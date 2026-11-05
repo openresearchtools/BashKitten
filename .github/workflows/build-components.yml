@@ -1,0 +1,78 @@
+name: Coordinate component builders
+'on':
+  workflow_dispatch:
+    inputs:
+      components:
+        default: '["all"]'
+        type: string
+      target:
+        default: all
+        type: string
+      force_rebuild:
+        default: false
+        type: boolean
+  workflow_call:
+    inputs:
+      components:
+        default: '["all"]'
+        type: string
+      target:
+        default: all
+        type: string
+      force_rebuild:
+        default: false
+        type: boolean
+    secrets:
+      BUILD_REPOS_TOKEN:
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  targets:
+    runs-on: ubuntu-24.04
+    outputs:
+      targets: ${{ steps.plan.outputs.targets }}
+    steps:
+    - id: plan
+      env:
+        TARGET: ${{ inputs.target }}
+      run: |
+        python3 - <<'PY'
+        import json, os
+        targets = ['linux-amd64', 'linux-arm64', 'termux-aarch64', 'termux-x86_64']
+        target = os.environ['TARGET']
+        if target != 'all':
+            if target not in targets:
+                raise ValueError('Unsupported component target')
+            targets = [target]
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+            output.write('targets=' + json.dumps(targets) + '\n')
+        PY
+  coordinate:
+    needs: targets
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.targets.outputs.targets) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+        filter: blob:none
+        sparse-checkout-cone-mode: false
+        sparse-checkout: |
+          /agent/packaging/*.py
+          /browser/taskarian/config/version.txt
+    - name: Build only changed or missing component outputs
+      env:
+        GH_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}
+        TARGET: ${{ matrix.target }}
+        COMPONENTS: ${{ inputs.components }}
+        FORCE: ${{ inputs.force_rebuild }}
+      run: |
+        flags=()
+        if [ "$FORCE" = true ]; then flags+=(--force-rebuild); fi
+        python3 agent/packaging/remote-components.py components "$TARGET" --components "$COMPONENTS" "${flags[@]}"

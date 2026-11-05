@@ -1,100 +1,32 @@
 #!/usr/bin/env python3
-"""Dispatch one builder and collect its artifact immediately after upload."""
+# SPDX-License-Identifier: AGPL-3.0-only
+"""Coordinate an app target and collect it through its exact direct release URL."""
 import argparse
 import importlib.util
 import json
 import os
 from pathlib import Path
-import re
-import subprocess
-import time
 
-ROOT = Path(__file__).resolve().parents[2]
-spec = importlib.util.spec_from_file_location('browser_component', Path(__file__).with_name('browser-component.py'))
-component = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(component)
-
-
-def api(endpoint, body=None):
-    command = ['gh', 'api', endpoint]
-    if body is not None:
-        command += ['--method', 'POST', '--input', '-']
-    result = subprocess.run(command, input=json.dumps(body) if body is not None else None,
-                            text=True, capture_output=True)
-    if result.returncode:
-        raise RuntimeError(result.stderr.strip() or 'GitHub API request failed')
-    return json.loads(result.stdout) if result.stdout.strip() else None
+HERE = Path(__file__).resolve().parent
+spec = importlib.util.spec_from_file_location('component_coordinator', HERE / 'remote-components.py')
+coordinator = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(coordinator)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('target', choices=['linux-arm64', 'linux-amd64', 'android', 'android-x86_64'])
+    parser.add_argument('target', choices=('linux-amd64', 'linux-arm64', 'android', 'android-x86_64'))
     parser.add_argument('--directory', type=Path, required=True)
-    parser.add_argument('--auth-run', default=os.environ.get('GITHUB_RUN_ID', ''))
-    parser.add_argument('--search-run', default=os.environ.get('GITHUB_RUN_ID', ''))
-    parser.add_argument('--node-run', default=os.environ.get('GITHUB_RUN_ID', ''))
-    parser.add_argument('--environments-run', default=os.environ.get('GITHUB_RUN_ID', ''))
-    parser.add_argument('--office-run', default=os.environ.get('GITHUB_RUN_ID', ''))
-    parser.add_argument('--warm-gkrust', choices=['true', 'false'], default='false')
-    parser.add_argument('--force-rebuild', choices=['true', 'false'], default='false')
+    parser.add_argument('--force-rebuild', choices=('true', 'false'), default='false')
+    parser.add_argument('--warm-gkrust', choices=('true', 'false'), default='false')
     args = parser.parse_args()
-    source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
-    repository = 'openresearchtools/taskarian-build-' + args.target.removeprefix('linux-')
-    request = f'{os.environ["GITHUB_RUN_ID"]}-{os.environ.get("GITHUB_RUN_ATTEMPT", "1")}-{args.target}'
-    title = f'Taskarian {source} / {request}'
-    inputs = {'source_sha': source, 'request_id': request}
-    if args.force_rebuild == 'true':
-        inputs['force_rebuild'] = True
-    for run in (args.auth_run, args.search_run, args.node_run):
-        if not re.fullmatch('[0-9]+', run):
-            raise ValueError('Build requires the source component run IDs')
-    inputs.update(auth_run=args.auth_run, search_run=args.search_run, node_run=args.node_run)
-    if not re.fullmatch('[0-9]+', args.environments_run):
-        raise ValueError('Build requires native environment component run ID')
-    inputs['environments_run'] = args.environments_run
-    if not re.fullmatch('[0-9]+', args.office_run):
-        raise ValueError('Build requires native Office component run ID')
-    inputs['office_run'] = args.office_run
-    if not args.target.startswith('android'):
-        inputs['warm_gkrust'] = args.warm_gkrust
-    endpoint = f'repos/{repository}/actions/workflows/build.yml'
-    runs = api(endpoint + '/runs?event=workflow_dispatch&per_page=100')['workflow_runs']
-    run = next((item for item in runs if item['display_title'] == title), None)
-    if run is None:
-        api(endpoint + '/dispatches', {'ref': 'main', 'inputs': inputs})
-        print(f'Started {args.target} for source {source} in {repository}', flush=True)
-    digest = component.fingerprint(args.target)
-    name = (component.artifact_name(args.target, digest) if args.target.startswith('android')
-            else f'taskarian-{args.target}-candidate')
-    linked = False
-    while True:
-        if run is None:
-            runs = api(endpoint + '/runs?event=workflow_dispatch&per_page=100')['workflow_runs']
-            run = next((item for item in runs if item['display_title'] == title), None)
-        if run is not None:
-            if not linked:
-                print(run['html_url'], flush=True)
-                with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a') as summary:
-                    summary.write(f'- [{args.target} build and downloadable artifacts]({run["html_url"]})\n')
-                linked = True
-            artifacts = api(f'repos/{repository}/actions/runs/{run["id"]}/artifacts?per_page=100')['artifacts']
-            artifact = next((item for item in artifacts if item['name'] == name and not item['expired']), None)
-            if artifact:
-                subprocess.run(['gh', 'run', 'download', str(run['id']), '--repo', repository,
-                                '--name', name, '--dir', str(args.directory)], check=True)
-                if args.target.startswith('android'):
-                    component.verify(args.directory, args.target, digest)
-                else:
-                    component.verify_package(args.directory, args.target, source, digest)
-                receipt = {'repository': repository, 'run': run['id'], 'artifact': artifact['id'],
-                           'requestedSource': source, 'inputDigest': digest, 'url': run['html_url']}
-                Path(os.environ['RUNNER_TEMP'], f'builder-{args.target}.json').write_text(json.dumps(receipt, indent=2) + '\n')
-                print(f'Collected verified {args.target} artifact; other targets may still be compiling.', flush=True)
-                return
-            run = api(f'repos/{repository}/actions/runs/{run["id"]}')
-            if run['status'] == 'completed':
-                raise RuntimeError(f'{args.target} ended with {run["conclusion"]} without its required artifact: {run["html_url"]}')
-        time.sleep(30)
+    native = {'android': 'termux-aarch64', 'android-x86_64': 'termux-x86_64'}.get(args.target, args.target)
+    coordinator.build(native, force=args.force_rebuild == 'true', warm_gkrust=args.warm_gkrust == 'true')
+    result = coordinator.application.restore(args.target, args.directory)
+    if not result:
+        raise ValueError('Builder finished without its exact application output')
+    receipt = {key: result[key] for key in ('repository', 'manifestName', 'manifestSha256', 'url')}
+    (Path(os.environ['RUNNER_TEMP']) / ('builder-' + args.target + '.json')).write_text(json.dumps(receipt, indent=2) + '\n')
 
 
 if __name__ == '__main__':

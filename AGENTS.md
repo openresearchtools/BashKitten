@@ -1,5 +1,19 @@
 # Taskarian · native Pi / Linux and Termux
 
+## 5 November reusable component builds
+
+Build components and assemble applications only in the four existing architecture
+builder repositories: Linux amd64/arm64 and Android/Termux arm64/x86_64. The main
+repository coordinates and publishes. Each builder keeps one rolling `components`
+prerelease with binaries, exact matching sources, complete licenses and checksums;
+download reusable outputs by direct release URLs. Keep official upstream versions
+and compare only each component's actual source, patches, locks, recipe and native
+toolchain inputs. Reuse engines for UI/backend-only edits. Archive disk-backed
+Gecko sccache and LibreOffice ccache as release fallbacks, splitting oversized files
+into pieces smaller than 2 GiB. Preserve completed outputs independently of sibling
+failures. LocalAI stays with its existing automated repository. This supersedes
+earlier shared Office-builder and Actions-artifact-only storage instructions.
+
 ## 5 November product identity
 
 Use **Taskarian** for the product, **Taskarian OS** for the desktop session,

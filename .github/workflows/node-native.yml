@@ -3,7 +3,7 @@ name: Private Node runtimes
   workflow_dispatch:
     inputs:
       force_rebuild:
-        description: Assemble pinned inputs without restoring completed artifacts
+        description: Rebuild selected components instead of reusing published outputs
         type: boolean
         default: false
   workflow_call:
@@ -11,55 +11,18 @@ name: Private Node runtimes
       force_rebuild:
         type: boolean
         default: false
+    secrets:
+      BUILD_REPOS_TOKEN:
+        required: true
 permissions:
   contents: read
   actions: read
 jobs:
-  node:
-    runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-        - platform: linux
-          architecture: amd64
-        - platform: linux
-          architecture: arm64
-        - platform: termux
-          architecture: aarch64
-        - platform: termux
-          architecture: x86_64
-    steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      with:
-        persist-credentials: false
-        filter: blob:none
-        sparse-checkout: |
-          agent/packaging
-          agent/vendor/node
-    - name: Restore a matching completed Node component
-      id: component
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: python3 -B agent/packaging/node-component.py restore '${{ matrix.platform }}-${{ matrix.architecture }}' --directory "$RUNNER_TEMP/node" --force '${{ inputs.force_rebuild }}'
-    - name: Install component assembly tools
-      if: steps.component.outputs.hit != 'true'
-      run: sudo apt-get update && sudo apt-get install -y python3 curl xz-utils patchelf binutils dpkg-dev gnupg
-    - name: Cache pinned downloads
-      if: steps.component.outputs.hit != 'true'
-      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-      with:
-        path: ~/.cache/Taskarian/sources
-        key: node-${{ matrix.platform }}-${{ matrix.architecture }}-${{ hashFiles('agent/packaging/node/**') }}
-        restore-keys: node-${{ matrix.platform }}-${{ matrix.architecture }}-
-    - name: Assemble pinned private runtime and corresponding source
-      if: steps.component.outputs.hit != 'true'
-      run: python3 agent/packaging/node/build.py --platform '${{ matrix.platform }}' --architecture '${{ matrix.architecture }}' --output "$RUNNER_TEMP/node"
-    - name: Verify Node runtime, corresponding source and provenance
-      run: python3 -B agent/packaging/node-component.py verify '${{ matrix.platform }}-${{ matrix.architecture }}' --directory "$RUNNER_TEMP/node"
-    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-      with:
-        name: node-runtime-${{ matrix.platform }}-${{ matrix.architecture }}
-        path: ${{ runner.temp }}/node/
-        if-no-files-found: error
-        compression-level: 0
+  components:
+    uses: ./.github/workflows/build-components.yml
+    with:
+      components: '["node"]'
+      target: all
+      force_rebuild: ${{ inputs.force_rebuild || false }}
+    secrets:
+      BUILD_REPOS_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}

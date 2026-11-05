@@ -2,6 +2,10 @@ name: Prepare next release candidate
 'on':
   workflow_dispatch:
     inputs:
+      bump:
+        description: Increment the Taskarian patch version for this app repackage
+        default: true
+        type: boolean
       warm_gkrust:
         description: Warm the desktop Rust compiler cache
         default: false
@@ -20,13 +24,16 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: openresearchtools/Taskarian
       WARM_GKRUST: ${{ inputs.warm_gkrust }}
+      BUMP: ${{ inputs.bump }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         ref: main
     - name: Prepare the next shared product version before building
       run: |
-        version=$(python3 -B agent/packaging/release_version.py prepare)
+        flags=()
+        if [ "$BUMP" = true ]; then flags+=(--bump); fi
+        version=$(python3 -B agent/packaging/release_version.py prepare "${flags[@]}")
         if ! git diff --quiet; then
           git config user.name 'openresearchtools'
           git config user.email 'openresearchtools@gmail.com'

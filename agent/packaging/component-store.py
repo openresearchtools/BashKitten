@@ -241,7 +241,7 @@ def gh(*arguments, data=None):
     raise StoreUnavailable('Component publication interrupted; retry this job: ' + result.stderr[-1200:])
 
 
-def publish(component, target, version, inputs, directory, *, assets, source_commit, producer=None, dependencies=()):
+def publish(component, target, version, inputs, directory, *, assets, source_commit, producer=None, dependencies=(), validation_only=False):
     ident = identity(component, target, inputs); directory = Path(directory)
     if (os.environ.get('GITHUB_ACTIONS') != 'true' or os.environ.get('GITHUB_REPOSITORY') != ident['repository']):
         raise ValueError('Components publish only from their architecture builder')
@@ -249,6 +249,16 @@ def publish(component, target, version, inputs, directory, *, assets, source_com
         raise ValueError('Use the real upstream/product version')
     existing = lookup(component, target, inputs)
     if existing:
+        if validation_only:
+            # The caller has just run its real owner and normal ABI/source/legal
+            # validation. Preserve the first canonical producer and bytes.
+            for name in assets:
+                (directory / name).unlink(missing_ok=True)
+            result = fetch(existing, directory)
+            if result is None:
+                raise StoreUnavailable('Canonical component disappeared during validation; retry restoration')
+            print(f'Fresh native-owner validation completed for {component}/{target}; retained canonical producer ' + existing['manifest']['sourceCommit'], flush=True)
+            return result
         if (existing['manifest']['version'] != version or
                 any(sha(directory / item['name']) != item['sha256'] for item in existing['manifest']['assets'])):
             raise ValueError('An immutable component already exists with different producer bytes')
@@ -286,7 +296,7 @@ def publish(component, target, version, inputs, directory, *, assets, source_com
             with file.open('rb') as source:
                 for index, offset in enumerate(range(0, max(item['size'], 1), PART_SIZE), 1):
                     part_name = ident['manifest'][:-5] + '--' + name + (f'.part{index:04d}' if item['size'] > PART_SIZE else '')
-                    part = temporary / part_name
+                    part = temporary / 'part'
                     remaining = min(PART_SIZE, item['size'] - offset)
                     with part.open('wb') as output:
                         while remaining:
@@ -294,13 +304,18 @@ def publish(component, target, version, inputs, directory, *, assets, source_com
                             if not block:
                                 raise ValueError('Component changed during publication')
                             output.write(block); remaining -= len(block)
-                    record = {'asset': part_name, 'size': part.stat().st_size, 'sha256': sha(part)}
+                    checksum = sha(part)
+                    part_name = ident['manifest'][:-5] + '--' + checksum + '.part'
+                    named = temporary / part_name
+                    part.rename(named); part = named
+                    record = {'asset': part_name, 'size': part.stat().st_size, 'sha256': checksum}
                     previous = uploaded.get(part_name)
                     if previous:
                         if previous['size'] != record['size'] or previous.get('digest') != 'sha256:' + record['sha256']:
                             raise ValueError('Immutable component asset collision: ' + part_name)
                     else:
                         gh('release', 'upload', TAG, str(part), '--repo', ident['repository'])
+                        uploaded[part_name] = {'size': record['size'], 'digest': 'sha256:' + record['sha256']}
                     item['parts'].append(record)
                     part.unlink()
             manifest['assets'].append(item)
@@ -335,6 +350,7 @@ def cleanup(repo, component, target):
             if match:
                 groups.setdefault(match.groups(), []).append(item)
         protected = set()
+        protected_parts = set()
         pending = []
         now = datetime.now(timezone.utc)
         for members in groups.values():
@@ -352,7 +368,9 @@ def cleanup(repo, component, target):
             if raw is None:
                 return  # An incomplete view cannot justify deletion.
             record = json.loads(raw); validate(record)
+            protected_parts.update(part['asset'] for file in record['assets'] for part in file['parts'])
             pending.extend(dep['manifestName'] for dep in record.get('dependencies', []) if dep['repository'] == repo)
+        removed = set()
         for item in groups.get((component, target), []):
             if item['name'] in protected:
                 continue
@@ -364,6 +382,14 @@ def cleanup(repo, component, target):
             for asset in assets:
                 if asset['name'] in doomed:
                     gh('api', f'repos/{repo}/releases/assets/{asset["id"]}', '--method', 'DELETE')
+                    removed.add(asset['id'])
+        prefix = f'component-{component}-{target}-'
+        for asset in assets:
+            if asset['id'] in removed or not asset['name'].startswith(prefix) or '--' not in asset['name'] or asset['name'] in protected_parts:
+                continue
+            age = (now - datetime.fromisoformat(asset['created_at'].replace('Z', '+00:00'))).total_seconds()
+            if age > 24 * 60 * 60:
+                gh('api', f'repos/{repo}/releases/assets/{asset["id"]}', '--method', 'DELETE')
     except (StoreUnavailable, ValueError, KeyError, TypeError) as error:
         print('Published component retained; old-generation cleanup deferred:', error, flush=True)
 

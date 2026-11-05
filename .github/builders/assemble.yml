@@ -1,0 +1,88 @@
+name: Assemble Taskarian application
+run-name: Assemble ${{ inputs.source_sha }} / ${{ inputs.request_id }}
+'on':
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        required: true
+        type: string
+      request_id:
+        required: true
+        type: string
+      target:
+        required: true
+        type: string
+      force_rebuild:
+        default: false
+        type: boolean
+permissions:
+  contents: write
+jobs:
+  assemble:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PI_TELEMETRY: '0'
+      PI_OFFLINE: '1'
+      DO_NOT_TRACK: '1'
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: openresearchtools/Taskarian
+        ref: ${{ inputs.source_sha }}
+        filter: blob:none
+        persist-credentials: false
+        sparse-checkout-cone-mode: false
+        sparse-checkout: |
+          /agent/
+          /auth/
+          /files/
+          !/files/vendor/quantum/source/
+          /office/
+          !/office/upstream/online/source/
+          /references/
+          /os/
+          /browser/taskarian/config/
+          /browser/taskarian/browser/branding/
+          /browser/taskarian/android/
+          /browser/mobile/android/taskarian/display/
+          /browser/taskarian/vendor/termux-x11/
+          /LICENSE
+    - name: Restore exact application output when this source already succeeded
+      id: completed
+      env:
+        TARGET: ${{ inputs.target }}
+        FORCE: ${{ inputs.force_rebuild }}
+      run: |
+        python3 - <<'PY'
+        import importlib.util, os
+        from pathlib import Path
+        spec = importlib.util.spec_from_file_location('application', 'agent/packaging/application.py')
+        owner = importlib.util.module_from_spec(spec); spec.loader.exec_module(owner)
+        hit = None if os.environ['FORCE'] == 'true' else owner.restore(os.environ['TARGET'], Path(os.environ['RUNNER_TEMP']) / 'application')
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+            output.write('hit=' + str(bool(hit)).lower() + '\n')
+        PY
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      if: steps.completed.outputs.hit != 'true'
+      with:
+        node-version: '24'
+    - name: Install packaging tools
+      if: steps.completed.outputs.hit != 'true'
+      run: sudo apt-get update && sudo apt-get install -y zstd
+    - name: Assemble from published modules
+      if: steps.completed.outputs.hit != 'true'
+      env:
+        TARGET: ${{ inputs.target }}
+        TASKARIAN_SOURCE_CACHE: ${{ runner.temp }}/source-cache
+      run: python3 agent/packaging/prepare-assembly.py build "$TARGET" --directory "$RUNNER_TEMP/inputs" --output "$RUNNER_TEMP/application"
+    - name: Publish completed application
+      if: steps.completed.outputs.hit != 'true'
+      env:
+        TARGET: ${{ inputs.target }}
+        FORCE: ${{ inputs.force_rebuild }}
+      run: |
+        flags=()
+        if [ "$FORCE" = true ]; then flags+=(--validation-only); fi
+        python3 agent/packaging/application.py publish "$TARGET" --directory "$RUNNER_TEMP/application" "${flags[@]}"

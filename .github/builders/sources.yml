@@ -1,0 +1,59 @@
+name: Collect complete corresponding source
+run-name: Sources ${{ inputs.source_sha }} / ${{ inputs.request_id }}
+'on':
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        required: true
+        type: string
+      request_id:
+        required: true
+        type: string
+permissions:
+  contents: write
+jobs:
+  sources:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: openresearchtools/Taskarian
+        ref: ${{ inputs.source_sha }}
+        persist-credentials: false
+        filter: blob:none
+        sparse-checkout-cone-mode: false
+        sparse-checkout: |
+          /agent/packaging/
+          /auth/dependencies/**/sources.json
+          /auth/dependencies/go/proxy/
+          /files/go_runtime.py
+          /files/vendor/dependencies/
+          /browser/taskarian/config/version.txt
+          /browser/taskarian/scripts/blocker_asset_provenance.py
+          /browser/taskarian/BLOCKER-ASSET-SOURCE-NOTICE
+          /browser/browser/components/blocker/assets/
+          /browser/browser/components/blocker/scripts/
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '24'
+    - name: Restore original source download cache
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: ${{ runner.temp }}/source-cache
+        key: taskarian-source-originals-${{ hashFiles('auth/dependencies/**/sources.json', 'files/vendor/dependencies/*sources.json', 'agent/packaging/node/lock.json') }}
+        restore-keys: taskarian-source-originals-
+    - name: Backfill committed source with native Git
+      run: git backfill --no-sparse
+    - name: Collect and publish matching original sources
+      env:
+        TASKARIAN_SOURCE_CACHE: ${{ runner.temp }}/source-cache
+      run: python3 agent/packaging/source-delivery.py
+    - name: Save original source download cache
+      if: success()
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: ${{ runner.temp }}/source-cache
+        key: taskarian-source-originals-${{ hashFiles('auth/dependencies/**/sources.json', 'files/vendor/dependencies/*sources.json', 'agent/packaging/node/lock.json') }}

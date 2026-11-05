@@ -1,51 +1,16 @@
-name: Android browser candidate
+name: Android browser candidates
 'on':
   workflow_dispatch:
     inputs:
       force_rebuild:
-        description: Bypass native and APK artifact reuse
+        description: Rebuild native inputs instead of reusing published components
         default: false
         type: boolean
-      auth_run:
-        description: Successful native-auth run containing native auth artifacts for both Termux architectures
-        required: true
-        type: string
-      search_run:
-        description: Successful native-search run containing native search artifacts for both Termux architectures
-        required: true
-        type: string
-      node_run:
-        description: Successful Node runtime run containing both Termux architectures
-        required: true
-        type: string
-      environments_run:
-        description: Successful native-environments run containing the Display loader and both Termux OS architectures
-        required: true
-        type: string
-      office_run:
-        description: Component run containing both native Termux Office artifacts
-        required: true
-        type: string
   workflow_call:
     inputs:
       force_rebuild:
         default: false
         type: boolean
-      auth_run:
-        default: ''
-        type: string
-      search_run:
-        default: ''
-        type: string
-      node_run:
-        default: ''
-        type: string
-      environments_run:
-        default: ''
-        type: string
-      office_run:
-        default: ''
-        type: string
     secrets:
       BUILD_REPOS_TOKEN:
         required: true
@@ -53,19 +18,14 @@ permissions:
   contents: read
   actions: read
 jobs:
-  android:
+  browser:
     strategy:
       fail-fast: false
       matrix:
-        target: [android, android-x86_64]
+        target: ['android', 'android-x86_64']
     uses: ./.github/workflows/remote-browser.yml
     with:
       target: ${{ matrix.target }}
       force_rebuild: ${{ inputs.force_rebuild }}
-      auth_run: ${{ inputs.auth_run }}
-      search_run: ${{ inputs.search_run }}
-      node_run: ${{ inputs.node_run }}
-      environments_run: ${{ inputs.environments_run }}
-      office_run: ${{ inputs.office_run }}
     secrets:
       BUILD_REPOS_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}

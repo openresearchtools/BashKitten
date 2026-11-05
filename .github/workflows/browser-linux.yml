@@ -3,22 +3,12 @@ name: Linux packages
   workflow_dispatch:
     inputs:
       force_rebuild:
-        description: Bypass native browser artifact reuse
+        description: Rebuild native inputs instead of reusing published components
         default: false
         type: boolean
       warm_gkrust:
-        description: Warm the Rust compiler cache before Gecko
         default: false
         type: boolean
-      auth_run:
-        required: true
-        type: string
-      search_run:
-        required: true
-        type: string
-      node_run:
-        required: true
-        type: string
   workflow_call:
     inputs:
       force_rebuild:
@@ -27,15 +17,6 @@ name: Linux packages
       warm_gkrust:
         default: false
         type: boolean
-      auth_run:
-        required: true
-        type: string
-      search_run:
-        required: true
-        type: string
-      node_run:
-        required: true
-        type: string
     secrets:
       BUILD_REPOS_TOKEN:
         required: true
@@ -47,16 +28,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target:
-        - linux-arm64
-        - linux-amd64
+        target: ['linux-amd64', 'linux-arm64']
     uses: ./.github/workflows/remote-browser.yml
     with:
       target: ${{ matrix.target }}
       force_rebuild: ${{ inputs.force_rebuild }}
       warm_gkrust: ${{ inputs.warm_gkrust }}
-      auth_run: ${{ inputs.auth_run }}
-      search_run: ${{ inputs.search_run }}
-      node_run: ${{ inputs.node_run }}
     secrets:
       BUILD_REPOS_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}

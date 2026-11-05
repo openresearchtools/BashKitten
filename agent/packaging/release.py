@@ -7,6 +7,7 @@ that real device validation has occurred.
 import argparse
 import errno
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -53,7 +54,9 @@ def validate_termux_update(value, version=None, abi=None):
         if not isinstance(item, dict):
             raise ValueError('Invalid Android companion package expectation')
         name = item.get('name')
-        expected_version = {'taskarian': product_version, 'taskarian-os': product_version + '-1'}.get(name)
+        expected_version = {'taskarian': product_version, 'taskarian-os': item.get('version')}.get(name)
+        if name == 'taskarian-os' and not re.fullmatch(r'[0-9][0-9A-Za-z.+:~_-]*', str(expected_version)):
+            raise ValueError('Android companion OS package version is invalid')
         if not expected_version or name in names or item.get('version') != expected_version or item.get('architecture') != architecture:
             raise ValueError('Android companion package identity/version mismatch')
         names.add(name)
@@ -304,6 +307,9 @@ def main():
     os_identities = {}
     auxiliary_keys = set()
     architectures = set()
+    native_spec = importlib.util.spec_from_file_location('release_native_components', ROOT / 'agent/packaging/native-component.py')
+    native = importlib.util.module_from_spec(native_spec)
+    native_spec.loader.exec_module(native)
     for file in sorted(args.candidates.rglob('*.deb')):
         name = subprocess.check_output(['dpkg-deb', '-f', str(file), 'Package'], text=True).strip()
         if name != 'taskarian':
@@ -312,8 +318,7 @@ def main():
             architecture = fields['Architecture']
             if name not in {'taskarian-os', 'taskarian-machines-guest'} or architecture not in {'amd64', 'arm64', 'aarch64', 'x86_64'}:
                 raise ValueError('Unexpected auxiliary package: ' + file.name)
-            expected = version + '-1' if architecture in {'aarch64', 'x86_64'} else version
-            if fields['Version'] != expected:
+            if not re.fullmatch(r'\d+\.\d+(?:\.\d+)?(?:-\d+)?', fields['Version']):
                 raise ValueError('Auxiliary package version mismatch: ' + file.name)
             if name == 'taskarian-os' and architecture in {'aarch64', 'x86_64'}:
                 identity = termux_os_identity(file)
@@ -321,8 +326,11 @@ def main():
                     raise ValueError('Termux OS installed identity differs from its package')
                 os_identities[architecture] = identity
             metadata = json.loads(Path(str(file) + '.json').read_text())
-            if metadata.get('sourceCommit', metadata.get('revision')) != revision:
-                raise ValueError('Auxiliary source revision mismatch: ' + file.name)
+            producer = metadata.get('sourceCommit', metadata.get('revision'))
+            if producer != revision:
+                component = 'os' if architecture in {'aarch64', 'x86_64'} else 'guest'
+                target = ('termux-' if component == 'os' else 'linux-') + architecture
+                native.verify_equivalence(file.parent, component, target, revision, producer)
             digest = metadata.get('sha256') or Path(str(file) + '.sha256').read_text().split()[0]
             if digest != sha(file) or (name, architecture) in auxiliary_keys:
                 raise ValueError('Auxiliary checksum/identity mismatch: ' + file.name)
@@ -346,8 +354,15 @@ def main():
             if stamp.get('components', {}).get('display', {}).get('developmentOnly'):
                 raise ValueError('Local development APK pairing cannot be published')
             display = stamp.get('components', {}).get('display', {}).get('metadata', {})
-            if display.get('signerSha256') != CERT or display.get('package') != 'com.taskarian' or display.get('sourceCommit') != revision:
+            if display.get('signerSha256') != CERT or display.get('package') != 'com.taskarian':
                 raise ValueError('Termux Display is not paired with these APKs')
+            if display.get('sourceCommit') != revision:
+                equivalence = stamp['components']['display'].get('inputEquivalence', {})
+                target = 'termux-' + architecture
+                if (equivalence.get('requestedSource') != revision or
+                        equivalence.get('producerSource') != display.get('sourceCommit') or
+                        equivalence.get('inputs') != native.inputs('loader', target, revision)):
+                    raise ValueError('Termux Display source does not match the required package/signer/protocol')
         elif not all(name in stamp.get('components', {}) for name in ['machines', 'display']):
             raise ValueError('Desktop package is missing native environment components')
         architectures.add(architecture)

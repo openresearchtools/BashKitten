@@ -2,6 +2,7 @@
 """Assemble the complete Linux or native Termux package from CI component artifacts."""
 import argparse
 import configparser
+from functools import cache
 import hashlib
 import importlib.util
 import json
@@ -18,9 +19,14 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = ROOT.parent
-_native_spec = importlib.util.spec_from_file_location('native_component', ROOT / 'packaging/native-component.py')
-_native_components = importlib.util.module_from_spec(_native_spec)
-_native_spec.loader.exec_module(_native_components)
+@cache
+def native_components():
+    # Pure ELF/license helpers are also used by isolated native producers.
+    # Load release transport only when package assembly actually needs it.
+    spec = importlib.util.spec_from_file_location('native_component', ROOT / 'packaging/native-component.py')
+    value = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(value)
+    return value
 
 
 def run(command, **kwargs):
@@ -127,7 +133,7 @@ def install_machines(args, app, revision, version):
     root = app / 'machines'; metadata = read_json(root / 'manifest.json')
     require(metadata.get('schema') == 1 and metadata.get('platform') == 'linux' and
             metadata.get('architecture') == args.architecture, 'Private Podman target mismatch')
-    equivalence = _native_components.verify_equivalence(args.machines_archive.parent, 'machines', 'linux-' + args.architecture, revision, metadata.get('sourceCommit'))
+    equivalence = native_components().verify_equivalence(args.machines_archive.parent, 'machines', 'linux-' + args.architecture, revision, metadata.get('sourceCommit'))
     helpers = ['podman', 'rootlessport', 'crun', 'conmon', 'netavark', 'aardvark-dns',
                'pasta', 'passt', 'pesto', 'fusermount3', 'fuse-overlayfs', 'catatonit']
     if args.architecture == 'amd64': helpers += ['passt.avx2', 'pasta.avx2']
@@ -156,15 +162,17 @@ def install_machines(args, app, revision, version):
         info = dict(line.split(': ', 1) for line in fields.splitlines())
         name = info['Package']
         require(name in expected and name not in found, 'Unexpected or duplicate guest package: ' + name)
-        require(info['Version'] == version and info['Architecture'] == args.architecture,
+        require(info['Architecture'] == args.architecture and
+                re.fullmatch(r'\d+\.\d+(?:\.\d+)?(?:-\d+)?', info['Version']),
                 'Guest package version/architecture mismatch: ' + name)
         provenance = read_json(Path(str(deb) + '.json'))
         producer = provenance.get('revision', provenance.get('sourceCommit'))
         guest_equivalence = None
         if name == 'taskarian-backend':
-            require(producer == revision, 'Guest backend must contain the current integration source')
+            require(producer == revision and info['Version'] == version,
+                    'Guest backend must contain the current integration source and app version')
         else:
-            guest_equivalence = _native_components.verify_equivalence(deb.parent, 'guest', 'linux-' + args.architecture, revision, producer)
+            guest_equivalence = native_components().verify_equivalence(deb.parent, 'guest', 'linux-' + args.architecture, revision, producer)
         checksum = sha(deb)
         if provenance.get('sha256'):
             require(provenance['sha256'] == checksum, 'Guest package checksum mismatch: ' + name)
@@ -172,7 +180,7 @@ def install_machines(args, app, revision, version):
             require(Path(str(deb) + '.sha256').read_text().split()[0] == checksum,
                     'Guest package checksum mismatch: ' + name)
         shutil.copy2(deb, packages / deb.name); found[name] = deb.name
-        record = {'package': name, 'file': deb.name, 'sha256': checksum, 'provenance': provenance}
+        record = {'package': name, 'version': info['Version'], 'file': deb.name, 'sha256': checksum, 'provenance': provenance}
         if guest_equivalence: record['inputEquivalence'] = guest_equivalence
         records.append(record)
         if name != 'taskarian-backend':
@@ -182,7 +190,7 @@ def install_machines(args, app, revision, version):
                                                 else 'usr/share/taskarian-machines-guest')
                 notices = license_files(notice_root)
                 require(notices, 'Missing full guest package license texts: ' + name)
-                guest_licenses.append({'name': name, 'version': version, 'source':
+                guest_licenses.append({'name': name, 'version': info['Version'], 'source':
                     'https://github.com/openresearchtools/Taskarian/tree/' + producer,
                     'text': '\n\n'.join(str(p.relative_to(notice_root)) + '\n' + p.read_text() for p in notices)})
     require(set(found) == expected, 'Guest image needs backend, Taskarian OS and guest-service packages')
@@ -203,7 +211,7 @@ def install_display(args, app, revision):
         shutil.move(str(Path(incoming) / 'display'), app / 'display')
     metadata = read_json(app / 'display/manifest.json')
     require(metadata.get('architecture') == args.architecture, 'Display component target mismatch')
-    equivalence = _native_components.verify_equivalence(args.display_archive.parent, 'display', 'linux-' + args.architecture, revision, metadata.get('sourceCommit'))
+    equivalence = native_components().verify_equivalence(args.display_archive.parent, 'display', 'linux-' + args.architecture, revision, metadata.get('sourceCommit'))
     require(sha(app / 'display/taskarian-display') == metadata.get('binarySha256'), 'Display executable checksum mismatch')
     require(isinstance(metadata.get('depends'), list), 'Display must declare native dependencies')
     (app / 'browser/runtime/display').symlink_to('../../display')
@@ -239,7 +247,7 @@ def install_termux_display(args, app, revision, bin_dir):
     source = args.termux_display_dir
     metadata = read_json(source / 'manifest.json')
     require(metadata.get('package') == 'com.taskarian', 'Termux Display loader package mismatch')
-    equivalence = _native_components.verify_equivalence(source, 'loader', 'termux-aarch64', revision, metadata.get('sourceCommit'))
+    equivalence = native_components().verify_equivalence(source, 'loader', 'termux-' + args.architecture, revision, metadata.get('sourceCommit'))
     # The same publisher certificate is enforced against final APKs by release.py.
     from release import CERT
     signer = CERT
@@ -274,17 +282,19 @@ def collect_termux_os(deb, app, revision, architecture, version):
     require(deb is not None and deb.is_file(), 'Termux requires matching --os-package')
     fields = subprocess.check_output(['dpkg-deb', '-f', str(deb), 'Package', 'Version', 'Architecture'], text=True)
     info = dict(line.split(': ', 1) for line in fields.splitlines())
-    require(info == {'Package': 'taskarian-os', 'Version': version + '-1', 'Architecture': architecture},
+    require(info.get('Package') == 'taskarian-os' and info.get('Architecture') == architecture and
+            re.fullmatch(r'\d+\.\d+(?:\.\d+)?-\d+', info.get('Version', '')),
             'Termux OS package target/version mismatch')
     metadata = read_json(Path(str(deb) + '.json'))
-    require(metadata.get('sha256') == sha(deb), 'Taskarian OS package hash mismatch')
-    equivalence = _native_components.verify_equivalence(deb.parent, 'os', 'termux-' + architecture, revision, metadata.get('sourceCommit'))
+    require(metadata.get('sha256') == sha(deb) and metadata.get('version') == info['Version'],
+            'Taskarian OS package version/hash mismatch')
+    equivalence = native_components().verify_equivalence(deb.parent, 'os', 'termux-' + architecture, revision, metadata.get('sourceCommit'))
     with tempfile.TemporaryDirectory(prefix='termux-os-notices-', dir=app.parent) as temporary:
         run(['dpkg-deb', '-x', str(deb), temporary])
         root = Path(temporary) / 'data/data/com.termux/files/usr/share/taskarian-os'
         paths = license_files(root)
         require(paths, 'Termux OS package lacks full license texts')
-        write_json(app / 'os-licenses.json', [{'name': 'Taskarian OS', 'version': version + '-1',
+        write_json(app / 'os-licenses.json', [{'name': 'Taskarian OS', 'version': info['Version'],
             'text': '\n\n'.join(str(p.relative_to(root)) + '\n' + p.read_text() for p in paths)}])
     return {**metadata, 'inputEquivalence': equivalence} if equivalence else metadata
 
@@ -364,8 +374,13 @@ def package_browser(args, app, stage, version, auth):
     require((browser / 'taskarian').is_file(), 'Browser archive has no Taskarian executable')
     ini = configparser.ConfigParser()
     ini.read(browser / 'application.ini')
-    require(ini.get('App', 'Version', fallback='') in {version, metadata.get('firefox_version')},
-            'Browser application.ini version differs from component metadata')
+    require(ini.get('App', 'Version', fallback='') in
+            {metadata.get('firefox_version'), str(metadata.get('firefox_version', '')).removesuffix('esr')},
+            'Native browser version differs from its ESR component metadata')
+    application = configparser.ConfigParser()
+    application.read(browser / 'browser/application.ini')
+    require(application.get('App', 'Version', fallback='') == version,
+            'Browser resource application version differs from this package')
     for obsolete in ['runtime/torrent', 'runtime/jackett-mini', 'runtime/search', 'runtime/pi-web']:
         require(not (browser / obsolete).exists(), f'Obsolete component remains in browser: {obsolete}')
     shutil.move(str(browser), app / 'browser')
@@ -414,6 +429,57 @@ def package_browser(args, app, stage, version, auth):
     return {'archive': archive.name, 'sha256': digest, **metadata}
 
 
+def install_agent_sources(app, target):
+    """Select the existing production Agent payload without installing dependencies."""
+    for folder in ['src/server', 'src/web', 'src/phone', 'reference', 'licenses', 'pi']:
+        require((ROOT / folder).is_dir(), f'Missing product payload: {folder}')
+        shutil.copytree(ROOT / folder, app / folder,
+                        ignore=shutil.ignore_patterns('__pycache__', '*.pyc', 'pillama', 'pi-codex-usage') if folder == 'pi'
+                        else shutil.ignore_patterns('__pycache__', '*.pyc'))
+    # The reviewer is an independently versioned Pi package. Its parser
+    # dependencies are part of the same verified root npm closure.
+    reviewer = ROOT / 'systematic-reviewer'
+    reviewer_meta = read_json(reviewer / 'package.json')
+    for name in ['package.json', *reviewer_meta['files']]:
+        source = reviewer / name
+        require(source.exists() and source.resolve().is_relative_to(reviewer.resolve()),
+                f'Invalid reviewer runtime file: {name}')
+        destination = app / 'systematic-reviewer' / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if source.is_dir():
+            shutil.copytree(source, destination, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+        else:
+            shutil.copy2(source, destination)
+    run(['python3', str(ROOT / 'packaging/pi-skills.py'), str(app / 'pi'), target])
+    usage_notice = app / 'pi/vendor/pi-codex-usage/LICENSE'
+    usage_notice.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(ROOT / 'pi/vendor/pi-codex-usage/LICENSE', usage_notice)
+    for role in ['termux-use', 'computer-use']:
+        guide = app / 'pi/desktop-guides' / role / 'SKILL.md'
+        guide.parent.mkdir(parents=True, exist_ok=True)
+        original = (REPOSITORY / 'os/skills/desktop-use/SKILL.md').read_text()
+        guide.write_text(original.replace('name: desktop-use', 'name: ' + role))
+    # Keep the complete upstream tree in source releases; install only its
+    # declared runtime files, without upstream tests or development tools.
+    pillama = ROOT / 'pi/vendor/pillama'
+    for name in [*read_json(pillama / 'package.json')['files'], 'package.json', 'NOTICE']:
+        source = pillama / name
+        require(source.is_file() and source.resolve().is_relative_to(pillama.resolve()),
+                f'Invalid pillama runtime file: {name}')
+        destination = app / 'pi/vendor/pillama' / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+    for folder in ['src', 'third_party']:
+        shutil.copytree(ROOT / 'search' / folder, app / 'search' / folder,
+                        ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+    for name in ['LICENSE', 'THIRD_PARTY_NOTICES.md', 'README.md', 'pyproject.toml', 'runtime-lock.json', 'taskarian-search']:
+        source = ROOT / 'search' / name
+        require(source.is_file(), f'Missing search payload: {name}')
+        shutil.copy2(source, app / 'search' / name)
+    for name in ['package.json', 'package-lock.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'PI_UPSTREAM.md']:
+        shutil.copy2(ROOT / name, app / name)
+
+
 def assemble(args):
     termux = args.target == 'termux'
     require(not termux or not args.backend_only, '--backend-only is a native Linux guest package')
@@ -442,62 +508,28 @@ def assemble(args):
         stage = Path(temporary) / 'root'
         app = stage / prefix.lstrip('/') / 'lib/taskarian'
         app.mkdir(parents=True)
-        for folder in ['src/server', 'src/web', 'src/phone', 'reference', 'licenses', 'pi']:
-            require((ROOT / folder).is_dir(), f'Missing product payload: {folder}')
-            shutil.copytree(ROOT / folder, app / folder,
-                            ignore=shutil.ignore_patterns('__pycache__', '*.pyc', 'pillama', 'pi-codex-usage') if folder == 'pi'
-                            else shutil.ignore_patterns('__pycache__', '*.pyc'))
-        # The reviewer is an independently versioned Pi package. Its parser
-        # dependencies are part of the same verified root npm closure.
-        reviewer = ROOT / 'systematic-reviewer'
-        reviewer_meta = read_json(reviewer / 'package.json')
-        for name in ['package.json', *reviewer_meta['files']]:
-            source = reviewer / name
-            require(source.exists() and source.resolve().is_relative_to(reviewer.resolve()),
-                    f'Invalid reviewer runtime file: {name}')
-            destination = app / 'systematic-reviewer' / name
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            if source.is_dir():
-                shutil.copytree(source, destination, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
-            else:
-                shutil.copy2(source, destination)
-        run(['python3', str(ROOT / 'packaging/pi-skills.py'), str(app / 'pi'), args.target])
-        usage_notice = app / 'pi/vendor/pi-codex-usage/LICENSE'
-        usage_notice.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(ROOT / 'pi/vendor/pi-codex-usage/LICENSE', usage_notice)
-        for role in ['termux-use', 'computer-use']:
-            guide = app / 'pi/desktop-guides' / role / 'SKILL.md'
-            guide.parent.mkdir(parents=True, exist_ok=True)
-            original = (REPOSITORY / 'os/skills/desktop-use/SKILL.md').read_text()
-            guide.write_text(original.replace('name: desktop-use', 'name: ' + role))
-        # Keep the complete upstream tree in source releases; install only its
-        # declared runtime files, without upstream tests or development tools.
-        pillama = ROOT / 'pi/vendor/pillama'
-        for name in [*read_json(pillama / 'package.json')['files'], 'package.json', 'NOTICE']:
-            source = pillama / name
-            require(source.is_file() and source.resolve().is_relative_to(pillama.resolve()),
-                    f'Invalid pillama runtime file: {name}')
-            destination = app / 'pi/vendor/pillama' / name
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, destination)
-        for folder in ['src', 'third_party']:
-            shutil.copytree(ROOT / 'search' / folder, app / 'search' / folder,
-                            ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
-        for name in ['LICENSE', 'THIRD_PARTY_NOTICES.md', 'README.md', 'pyproject.toml', 'runtime-lock.json', 'taskarian-search']:
-            source = ROOT / 'search' / name
-            require(source.is_file(), f'Missing search payload: {name}')
-            shutil.copy2(source, app / 'search' / name)
-        for name in ['package.json', 'package-lock.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'PI_UPSTREAM.md']:
-            shutil.copy2(ROOT / name, app / name)
+        if args.agent_resources_archive:
+            checked_archive(args.agent_resources_archive)
+            extract(args.agent_resources_archive, app)
+        else:
+            install_agent_sources(app, args.target)
         npm_cache = Path(temporary) / 'npm-cache'
-        run(['python3', str(ROOT / 'packaging/npm-sources.py'), '--cache', str(npm_cache)])
-        command = ['npm', 'ci', '--prefix', str(app), '--cache', str(npm_cache), '--offline',
-                   '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund',
-                   '--os=' + ('android' if termux else 'linux'), '--cpu=' + ('x64' if args.architecture in {'amd64', 'x86_64'} else 'arm64')]
-        require(int(subprocess.check_output(['npm', '--version'], text=True).split('.')[0]) >= 10,
-                'Use npm >=10 for explicit target dependency selection')
-        run(command)
-        run(['python3', str(ROOT / 'packaging/photon/build.py'), str(app)])
+        if args.npm_runtime_archive and args.photon_archive:
+            for archive in (args.npm_runtime_archive, args.photon_archive):
+                checked_archive(archive)
+                extract(archive, app)
+            photon_lock = read_json(ROOT / 'packaging/photon/lock.json')
+            require((app / photon_lock['package']['location'] / 'TASKARIAN-SOURCE.json').is_file(),
+                    'Prebuilt npm runtime lacks the source-built Photon component')
+        else:
+            run(['python3', str(ROOT / 'packaging/npm-sources.py'), '--cache', str(npm_cache)])
+            command = ['npm', 'ci', '--prefix', str(app), '--cache', str(npm_cache), '--offline',
+                       '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund',
+                       '--os=' + ('android' if termux else 'linux'), '--cpu=' + ('x64' if args.architecture in {'amd64', 'x86_64'} else 'arm64')]
+            require(int(subprocess.check_output(['npm', '--version'], text=True).split('.')[0]) >= 10,
+                    'Use npm >=10 for explicit target dependency selection')
+            run(command)
+            run(['python3', str(ROOT / 'packaging/photon/build.py'), str(app)])
         from applications import install as install_applications
         application_components = install_applications(args, app, revision, npm_cache, checked_archive, extract)
         run(['node', str(ROOT / 'src/server/updates/platform-packages.mjs'), str(app),
@@ -507,8 +539,8 @@ def assemble(args):
         extract(args.auth_archive, auth)
         auth_meta = read_json(auth / 'share/metadata/runtime.json')
         auth_equivalence = None
-        if (args.auth_archive.parent / _native_components.receipt_name('auth', target)).exists():
-            auth_equivalence = _native_components.verify_equivalence(args.auth_archive.parent, 'auth', target, revision)
+        if (args.auth_archive.parent / native_components().receipt_name('auth', target)).exists():
+            auth_equivalence = native_components().verify_equivalence(args.auth_archive.parent, 'auth', target, revision)
         require(auth_meta['target'] == target and auth_meta['architecture'] == args.architecture, 'Native auth target mismatch')
         for executable_name in ['authelia', 'caddy', 'tor', 'valkey-server', 'chisel', 'taskarian-remote', 'runtime-guard']:
             require(os.access(auth / 'bin' / executable_name, os.X_OK), f'Missing native {executable_name}')
@@ -522,7 +554,7 @@ def assemble(args):
         search_meta = read_json(app / 'search/runtime/manifest.json')
         search_equivalence = None
         if search_meta.get('sourceCommit') != revision:
-            search_equivalence = _native_components.verify_equivalence(args.search_archive.parent, 'search', target, revision, search_meta.get('sourceCommit'))
+            search_equivalence = native_components().verify_equivalence(args.search_archive.parent, 'search', target, revision, search_meta.get('sourceCommit'))
         require(search_meta['target'] == target, 'Native search target mismatch')
         components = {
             **application_components,
@@ -641,7 +673,7 @@ fi
                                components.get('display', {}).get('metadata', {}).get('depends', []),
                                components.get('files', {}).get('metadata', {}).get('depends', []),
                                components.get('office', {}).get('metadata', {}).get('depends', []),
-                               [f'taskarian-os (= {version}-1)'] if termux else [])
+                               [f"taskarian-os (= {components['os']['version']})"] if termux else [])
         replacements = '' if termux or args.backend_only else 'Replaces: taskarian-desktop\nBreaks: taskarian-desktop\nProvides: taskarian-desktop\n'
         doc = stage / prefix.lstrip('/') / 'share/doc/taskarian'
         doc.mkdir(parents=True)
@@ -675,6 +707,8 @@ def main():
     parser.add_argument('--node-archive', type=Path, required=True)
     parser.add_argument('--files-archive', type=Path)
     parser.add_argument('--office-archive', type=Path)
+    for name in ('npm-runtime', 'photon', 'agent-resources', 'references', 'office-integration', 'files-integration'):
+        parser.add_argument('--' + name + '-archive', type=Path)
     parser.add_argument('--integration-iteration', action='store_true',
                         help='Authorized browser integration iteration only; permits unavailable native Files/Office components')
     parser.add_argument('--machines-archive', type=Path)
