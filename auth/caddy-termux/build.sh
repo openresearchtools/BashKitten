@@ -1,6 +1,6 @@
 # Taskarian private installation of the upstream Termux Caddy recipe.
 source "$TERMUX_PKG_BUILDER_DIR/upstream-build.sh"
-TERMUX_PKG_VERSION=2.11.7
+TERMUX_PKG_VERSION=2.11.9
 TERMUX_PKG_AUTO_UPDATE=false
 TERMUX_PKG_NO_STATICSPLIT=true
 TERMUX_PKG_LICENSE_FILE=LICENSE

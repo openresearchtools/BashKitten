@@ -2,7 +2,7 @@
   "schema": 1,
   "locks": {
     "auth/authelia/go.sum": "53a1deac1d271ec252461fac053c223fa981508ed72795486383eb3a673fd9e4",
-    "auth/caddy/go.sum": "c4f0fb5c57d37da907d0620d19556c6889b56b82f350adf64da738803fb0a92c",
+    "auth/caddy/go.sum": "cb9e045b6acab725f2caf969cc6f5ab4cc1d98f3addd368227ed54f7452886c7",
     "auth/chisel/go.sum": "915ec76ce11dd9eb20324abea6406dde2f681c1fee436ef3601ea99ed0771b24",
     "auth/age/go.sum": "5480abea1030f2e6984601f8ef1c00337cf53dfa969e80a2447be8d45cebf3b6",
     "auth/mobile/go.sum": "20b6c39d75cad9e5666e6c1c2678fde787fd6db2bb233a08668bc912912b7a64",
@@ -599,7 +599,8 @@
       },
       "locks": [
         "auth/age/go.sum",
-        "agent/native/remote/go.sum"
+        "agent/native/remote/go.sum",
+        "agent/native/remote/android/go.sum"
       ],
       "licenses": [
         "filippo.io/hpke@v0.4.0/LICENSE"
@@ -1172,7 +1173,8 @@
       "origin": null,
       "locks": [
         "auth/chisel/go.sum",
-        "agent/native/remote/go.sum"
+        "agent/native/remote/go.sum",
+        "agent/native/remote/android/go.sum"
       ],
       "licenses": [
         "github.com/armon/go-socks5@v0.0.0-20160902184237-e75332964ef5/LICENSE"
@@ -3166,7 +3168,8 @@
       "locks": [
         "auth/authelia/go.sum",
         "auth/chisel/go.sum",
-        "agent/native/remote/go.sum"
+        "agent/native/remote/go.sum",
+        "agent/native/remote/android/go.sum"
       ],
       "licenses": [
         "github.com/fsnotify/fsnotify@v1.10.1/LICENSE"
@@ -3296,35 +3299,35 @@
     },
     {
       "name": "github.com/go-chi/chi/v5",
-      "version": "v5.3.2",
-      "sum": "h1:5YQkICvTCSZ25hoRsyJazN0scjzKGiu4VAUc7H1o1nY=",
-      "goModSum": "h1:R+tYY2hNuVUUjxoPtqUdgBqevM9s9njzkTLutVsOCto=",
+      "version": "v5.4.0",
+      "sum": "h1:+ufzvFTGKyin26Or5DLrlIDq4ygIDBVcj7oVNeeaYFE=",
+      "goModSum": "h1:d1IG7GtKPSjPyBP365PH8sAGVHk3qfB/IhjFNRH1wWM=",
       "origin": {
         "VCS": "git",
         "URL": "https://github.com/go-chi/chi",
-        "Hash": "38939062c5df4d3e8814aad1a488983112627ced",
-        "Ref": "refs/tags/v5.3.2"
+        "Hash": "7f9b7448f51d28804fac98c0a17bc2a7cec1079f",
+        "Ref": "refs/tags/v5.4.0"
       },
       "locks": [
         "auth/caddy/go.sum"
       ],
       "licenses": [
-        "github.com/go-chi/chi/v5@v5.3.2/LICENSE"
+        "github.com/go-chi/chi/v5@v5.4.0/LICENSE"
       ],
       "files": {
         "zip": {
-          "file": "proxy/github.com/go-chi/chi/v5/@v/v5.3.2.zip",
-          "sha256": "01a5501125c9a45782db99fc0e2d054f755871d6690ec7c75af494c2c8fcb589",
-          "size": 133081
+          "file": "proxy/github.com/go-chi/chi/v5/@v/v5.4.0.zip",
+          "sha256": "9ad4c02fc179b71081c86a7166bc871e0a816d5a803da5053ea9ed4cfd97422f",
+          "size": 140799
         },
         "mod": {
-          "file": "proxy/github.com/go-chi/chi/v5/@v/v5.3.2.mod",
-          "sha256": "4d88d6917853bbb427146ba26661b51a21f8780f524162c9797a5769464e1482",
+          "file": "proxy/github.com/go-chi/chi/v5/@v/v5.4.0.mod",
+          "sha256": "7eb620f0fce870d93eaba87bf6f8c36284db786108030ca229a5016461797090",
           "size": 149
         },
         "info": {
-          "file": "proxy/github.com/go-chi/chi/v5/@v/v5.3.2.info",
-          "sha256": "1fcad8d2b95df816e39a9cbc6175554cdd8864199a181476c2d9e55150c417a7",
+          "file": "proxy/github.com/go-chi/chi/v5/@v/v5.4.0.info",
+          "sha256": "0bbb441ad8c093e9153f51081d79fc4dc32ef2521ae919ea8cf34727757f7d41",
           "size": 186
         }
       }
@@ -3440,36 +3443,36 @@
     },
     {
       "name": "github.com/go-jose/go-jose/v4",
-      "version": "v4.1.5",
-      "sum": "h1:RjgjO2LOtWOJKUC5wpwY9LR3B3vwVAz6JS2YHfYU6eA=",
+      "version": "v4.1.6",
+      "sum": "h1:sNRkftxFJxwsILiQukqp5z83QBSmntVwmgRY7AqBDO4=",
       "goModSum": "h1:x4oUasVrzR7071A4TnHLGSPpNOm2a21K9Kf04k1rs08=",
       "origin": {
         "VCS": "git",
         "URL": "https://github.com/go-jose/go-jose",
-        "Hash": "b10771e937ddcce419e30fc0c2b9e38464a333d0",
-        "Ref": "refs/tags/v4.1.5"
+        "Hash": "a0111f82742fa92bceec9ede40845e73319e6230",
+        "Ref": "refs/tags/v4.1.6"
       },
       "locks": [
         "auth/caddy/go.sum"
       ],
       "licenses": [
-        "github.com/go-jose/go-jose/v4@v4.1.5/LICENSE",
-        "github.com/go-jose/go-jose/v4@v4.1.5/json/LICENSE"
+        "github.com/go-jose/go-jose/v4@v4.1.6/LICENSE",
+        "github.com/go-jose/go-jose/v4@v4.1.6/json/LICENSE"
       ],
       "files": {
         "zip": {
-          "file": "proxy/github.com/go-jose/go-jose/v4/@v/v4.1.5.zip",
-          "sha256": "0187ade1d4dd731fc0de8d972aeddd156f8f930e628f1f0badc252e5579db4c8",
-          "size": 391286
+          "file": "proxy/github.com/go-jose/go-jose/v4/@v/v4.1.6.zip",
+          "sha256": "62506f3369fc124682356bbe8eb442f982422401dda99ace200694efc962da76",
+          "size": 397543
         },
         "mod": {
-          "file": "proxy/github.com/go-jose/go-jose/v4/@v/v4.1.5.mod",
+          "file": "proxy/github.com/go-jose/go-jose/v4/@v/v4.1.6.mod",
           "sha256": "e069e6002d29495b8c2dc6cf0d3b56a075ec5be7abb6c2eb1a1c0845cb66b8b3",
           "size": 48
         },
         "info": {
-          "file": "proxy/github.com/go-jose/go-jose/v4/@v/v4.1.5.info",
-          "sha256": "1df1ec75c712c7c77306f4aca40cb0e900ae30108a1fc12474ede982488087a6",
+          "file": "proxy/github.com/go-jose/go-jose/v4/@v/v4.1.6.info",
+          "sha256": "dfbbcff78220130e26d4f7584d8a90a91df3aee72d62be3bef1aae76626991a6",
           "size": 191
         }
       }
@@ -4325,7 +4328,8 @@
       },
       "locks": [
         "auth/chisel/go.sum",
-        "agent/native/remote/go.sum"
+        "agent/native/remote/go.sum",
+        "agent/native/remote/android/go.sum"
       ],
       "licenses": [
         "github.com/gorilla/websocket@v1.5.3/AUTHORS",
@@ -5174,7 +5178,8 @@
       "origin": null,
       "locks": [
         "auth/chisel/go.sum",
-        "agent/native/remote/go.sum"
+        "agent/native/remote/go.sum",
+        "agent/native/remote/android/go.sum"
       ],
       "licenses": [
         "github.com/jpillora/sizestr@v1.0.0/LICENSE"
@@ -10441,7 +10446,8 @@
       "locks": [
         "auth/chisel/go.sum",
         "auth/age/go.sum",
-        "agent/native/remote/go.sum"
+        "agent/native/remote/go.sum",
+        "agent/native/remote/android/go.sum"
       ],
       "licenses": [
         "golang.org/x/crypto@v0.55.0/LICENSE",
@@ -10504,35 +10510,35 @@
     },
     {
       "name": "golang.org/x/crypto/x509roots/fallback",
-      "version": "v0.0.0-20260929172509-b39ff6d641ec",
-      "sum": "h1:6gLejUU4OPMnmDEz8DkDkWMoyDj2Ny5iUy1Ze3raJhs=",
+      "version": "v0.0.0-20261030153154-30a33513ff6d",
+      "sum": "h1:5NBkmd8MXirajj6AAEpi4HFVJnVkBNPTL1ggYAKqaws=",
       "goModSum": "h1:HPze8vhfG6fO06AM+VSvxRm4E3+5Yk375mgrJ5M2z1E=",
       "origin": {
         "VCS": "git",
         "URL": "https://go.googlesource.com/crypto",
         "Subdir": "x509roots/fallback",
-        "Hash": "b39ff6d641ecc5bb4b241737cb0c6b646f3e12a9"
+        "Hash": "30a33513ff6dc70af58e35680e54167d239ce419"
       },
       "locks": [
         "auth/caddy/go.sum"
       ],
       "licenses": [
-        "golang.org/x/crypto/x509roots/fallback@v0.0.0-20260929172509-b39ff6d641ec/LICENSE"
+        "golang.org/x/crypto/x509roots/fallback@v0.0.0-20261030153154-30a33513ff6d/LICENSE"
       ],
       "files": {
         "zip": {
-          "file": "proxy/golang.org/x/crypto/x509roots/fallback/@v/v0.0.0-20260929172509-b39ff6d641ec.zip",
-          "sha256": "478a1cfb01ddae17e24a37a8297dfa68cb98c6d8a7d26f5547fe3899524b518e",
-          "size": 111028
+          "file": "proxy/golang.org/x/crypto/x509roots/fallback/@v/v0.0.0-20261030153154-30a33513ff6d.zip",
+          "sha256": "1d89cd0d2f89441aec256fba2c3aaf0d83579f5bd2ceafa6c83f5b3698b3adcf",
+          "size": 109681
         },
         "mod": {
-          "file": "proxy/golang.org/x/crypto/x509roots/fallback/@v/v0.0.0-20260929172509-b39ff6d641ec.mod",
+          "file": "proxy/golang.org/x/crypto/x509roots/fallback/@v/v0.0.0-20261030153154-30a33513ff6d.mod",
           "sha256": "a28132572ab7a286be033b3852de145f25ee0d6a94f73d01ca221fdf6b7be825",
           "size": 57
         },
         "info": {
-          "file": "proxy/golang.org/x/crypto/x509roots/fallback/@v/v0.0.0-20260929172509-b39ff6d641ec.info",
-          "sha256": "169eeed379cb41df3f083503d195fabf495edaf7154be225d25dd2836bcb3c12",
+          "file": "proxy/golang.org/x/crypto/x509roots/fallback/@v/v0.0.0-20261030153154-30a33513ff6d.info",
+          "sha256": "947010e9d51c0bd0c19c8df3c53be135dd2458a0a20499fd965af68bf02a4bc1",
           "size": 224
         }
       }
@@ -10691,7 +10697,9 @@
         "Ref": "refs/tags/v0.41.0"
       },
       "locks": [
-        "auth/mobile/go.sum"
+        "auth/caddy/go.sum",
+        "auth/mobile/go.sum",
+        "agent/native/remote/android/go.sum"
       ],
       "licenses": [
         "golang.org/x/mod@v0.41.0/LICENSE",
@@ -10765,7 +10773,7 @@
       },
       "locks": [
         "auth/authelia/go.sum",
-        "auth/caddy/go.sum"
+        "agent/native/remote/android/go.sum"
       ],
       "licenses": [
         "golang.org/x/net@v0.59.0/LICENSE",
@@ -10785,6 +10793,42 @@
         "info": {
           "file": "proxy/golang.org/x/net/@v/v0.59.0.info",
           "sha256": "f2f059aefc08c37826ae9739869ef4d9324e147c9897a79a5de3f2e2d2f00900",
+          "size": 190
+        }
+      }
+    },
+    {
+      "name": "golang.org/x/net",
+      "version": "v0.60.0",
+      "sum": "h1:79p50tfZlm0J9YfoDsSi639qSXNGVwEzOPLCxM2FsYU=",
+      "goModSum": "h1:2DA/G1UfVbCpQPeWTmMPGY7Cs2PkBkwu743bVX5PIVg=",
+      "origin": {
+        "VCS": "git",
+        "URL": "https://go.googlesource.com/net",
+        "Hash": "18ece0ce30bc35fa81fe72028bf309bb3ff3f4a5",
+        "Ref": "refs/tags/v0.60.0"
+      },
+      "locks": [
+        "auth/caddy/go.sum"
+      ],
+      "licenses": [
+        "golang.org/x/net@v0.60.0/LICENSE",
+        "golang.org/x/net@v0.60.0/PATENTS"
+      ],
+      "files": {
+        "zip": {
+          "file": "proxy/golang.org/x/net/@v/v0.60.0.zip",
+          "sha256": "052e0453db47a96ae9567503e7c95ea925ab52682cb1cec31250541f7160107e",
+          "size": 1871475
+        },
+        "mod": {
+          "file": "proxy/golang.org/x/net/@v/v0.60.0.mod",
+          "sha256": "f7034587fa012c43de66d8c276ddab161032931abf116a629daa8d66f1c80023",
+          "size": 157
+        },
+        "info": {
+          "file": "proxy/golang.org/x/net/@v/v0.60.0.info",
+          "sha256": "374e92c32cc0392f788b8904f77fd3d400df28def232813a9f2b3fa9e36205f0",
           "size": 190
         }
       }
@@ -10876,7 +10920,8 @@
       "locks": [
         "auth/authelia/go.sum",
         "auth/caddy/go.sum",
-        "auth/mobile/go.sum"
+        "auth/mobile/go.sum",
+        "agent/native/remote/android/go.sum"
       ],
       "licenses": [
         "golang.org/x/sync@v0.23.0/LICENSE",
@@ -10952,7 +10997,8 @@
       "locks": [
         "auth/authelia/go.sum",
         "auth/caddy/go.sum",
-        "auth/mobile/go.sum"
+        "auth/mobile/go.sum",
+        "agent/native/remote/android/go.sum"
       ],
       "licenses": [
         "golang.org/x/sys@v0.48.0/LICENSE",
@@ -11096,7 +11142,8 @@
       },
       "locks": [
         "auth/chisel/go.sum",
-        "agent/native/remote/go.sum"
+        "agent/native/remote/go.sum",
+        "agent/native/remote/android/go.sum"
       ],
       "licenses": [
         "golang.org/x/text@v0.41.0/LICENSE",
@@ -11245,7 +11292,9 @@
         "Ref": "refs/tags/v0.50.0"
       },
       "locks": [
-        "auth/mobile/go.sum"
+        "auth/caddy/go.sum",
+        "auth/mobile/go.sum",
+        "agent/native/remote/android/go.sum"
       ],
       "licenses": [
         "golang.org/x/tools@v0.50.0/LICENSE",
@@ -11351,7 +11400,8 @@
       "origin": null,
       "locks": [
         "auth/gozxing/go.sum",
-        "agent/native/remote/go.sum"
+        "agent/native/remote/go.sum",
+        "agent/native/remote/android/go.sum"
       ],
       "licenses": [
         "golang.org/x/xerrors@v0.0.0-20200804184101-5ec99f83aff1/LICENSE",
@@ -12382,13 +12432,6 @@
     {
       "name": "github.com/yuin/goldmark",
       "version": "v1.4.13",
-      "url": "https://proxy.golang.org/github.com/yuin/goldmark/@v/v1.4.13.info",
-      "file": "proxy/github.com/yuin/goldmark/@v/v1.4.13.info",
-      "sha256": "b0302ffb76a1b14e08f0f9aeacf7f6fcc4897f5e19cd00543fe3ddd62f2ada71"
-    },
-    {
-      "name": "github.com/yuin/goldmark",
-      "version": "v1.4.13",
       "sum": "h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=",
       "file": "proxy/github.com/yuin/goldmark/@v/v1.4.13.mod",
       "sha256": "ee7fe4466203a01d3ac19adc134cdec99bc6de71992c28f3dd9a74480bff0603"
@@ -12735,20 +12778,6 @@
       "sum": "h1:TeRTkGYfJXctD9OcfyVLyj2J3IxLnKwHJR8f4D8a3YE=",
       "file": "proxy/golang.org/x/telemetry/@v/v0.0.0-20240228155512-f48c80bd79b2.mod",
       "sha256": "804303f8b1c302436bc448c6517cf3f32216611f1c7ffd72b52df2a69565a5c6"
-    },
-    {
-      "name": "golang.org/x/telemetry",
-      "version": "v0.0.0-20260908163034-4bcc4b2ee518",
-      "url": "https://proxy.golang.org/golang.org/x/telemetry/@v/v0.0.0-20260908163034-4bcc4b2ee518.info",
-      "file": "proxy/golang.org/x/telemetry/@v/v0.0.0-20260908163034-4bcc4b2ee518.info",
-      "sha256": "b1dc3dbdce12f427a27c7aecff78d0cee3ce6d4cee05cff8d875f242a2439675"
-    },
-    {
-      "name": "golang.org/x/telemetry",
-      "version": "v0.0.0-20260908163034-4bcc4b2ee518",
-      "url": "https://proxy.golang.org/golang.org/x/telemetry/@v/v0.0.0-20260908163034-4bcc4b2ee518.mod",
-      "file": "proxy/golang.org/x/telemetry/@v/v0.0.0-20260908163034-4bcc4b2ee518.mod",
-      "sha256": "b3db3a6093c95190ba4c799a41b18ed8cab5f9d5329e6d327eecd8bb54d7ff76"
     },
     {
       "name": "golang.org/x/term",

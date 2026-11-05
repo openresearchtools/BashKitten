@@ -23,12 +23,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptrace"
 	"net/netip"
 	"net/textproto"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -36,6 +38,7 @@ import (
 	"time"
 
 	"github.com/dunglas/httpsfv"
+	"github.com/quic-go/quic-go/http3"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/net/http/httpguts"
@@ -532,7 +535,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 		if randErr != nil {
 			return randErr
 		}
-		clonedReq.Header["Sec-WebSocket-Key"] = []string{base64.StdEncoding.EncodeToString(key)}
+		clonedReq.Header["Sec-WebSocket-Key"] = []string{base64.StdEncoding.EncodeToString(key)} //nolint:canonicalheader // RFC 6455 casing, see normalizeWebsocketHeaders
 	}
 
 	// we will need the original headers and Host value if
@@ -794,6 +797,7 @@ func normalizeWebsocketHeaders(header http.Header) {
 // proxying) regardless of proxy retries. This assumes that no mutations
 // of the cloned request are performed by h during or after proxying.
 func (h Handler) prepareRequest(req *http.Request, repl *caddy.Replacer) (*http.Request, error) {
+	origReq := req
 	req = cloneRequest(req)
 
 	// if enabled, perform rewrites on the cloned request; if
@@ -805,6 +809,17 @@ func (h Handler) prepareRequest(req *http.Request, repl *caddy.Replacer) (*http.
 			req.ContentLength = 0
 			req.Body = nil
 		}
+	}
+
+	if req.Body != nil {
+		// net/http fills in the incoming trailers only when Body.Read reaches
+		// EOF. Keep an independent map, but update it in that same Read before
+		// the transport writes the trailers. Install this before buffering,
+		// which may itself consume the body to EOF before the round trip.
+		if req.Trailer == nil {
+			req.Trailer = make(http.Header)
+		}
+		req.Body = &requestBodyWithTrailers{ReadCloser: req.Body, original: origReq, trailer: req.Trailer}
 	}
 
 	// Fully buffering the request is incompatible with incremental forwarding.
@@ -829,8 +844,17 @@ func (h Handler) prepareRequest(req *http.Request, repl *caddy.Replacer) (*http.
 		// set Content-Length when body is fully buffered
 		if b, ok := req.Body.(bodyReadCloser); ok && b.body == nil {
 			req.ContentLength = readBytes
-			req.Header.Set("Content-Length", strconv.FormatInt(req.ContentLength, 10))
+			req.Header["Content-Length"] = []string{strconv.FormatInt(req.ContentLength, 10)}
 		}
+	}
+
+	// HTTP/1 upstreams require chunked framing to carry trailers, including
+	// when buffering has made the body length known (or the body is empty).
+	// Length-required transports such as FastCGI need the buffered length and
+	// do not carry HTTP trailers.
+	if len(req.Trailer) > 0 && req.Body != nil && !h.transportRequiresContentLength() {
+		req.ContentLength = -1
+		req.Header.Del("Content-Length")
 	}
 
 	if req.ContentLength == 0 {
@@ -842,7 +866,7 @@ func (h Handler) prepareRequest(req *http.Request, repl *caddy.Replacer) (*http.
 	// if User-Agent is not set by client, then explicitly
 	// disable it so it's not set to default value by std lib
 	if _, ok := req.Header["User-Agent"]; !ok {
-		req.Header.Set("User-Agent", "")
+		req.Header["User-Agent"] = []string{""}
 	}
 
 	// Indicate if request has been conveyed in early data.
@@ -854,7 +878,7 @@ func (h Handler) prepareRequest(req *http.Request, repl *caddy.Replacer) (*http.
 	// might already have been forwarded by it or another instance
 	// (see Section 6.2)."
 	if req.TLS != nil && !req.TLS.HandshakeComplete {
-		req.Header.Set("Early-Data", "1")
+		req.Header["Early-Data"] = []string{"1"}
 	}
 
 	reqUpgradeType := upgradeType(req.Header)
@@ -870,17 +894,18 @@ func (h Handler) prepareRequest(req *http.Request, repl *caddy.Replacer) (*http.
 		// advertise that unless the incoming client request thought it was worth
 		// mentioning.)
 		if h == "Te" && httpguts.HeaderValuesContainsToken(req.Header["Te"], "trailers") {
-			req.Header.Set("Te", "trailers")
+			req.Header["Te"] = []string{"trailers"}
 			continue
 		}
-		req.Header.Del(h)
+		// hopHeaders are already canonical, so skip the normalization Del does
+		delete(req.Header, h)
 	}
 
 	// After stripping all the hop-by-hop connection headers above, add back any
 	// necessary for protocol upgrades, such as for websockets.
 	if reqUpgradeType != "" {
-		req.Header.Set("Connection", "Upgrade")
-		req.Header.Set("Upgrade", reqUpgradeType)
+		req.Header["Connection"] = []string{"Upgrade"}
+		req.Header["Upgrade"] = []string{reqUpgradeType}
 	}
 
 	// Set up the PROXY protocol info
@@ -912,7 +937,8 @@ func (h Handler) prepareRequest(req *http.Request, repl *caddy.Replacer) (*http.
 	}
 
 	// Via header(s)
-	req.Header.Add("Via", strconv.Itoa(req.ProtoMajor)+"."+strconv.Itoa(req.ProtoMinor)+" Caddy")
+	req.Header["Via"] = append(req.Header["Via"],
+		strconv.Itoa(req.ProtoMajor)+"."+strconv.Itoa(req.ProtoMinor)+" Caddy")
 
 	return req, nil
 }
@@ -938,9 +964,9 @@ func (h Handler) addForwardedHeaders(req *http.Request) error {
 		// for security. If trusted, there is no peer IP to append to
 		// X-Forwarded-For, so clientIP stays empty.
 		if !trusted {
-			req.Header.Del("X-Forwarded-For")
-			req.Header.Del("X-Forwarded-Proto")
-			req.Header.Del("X-Forwarded-Host")
+			delete(req.Header, "X-Forwarded-For")
+			delete(req.Header, "X-Forwarded-Proto")
+			delete(req.Header, "X-Forwarded-Host")
 			return nil
 		}
 	} else {
@@ -954,9 +980,9 @@ func (h Handler) addForwardedHeaders(req *http.Request) error {
 		if err != nil {
 			// Remove the `X-Forwarded-*` headers to avoid upstreams
 			// potentially trusting a header that came from the client
-			req.Header.Del("X-Forwarded-For")
-			req.Header.Del("X-Forwarded-Proto")
-			req.Header.Del("X-Forwarded-Host")
+			delete(req.Header, "X-Forwarded-For")
+			delete(req.Header, "X-Forwarded-Proto")
+			delete(req.Header, "X-Forwarded-Host")
 			return nil
 		}
 
@@ -985,12 +1011,12 @@ func (h Handler) addForwardedHeaders(req *http.Request) error {
 	if !omit {
 		if trusted && ok && prior != "" {
 			if clientIP != "" {
-				req.Header.Set("X-Forwarded-For", prior+", "+clientIP)
+				req.Header["X-Forwarded-For"] = []string{prior + ", " + clientIP}
 			} else {
-				req.Header.Set("X-Forwarded-For", prior)
+				req.Header["X-Forwarded-For"] = []string{prior}
 			}
 		} else if clientIP != "" {
-			req.Header.Set("X-Forwarded-For", clientIP)
+			req.Header["X-Forwarded-For"] = []string{clientIP}
 		}
 	}
 
@@ -1006,7 +1032,7 @@ func (h Handler) addForwardedHeaders(req *http.Request) error {
 		proto = prior
 	}
 	if !omit {
-		req.Header.Set("X-Forwarded-Proto", proto)
+		req.Header["X-Forwarded-Proto"] = []string{proto}
 	}
 
 	// Set X-Forwarded-Host; often this is redundant because
@@ -1019,7 +1045,7 @@ func (h Handler) addForwardedHeaders(req *http.Request) error {
 		host = prior
 	}
 	if !omit {
-		req.Header.Set("X-Forwarded-Host", host)
+		req.Header["X-Forwarded-Host"] = []string{host}
 	}
 
 	return nil
@@ -1062,12 +1088,16 @@ func (h *Handler) reverseProxy(rw http.ResponseWriter, req *http.Request, origRe
 				return nil
 			}
 			h := rw.Header()
-			copyHeader(h, http.Header(header))
+			ownHeaders := h.Clone()
+			upstreamHeaders := http.Header(header).Clone()
+			stripHopByHopHeaders(upstreamHeaders)
+			copyHeader(h, upstreamHeaders)
 			rw.WriteHeader(code)
 
-			// Clear headers coming from the backend
+			// Clear headers coming from the backend, keeping our own
 			// (it's not automatically done by ResponseWriter.WriteHeader() for 1xx responses)
 			clear(h)
+			maps.Copy(h, ownHeaders)
 
 			return nil
 		},
@@ -1164,14 +1194,13 @@ func (h *Handler) reverseProxy(rw http.ResponseWriter, req *http.Request, origRe
 	// check if the response matches a retry match entry; if so,
 	// close the body and return a retryable error so the request
 	// is retried with the next upstream. Only evaluate matcher sets
-	// that contain at least one expression matcher, since those are
-	// the ones that can reference response data ({rp.status_code},
-	// {rp.header.*}). Pure request-only matchers (method, path, etc.)
-	// are skipped to avoid retrying every response that matches a
-	// request condition
+	// with an expression that references response data ({rp.status_code},
+	// {rp.header.*}). Request-only matchers (method, path, or an
+	// expression without response placeholders) are skipped to avoid
+	// retrying every response that matches a request condition
 	if h.LoadBalancing != nil && len(h.LoadBalancing.RetryMatch) > 0 {
 		for _, matcherSet := range h.LoadBalancing.RetryMatch {
-			if !matcherSetHasExpressionMatcher(matcherSet) {
+			if !matcherSetReferencesResponse(matcherSet) {
 				continue
 			}
 			match, err := matcherSet.MatchWithError(req)
@@ -1200,6 +1229,7 @@ func (h *Handler) reverseProxy(rw http.ResponseWriter, req *http.Request, origRe
 		if statusCodeStr := rh.StatusCode.String(); statusCodeStr != "" {
 			statusCode, err := strconv.Atoi(repl.ReplaceAll(statusCodeStr, ""))
 			if err != nil {
+				res.Body.Close()
 				return caddyhttp.Error(http.StatusInternalServerError, err)
 			}
 			if statusCode != 0 {
@@ -1271,10 +1301,7 @@ func (h *Handler) finalizeResponse(
 	// and restore it with a canonical Connection header.
 	upgradeVal := res.Header.Get("Upgrade")
 
-	removeConnectionHeaders(res.Header)
-	for _, h := range hopHeaders {
-		res.Header.Del(h)
-	}
+	stripHopByHopHeaders(res.Header)
 
 	if res.StatusCode == http.StatusSwitchingProtocols && upgradeVal != "" {
 		res.Header.Set("Upgrade", upgradeVal)
@@ -1290,12 +1317,13 @@ func (h *Handler) finalizeResponse(
 	}
 
 	// delete our Server header and use Via instead (see #6275)
-	rw.Header().Del("Server")
+	rwHeader := rw.Header()
+	delete(rwHeader, "Server")
 	var protoPrefix string
 	if !strings.HasPrefix(strings.ToUpper(res.Proto), "HTTP/") {
 		protoPrefix = res.Proto[:strings.Index(res.Proto, "/")+1]
 	}
-	rw.Header().Add("Via", protoPrefix+strconv.Itoa(res.ProtoMajor)+"."+strconv.Itoa(res.ProtoMinor)+" Caddy")
+	rwHeader["Via"] = append(rwHeader["Via"], protoPrefix+strconv.Itoa(res.ProtoMajor)+"."+strconv.Itoa(res.ProtoMinor)+" Caddy")
 
 	// apply any response header operations
 	if h.Headers != nil && h.Headers.Response != nil {
@@ -1341,7 +1369,13 @@ func (h *Handler) finalizeResponse(
 		// we'll just log the error and abort the stream here and panic just as
 		// the standard lib's proxy to propagate the stream error.
 		// see issue https://github.com/caddyserver/caddy/issues/5951
-		if c := logger.Check(zapcore.WarnLevel, "aborting with incomplete response"); c != nil {
+		lvl := zapcore.WarnLevel
+		if isClientCanceledH3(err) {
+			// the client canceled the request; expected and not actionable
+			// see issue https://github.com/caddyserver/caddy/issues/5766
+			lvl = zapcore.DebugLevel
+		}
+		if c := logger.Check(lvl, "aborting with incomplete response"); c != nil {
 			c.Write(zap.Error(err))
 		}
 		// flush the buffer to ensure the client sees the partial response
@@ -1383,6 +1417,17 @@ func (h *Handler) finalizeResponse(
 	return nil
 }
 
+// isClientCanceledH3 returns true if err is an HTTP/3 client canceling
+// its request (H3_REQUEST_CANCELLED) while the response was being written.
+// The same error read from an HTTP/3 backend is the backend's doing.
+func isClientCanceledH3(err error) bool {
+	if !errors.Is(err, errWritingDownstream) {
+		return false
+	}
+	h3Err, ok := errors.AsType[*http3.Error](err)
+	return ok && h3Err.Remote && h3Err.ErrorCode == http3.ErrCodeRequestCanceled
+}
+
 // tryAgain takes the time that the handler was initially invoked,
 // the amount of retries already performed, as well as any error
 // currently obtained, and the request being tried, and returns
@@ -1410,9 +1455,12 @@ func (lb LoadBalancing) tryAgain(ctx caddy.Context, start time.Time, retries int
 	// could not even be established to the upstream), then it
 	// should be safe to retry, since without a connection, no
 	// HTTP request can be transmitted; but if the error is not
-	// specifically a dialer error, we need to be careful
+	// specifically a dialer error, we need to be careful; the
+	// dial error may be wrapped, e.g. net/http wraps it in a
+	// *net.OpError ("proxyconnect") when a forward proxy is used
 	if proxyErr != nil {
-		_, isDialError := proxyErr.(DialError)
+		var dialErr DialError
+		isDialError := errors.As(proxyErr, &dialErr)
 		_, isRetryableResponse := proxyErr.(retryableResponseError)
 		herr, isHandlerError := proxyErr.(caddyhttp.HandlerError)
 
@@ -1535,33 +1583,53 @@ func (h Handler) provisionUpstream(upstream *Upstream, dynamic bool) {
 // (which it shouldn't be), this function returns its input; i.e. is a no-op, for safety.
 // Otherwise, it returns bodyReadCloser, the original body will be closed and body will be nil
 // if it's explicitly configured to buffer all or EOF is reached when reading.
-// TODO: the error during reading is discarded if the limit is negative, should the error be propagated
-// to upstream/downstream?
+// If reading fails, the body is returned as partially buffered, so the read error
+// is not hidden from the caller.
 func (h Handler) bufferedBody(originalBody io.ReadCloser, limit int64) (io.ReadCloser, int64) {
 	if limit == 0 {
 		return originalBody, 0
 	}
 	var written int64
+	var err error
 	buf := bufPool.Get().(*bytes.Buffer)
 	buf.Reset()
 	if limit > 0 {
-		var err error
 		written, err = io.CopyN(buf, originalBody, limit)
-		if (err != nil && err != io.EOF) || written == limit {
-			return bodyReadCloser{
-				Reader: io.MultiReader(buf, originalBody),
-				buf:    buf,
-				body:   originalBody,
-			}, written
-		}
 	} else {
-		written, _ = io.Copy(buf, originalBody)
+		written, err = io.Copy(buf, originalBody)
+	}
+	if (err != nil && err != io.EOF) || written == limit {
+		return bodyReadCloser{
+			Reader: io.MultiReader(buf, originalBody),
+			buf:    buf,
+			body:   originalBody,
+		}, written
 	}
 	originalBody.Close() // no point in keeping it open
 	return bodyReadCloser{
 		Reader: buf,
 		buf:    buf,
 	}, written
+}
+
+// requestBodyWithTrailers publishes a snapshot of the incoming trailers at EOF.
+// Close only closes the underlying body; it must not read or publish trailers.
+type requestBodyWithTrailers struct {
+	io.ReadCloser
+	original *http.Request
+	trailer  http.Header
+}
+
+func (b *requestBodyWithTrailers) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if err == io.EOF && b.original != nil {
+		clear(b.trailer)
+		for k, vv := range b.original.Trailer {
+			b.trailer[k] = slices.Clone(vv)
+		}
+		b.original = nil // repeated EOF reads must not recopy or append values
+	}
+	return n, err
 }
 
 // cloneRequest makes a semi-deep clone of origReq.
@@ -1648,7 +1716,10 @@ func upgradeType(h http.Header) string {
 	if !httpguts.HeaderValuesContainsToken(h["Connection"], "Upgrade") {
 		return ""
 	}
-	return strings.ToLower(h.Get("Upgrade"))
+	if v := h["Upgrade"]; len(v) > 0 {
+		return strings.ToLower(v[0])
+	}
+	return ""
 }
 
 // removeConnectionHeaders removes hop-by-hop headers listed in the "Connection" header of h.
@@ -1660,6 +1731,16 @@ func removeConnectionHeaders(h http.Header) {
 				h.Del(sf)
 			}
 		}
+	}
+}
+
+// stripHopByHopHeaders removes hop-by-hop headers from h, including any
+// headers nominated by the Connection header.
+// See RFC 7230, section 6.1.
+func stripHopByHopHeaders(h http.Header) {
+	removeConnectionHeaders(h)
+	for _, hop := range hopHeaders {
+		h.Del(hop)
 	}
 }
 
@@ -1795,6 +1876,11 @@ var hopHeaders = []string{
 // DialError is an error that specifically occurs
 // in a call to Dial or DialContext.
 type DialError struct{ error }
+
+// NewDialError wraps err as a DialError for transports outside this package.
+func NewDialError(err error) DialError {
+	return DialError{err}
+}
 
 // TLSTransport is implemented by transports
 // that are capable of using TLS.
@@ -1998,15 +2084,37 @@ type RequestHeaderOpsTransport interface {
 	RequestHeaderOps() *headers.HeaderOps
 }
 
-// matcherSetHasExpressionMatcher reports whether a matcher set contains
-// at least one expression matcher. Expression matchers can reference
-// response data via placeholders like {rp.status_code}. Matcher sets
-// without expression matchers only test request properties and should
-// not be evaluated for response-based retry decisions
-func matcherSetHasExpressionMatcher(matcherSet caddyhttp.MatcherSet) bool {
+// responsePlaceholders are the placeholders that are only set once the
+// upstream round trip completes ({rp.status_code} is adapted to
+// {http.reverse_proxy.status_code}, and so on)
+var responsePlaceholders = []string{
+	"http.reverse_proxy.status_code",
+	"http.reverse_proxy.status_text",
+	"http.reverse_proxy.upstream.latency",
+	"http.reverse_proxy.upstream.latency_ms",
+}
+
+// responseHeaderPlaceholderPrefix is the prefix of the response
+// header placeholders, {http.reverse_proxy.header.*}
+const responseHeaderPlaceholderPrefix = "http.reverse_proxy.header."
+
+// matcherSetReferencesResponse reports whether a matcher set contains an
+// expression matcher that reads response data, or a placeholder whose name
+// is only known at evaluation time. Other matcher sets only test request or
+// upstream selection properties and should not be evaluated for
+// response-based retry decisions
+func matcherSetReferencesResponse(matcherSet caddyhttp.MatcherSet) bool {
 	for _, m := range matcherSet {
-		if _, ok := m.(*caddyhttp.MatchExpression); ok {
-			return true
+		expr, ok := m.(*caddyhttp.MatchExpression)
+		if !ok {
+			continue
+		}
+		for _, name := range expr.Placeholders() {
+			if name == "" ||
+				slices.Contains(responsePlaceholders, name) ||
+				strings.HasPrefix(name, responseHeaderPlaceholderPrefix) {
+				return true
+			}
 		}
 	}
 	return false

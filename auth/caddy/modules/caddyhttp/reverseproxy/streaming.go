@@ -58,6 +58,19 @@ func (rwc h2ReadWriteCloser) Write(p []byte) (n int, err error) {
 }
 
 func (h *Handler) handleUpgradeResponse(logger *zap.Logger, wg *sync.WaitGroup, rw http.ResponseWriter, req *http.Request, res *http.Response) {
+	// Until the tunnel takes ownership, every setup failure must close the
+	// backend body and any hijacked client connection. net/http no longer
+	// owns the client socket after a successful hijack.
+	var conn io.ReadWriteCloser
+	tunnelOwnsConnections := false
+	defer func() {
+		if !tunnelOwnsConnections {
+			res.Body.Close()
+			if conn != nil {
+				conn.Close()
+			}
+		}
+	}()
 	reqUpType := upgradeType(req.Header)
 	resUpType := upgradeType(res.Header)
 
@@ -90,17 +103,14 @@ func (h *Handler) handleUpgradeResponse(logger *zap.Logger, wg *sync.WaitGroup, 
 	copyHeader(rw.Header(), res.Header)
 	normalizeWebsocketHeaders(rw.Header())
 
-	var (
-		conn io.ReadWriteCloser
-		brw  *bufio.ReadWriter
-	)
+	var brw *bufio.ReadWriter
 	// websocket over http2 or http3 if extended connect is enabled, assuming backend doesn't support this, the request will be modified to http1.1 upgrade
 	// TODO: once we can reliably detect backend support this, it can be removed for those backends
 	if body, ok := caddyhttp.GetVar(req.Context(), "extended_connect_websocket_body").(io.ReadCloser); ok {
 		req.Body = body
 		rw.Header().Del("Upgrade")
 		rw.Header().Del("Connection")
-		delete(rw.Header(), "Sec-WebSocket-Accept")
+		delete(rw.Header(), "Sec-WebSocket-Accept") //nolint:canonicalheader // set by normalizeWebsocketHeaders above
 		rw.WriteHeader(http.StatusOK)
 
 		if c := logger.Check(zap.DebugLevel, "upgrading connection"); c != nil {
@@ -163,6 +173,8 @@ func (h *Handler) handleUpgradeResponse(logger *zap.Logger, wg *sync.WaitGroup, 
 			c.Write(zap.Duration("duration", time.Since(start)))
 		}
 	}()
+	// From here on, the deferred closes above own both connections.
+	tunnelOwnsConnections = true
 
 	if err := brw.Flush(); err != nil {
 		if c := logger.Check(zapcore.DebugLevel, "response flush"); c != nil {
@@ -354,6 +366,10 @@ func (h Handler) copyResponse(dst http.ResponseWriter, src io.Reader, flushInter
 	return err
 }
 
+// errWritingDownstream wraps errors from writing the response to the client,
+// to tell them apart from errors reading the response from the backend.
+var errWritingDownstream = errors.New("writing")
+
 // copyBuffer returns any write errors or non-EOF read errors, and the amount
 // of bytes written.
 func (h Handler) copyBuffer(dst io.Writer, src io.Reader, buf []byte, logger *zap.Logger) (int64, error) {
@@ -394,7 +410,7 @@ func (h Handler) copyBuffer(dst io.Writer, src io.Reader, buf []byte, logger *za
 				)
 			}
 			if werr != nil {
-				return written, fmt.Errorf("writing: %w", werr)
+				return written, fmt.Errorf("%w: %w", errWritingDownstream, werr)
 			}
 			if nr != nw {
 				return written, io.ErrShortWrite

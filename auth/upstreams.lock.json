@@ -13,13 +13,13 @@
   },
   "caddy": {
     "repository": "https://github.com/caddyserver/caddy.git",
-    "commit": "72dd0fb067f6d7826c7f79907670ba4a713bfe37",
-    "tree": "733d77ae935d64209fac7398d4aeeb9a6fea840e",
-    "archive": "https://codeload.github.com/caddyserver/caddy/tar.gz/72dd0fb067f6d7826c7f79907670ba4a713bfe37",
-    "sha256": "e86c49311c0c9f7e9b3b80527f0139e5739dfe28effeaa41c444dd743f0bbd7e",
+    "commit": "0d98caea58f794f88e709b1bef2880996a471bca",
+    "tree": "5af0329527ad6aadebc48e02953d8385fa428b78",
+    "archive": "https://codeload.github.com/caddyserver/caddy/tar.gz/0d98caea58f794f88e709b1bef2880996a471bca",
+    "sha256": "7b8de20699ec38a43c97d70dd5347ed8e19d3db96d0c9d76ded020f018cb6e5e",
     "branch": "master",
-    "version": "2.11.7",
-    "tag": "v2.11.7",
+    "version": "2.11.9",
+    "tag": "v2.11.9",
     "license": "caddy/LICENSE"
   },
   "tor": {

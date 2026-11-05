@@ -13,7 +13,7 @@ The staged `bin/`, `share/` and any `lib/` directories install below the Agent
 package's `auth/`; the server uses `TASKARIAN_AUTH_BIN` only as an explicit
 override of that private binary directory.
 
-Chisel 1.12.0 is built without source patches. Caddy is pinned to 2.11.7;
+Chisel 1.12.0 is built without source patches. Caddy is pinned to 2.11.9;
 its older imported Termux recipe remains pristine, with the version override
 in our separate recipe. The complete age 1.3.2 source is pinned for the remote
 connection bundle integration; it is not a separate installed CLI.

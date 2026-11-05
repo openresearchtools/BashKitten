@@ -6,7 +6,7 @@
       "sourceCommit": "8646fe473c9501799fcad6e26138d49b32810561",
       "repository": "https://github.com/termux/termux-packages",
       "lock": "auth/upstreams.lock.json",
-      "lockSha256": "9b11a644b2f1c76011a54458d9a04b3ffeaf1b18cb96fc5f3ea5712eb068bf5d",
+      "lockSha256": "347dd295fc962f24a3a2446172293f1498ea0cd6361ef2cf32eb1ac559484d30",
       "url": "https://codeload.github.com/termux/termux-packages/tar.gz/8646fe473c9501799fcad6e26138d49b32810561",
       "file": "termux-packages-8646fe473c9501799fcad6e26138d49b32810561.tar.gz",
       "sha256": "de56ac80e88b45f0bdf4a497ce410d82189d6f50ec83881141e4db4f7324a281",

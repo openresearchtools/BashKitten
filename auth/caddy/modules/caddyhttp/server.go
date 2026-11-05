@@ -35,6 +35,7 @@ import (
 	"github.com/quic-go/quic-go/http3"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"golang.org/x/net/http/httpguts"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/modules/caddyevents"
@@ -74,7 +75,8 @@ type Server struct {
 	// it mitigates slowloris-style attacks without penalizing large
 	// uploads from legitimately slow clients. Combine with ReadTimeout
 	// for a hard ceiling on top.
-	// Default is 1 minute.
+	// Default is 1 minute. A negative value disables it, for instance
+	// behind a proxy that already buffers request bodies.
 	ReadIdleTimeout caddy.Duration `json:"read_idle_timeout,omitempty"`
 
 	// ReadMinRate, if set, requires the client to sustain at least this
@@ -97,7 +99,8 @@ type Server struct {
 	// response, or pauses between writes (e.g. SSE), is unaffected as
 	// long as each individual write keeps making progress. Combine
 	// with WriteTimeout for a hard ceiling on top.
-	// Default is 1 minute.
+	// Default is 1 minute. A negative value disables it, for instance
+	// behind a proxy that already times out slow clients.
 	WriteIdleTimeout caddy.Duration `json:"write_idle_timeout,omitempty"`
 
 	// WriteMinRate is like ReadMinRate, but for writes to the client.
@@ -585,8 +588,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if s.WriteTimeout > 0 {
 		writeHardDeadline = start.Add(time.Duration(s.WriteTimeout))
 	}
+	var idleReader *IdleTimeoutReader
+	var idleWriter *IdleTimeoutWriter
 	if s.ReadIdleTimeout > 0 && r.Body != nil {
-		idleReader := &IdleTimeoutReader{
+		idleReader = &IdleTimeoutReader{
 			ReadCloser: r.Body,
 			Ctrl:       rc,
 			Deadline: IdleDeadline{
@@ -595,14 +600,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				MinRate:      s.ReadMinRate,
 				HardDeadline: readHardDeadline,
 			},
-			Logger:        s.logger,
-			DrainDeadline: r.ProtoMajor == 1 && r.ContentLength != 0,
+			Logger:            s.logger,
+			DrainDeadline:     r.ProtoMajor == 1 && r.ContentLength != 0,
+			ClearBetweenReads: r.ProtoMajor == 2,
 		}
 		defer idleReader.HandlerDone()
 		r.Body = idleReader
+		w = &readDeadlineWriter{ResponseWriterWrapper: ResponseWriterWrapper{ResponseWriter: w}, reader: idleReader}
 	}
 	if s.WriteIdleTimeout > 0 {
-		idleWriter := &IdleTimeoutWriter{
+		idleWriter = &IdleTimeoutWriter{
 			ResponseWriterWrapper: &ResponseWriterWrapper{ResponseWriter: w},
 			Ctrl:                  rc,
 			Deadline: IdleDeadline{
@@ -638,7 +645,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// prepare internals of the request for the handler pipeline
 	repl := caddy.NewReplacer()
-	r = PrepareRequest(r, repl, w, s)
+	r = prepareRequest(r, repl, w, s, idleTimeouts{reader: idleReader, writer: idleWriter})
 
 	// clone the request for logging purposes before it enters any handler chain;
 	// this is necessary to capture the original request in case it gets modified
@@ -807,6 +814,19 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) error {
 	if r.ProtoMajor == 1 && r.ProtoMinor == 1 && r.Host == "" {
 		return HandlerError{
 			Err:        errors.New("rfc9112 forbids empty Host"),
+			StatusCode: http.StatusBadRequest,
+		}
+	}
+
+	// the host may be used in a file path (`root /srv/{host}`): HTTP/2 and HTTP/3 don't
+	// validate :authority, and Windows trims trailing dots, so "..." can act like ".."
+	host, _, err := net.SplitHostPort(r.Host)
+	if err != nil {
+		host = r.Host
+	}
+	if !httpguts.ValidHostHeader(r.Host) || (host != "" && strings.Trim(host, ".") == "") {
+		return HandlerError{
+			Err:        errors.New("invalid host"),
 			StatusCode: http.StatusBadRequest,
 		}
 	}
@@ -1254,6 +1274,11 @@ func (s *Server) logRequest(
 	if status >= 500 {
 		logLevel = zapcore.ErrorLevel
 	}
+	if levelName, ok := GetVar(ctx, LogLevelVar).(string); ok {
+		if level, err := zapcore.ParseLevel(levelName); err == nil && level >= zapcore.DebugLevel && level <= zapcore.ErrorLevel {
+			logLevel = level
+		}
+	}
 
 	var fields []zapcore.Field
 	for _, logger := range loggers {
@@ -1370,8 +1395,17 @@ func (s *Server) Name() string { return s.name }
 // PrepareRequest fills the request r for use in a Caddy HTTP handler chain. w and s can
 // be nil, but the handlers will lose response placeholders and access to the server.
 func PrepareRequest(r *http.Request, repl *caddy.Replacer, w http.ResponseWriter, s *Server) *http.Request {
+	return prepareRequest(r, repl, w, s, idleTimeouts{})
+}
+
+// prepareRequest is PrepareRequest, also making the wrappers applying
+// the server's idle timeouts, if any, available to handlers.
+func prepareRequest(r *http.Request, repl *caddy.Replacer, w http.ResponseWriter, s *Server, idle idleTimeouts) *http.Request {
 	// set up the context for the request
 	ctx := context.WithValue(r.Context(), caddy.ReplacerCtxKey, repl)
+	if idle.reader != nil || idle.writer != nil {
+		ctx = context.WithValue(ctx, idleTimeoutsCtxKey, idle)
+	}
 	ctx = context.WithValue(ctx, ServerCtxKey, s)
 
 	trusted, clientIP := determineTrustedProxy(r, s)
