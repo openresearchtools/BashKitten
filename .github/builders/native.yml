@@ -1,0 +1,84 @@
+name: Taskarian build components
+run-name: Taskarian components ${{ inputs.target }} / ${{ inputs.source_sha }} / ${{ inputs.request_id }}
+'on':
+  workflow_dispatch:
+    inputs:
+      source_sha: {required: true, type: string}
+      target: {required: true, type: string}
+      request_id: {required: true, type: string}
+      components: {default: '["all"]', type: string}
+      force_rebuild: {default: false, type: boolean}
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: native-components-${{ inputs.target }}
+  cancel-in-progress: false
+jobs:
+  native:
+    runs-on: ${{ inputs.target == 'linux-arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 360
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GOTELEMETRY: 'off'
+      DO_NOT_TRACK: '1'
+      PI_TELEMETRY: '0'
+      PI_OFFLINE: '1'
+      GIT_LFS_SKIP_SMUDGE: '1'
+      TASKARIAN_BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: openresearchtools/Taskarian
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+          path: source
+          filter: blob:none
+          sparse-checkout: |
+            agent/packaging
+            agent/package.json
+            agent/package-lock.json
+            agent/vendor/npm/sources.json
+            agent/vendor/pi/source.json
+            agent/machines/rust-toolchain/sources.json
+            auth/dependencies/go-toolchain/sources.json
+      - name: Resolve exact direct component manifests before build setup
+        id: plan
+        working-directory: source
+        env:
+          COMPONENTS: ${{ inputs.components }}
+          TARGET: ${{ inputs.target }}
+          FORCE: ${{ inputs.force_rebuild }}
+        run: |
+          echo "TASKARIAN_SOURCE_CACHE=$RUNNER_TEMP/component-work/sources" >> "$GITHUB_ENV"
+          arguments=()
+          if [ "$FORCE" = true ]; then arguments+=(--force-rebuild); fi
+          python3 agent/packaging/native-worker.py plan "$TARGET" --components "$COMPONENTS" --plan "$RUNNER_TEMP/components.json" "${arguments[@]}"
+      - name: Materialize current build owners only after a component miss
+        if: steps.plan.outputs.build == 'true'
+        working-directory: source
+        run: git sparse-checkout disable
+      - uses: actions/setup-go@v6
+        if: steps.plan.outputs.needs_go == 'true'
+        with:
+          go-version: ${{ steps.plan.outputs.go }}
+          cache: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        if: steps.plan.outputs.needs_node == 'true'
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        if: steps.plan.outputs.needs_pnpm == 'true'
+        with:
+          version: '12'
+          run_install: false
+      - name: Build missing components using their native owners
+        if: steps.plan.outputs.build == 'true'
+        working-directory: source
+        env:
+          TARGET: ${{ inputs.target }}
+          FORCE: ${{ inputs.force_rebuild }}
+        run: |
+          arguments=()
+          if [ "$FORCE" = true ]; then arguments+=(--force-rebuild); fi
+          python3 agent/packaging/native-worker.py build "$TARGET" --plan "$RUNNER_TEMP/components.json" --work "$RUNNER_TEMP/component-work" --output "$RUNNER_TEMP/component-output" "${arguments[@]}"

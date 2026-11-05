@@ -1,0 +1,396 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+"""Architecture-worker adapter for the existing native component build owners."""
+import argparse
+import importlib.util
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+import time
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).parent))
+
+
+def module(name):
+    spec = importlib.util.spec_from_file_location(name.replace('-', '_'), Path(__file__).with_name(name + '.py'))
+    value = importlib.util.module_from_spec(spec); spec.loader.exec_module(value)
+    return value
+
+
+store = module('component-store')
+native = module('native-component')
+tools = module('native-tools')
+MACHINES = ('podman', 'crun', 'conmon', 'netavark', 'aardvark-dns', 'passt', 'libfuse', 'fuse-overlayfs', 'catatonit')
+AUTH = tuple('auth-' + name for name in native.AUTH)
+OFFICE = ('office-engine', 'office-server', 'office-ui', 'office-integration', 'files-server', 'files-ui',
+          'files-media', 'files-office-addon', 'files-integration', 'references')
+APP = ('npm-runtime', 'photon', 'agent-resources')
+
+
+def head():
+    return native.git('rev-parse', 'HEAD')
+
+
+def run(command, **kwargs):
+    subprocess.run([str(value) for value in command], check=True, cwd=kwargs.pop('cwd', ROOT), **kwargs)
+
+
+def inputs(component, target, revision=None):
+    revision = revision or head()
+    if component == 'node':
+        return {'schema': 1, 'component': component, 'target': target,
+                'files': {name: native.entry(revision, name) for name in
+                          ('agent/packaging/node', 'agent/vendor/node', 'agent/packaging/source_cache.py')},
+                'recipe': native.native_toolchain(component, target, revision)}
+    if component == 'runtime-guard':
+        return {'schema': 1, 'component': component, 'target': target,
+                'files': {'agent/src/server/access/runtime-guard.c': native.entry(revision, 'agent/src/server/access/runtime-guard.c')},
+                'command': 'cc -std=c11 -Wall -Wextra -Werror -O2',
+                'recipe': native.native_toolchain(component, target, revision)}
+    return native.inputs(component, target, revision)
+
+
+component_inputs = inputs
+
+def version(component, target, revision=None):
+    revision = revision or head()
+    if component.startswith('auth-') and component != 'auth-remote':
+        return json.loads(native.content(revision, 'auth/upstreams.lock.json'))[component[5:]]['version']
+    if component.startswith('machines-'):
+        return json.loads(native.content(revision, 'agent/machines/vendor/' + component[9:] + '/source.json'))['version']
+    if component == 'node':
+        return json.loads(native.content(revision, 'agent/packaging/node/lock.json'))[target.split('-')[0]]['node_version']
+    if component == 'search':
+        return next(item['version'] for item in json.loads(native.content(revision, 'agent/search/runtime-lock.json'))['packages'] if item['name'] == 'ddgs')
+    return native.content(revision, 'browser/taskarian/config/version.txt').strip()
+
+
+def components(target):
+    values = [*AUTH, 'auth', 'node', 'search']
+    if target.startswith('linux-'):
+        values += ['runtime-guard', *('machines-' + name for name in MACHINES), 'machines', 'display', 'guest']
+    else:
+        values += ['os', 'loader']
+    return values
+
+
+def reference(result):
+    return {name: result[name] for name in ('repository', 'manifestName', 'manifestSha256')}
+
+
+def restore_component(component, target, directory, roles=None):
+    result = store.restore(component, target, inputs(component, target), directory,
+                           roles=roles, requested_source=head())
+    if result is None:
+        return None
+    # Keep provenance outside original archives and never relabel their producer.
+    files = {item['name']: item['sha256'] for item in result['manifest']['assets']
+             if (Path(directory) / item['name']).is_file()}
+    receipt = {'schema': 1, 'component': component, 'target': target,
+               'producerSource': result['manifest']['sourceCommit'], 'requestedSource': head(),
+               'inputs': inputs(component, target), 'files': files, 'store': result}
+    name = native.receipt_name(component, target)
+    (Path(directory) / name).write_text(json.dumps(receipt, indent=2) + '\n')
+    return result
+
+
+def extract(archive, destination):
+    Path(destination).mkdir(parents=True, exist_ok=True)
+    with tarfile.open(archive) as source:
+        source.extractall(destination, filter='data')
+
+
+def pack(directory, archive, root=None):
+    with tarfile.open(archive, 'w:gz') as output:
+        if root:
+            output.add(directory, arcname=root)
+        else:
+            for file in sorted(Path(directory).iterdir()):
+                output.add(file, arcname=file.name)
+
+
+def source_bundle(component, target, output):
+    """Selected tracked source plus exact downloaded native dependency originals."""
+    from source_archive import archive_revision
+    from source_cache import fetch
+    values = inputs(component, target)
+    paths = [path for path, identity in values.get('files', {}).items() if identity]
+    if component.startswith('machines-'):
+        paths.append('agent/packaging/machines/build.py')
+    paths += ['LICENSE', 'agent/packaging/native-components.py', 'agent/packaging/native-tools.py',
+              'agent/packaging/source_archive.py', 'agent/packaging/source_cache.py']
+    original = Path(output) / f'{component}-tracked-source.tar.gz'
+    archive_revision(ROOT, head(), original, paths=paths)
+    pins = []
+    if component.startswith('auth-'):
+        name = component[5:]
+        lock = json.loads((ROOT / 'auth/upstreams.lock.json').read_text())
+        if name in lock and lock[name].get('archive'):
+            pins.append({**lock[name], 'url': lock[name]['archive']})
+        selected = values.get('records', {}).get('goPins', {})
+        for item in selected.get('modules', []):
+            pins += list(item['files'].values())
+        pins += selected.get('moduleMetadata', [])
+        if name in ('authelia', 'caddy', 'chisel', 'remote'):
+            pins.append(json.loads((ROOT / 'auth/dependencies/go-toolchain/sources.json').read_text()))
+        if name == 'authelia':
+            pins += json.loads((ROOT / 'auth/dependencies/frontend/sources.json').read_text())['components']
+        if target.startswith('termux-'):
+            selected_commit = json.loads((ROOT / 'auth/build/termux-toolchain.json').read_text())['commit']
+            pins += [item for item in json.loads((ROOT / 'auth/dependencies/termux/sources.json').read_text())['components'] if item['sourceCommit'] == selected_commit]
+    if component.startswith('machines-'):
+        name = component[9:]
+        record = json.loads((ROOT / f'agent/machines/vendor/{name}/source.json').read_text())
+        if record.get('vendor'):
+            pins.append(record['vendor'])
+        if name in ('netavark', 'aardvark-dns'):
+            pins.append(json.loads((ROOT / 'agent/machines/rust-toolchain/sources.json').read_text()))
+        if name == 'podman':
+            pins.append(json.loads((ROOT / 'auth/dependencies/go-toolchain/sources.json').read_text()))
+    if component in ('display', 'guest'):
+        pins.append(json.loads((ROOT / 'agent/machines/rust-toolchain/sources.json').read_text()))
+    archive = Path(output) / f'{component}-source-{target}.tar.gz'
+    with tarfile.open(archive, 'w:gz') as destination:
+        destination.add(original, arcname=original.name)
+        seen = set()
+        for pin in pins:
+            if pin['sha256'] in seen:
+                continue
+            seen.add(pin['sha256'])
+            if not pin.get('url') and pin.get('file', '').startswith('proxy/'):
+                pin = {**pin, 'url': 'https://proxy.golang.org/' + pin['file'][6:]}
+            file = fetch(pin)
+            destination.add(file, arcname='originals/' + file.name)
+    original.unlink()
+    return archive
+
+
+def legal_bundle(component, output):
+    destination = Path(output) / f'{component}-legal.tar.gz'
+    with tarfile.open(destination, 'w:gz') as legal:
+        legal.add(ROOT / 'LICENSE', arcname='Taskarian-LICENSE')
+        for archive in sorted(Path(output).glob('*.tar.*')):
+            if archive == destination or 'source' in archive.name or archive.name.endswith('.zst'):
+                continue
+            with tarfile.open(archive) as payload:
+                for member in payload:
+                    if member.isfile() and any(token in member.name.lower() for token in ('licens', 'copying', 'notice', 'copyright')):
+                        data = payload.extractfile(member)
+                        legal.addfile(member, data)
+    return destination
+
+
+def publish(component, target, output, dependencies=()):
+    output = Path(output)
+    existing_sources = [path for path in output.glob('*source*.tar.*') if path.is_file()]
+    if not existing_sources:
+        source_bundle(component, target, output)
+    legal = legal_bundle(component, output)
+    assets = {}
+    for file in output.iterdir():
+        if not file.is_file() or file.name.startswith('native-input-equivalence-'):
+            continue
+        assets[file.name] = ('legal' if file == legal else 'source' if 'source' in file.name else
+                             'build-support' if 'build-support' in file.name else
+                             'metadata' if file.suffix in ('.json', '.txt') or file.name == 'SHA256SUMS' else 'runtime')
+    return store.publish(component, target, version(component, target), inputs(component, target), output,
+                         assets=assets, source_commit=head(), dependencies=[reference(value) for value in dependencies])
+
+
+def build_search(target, work, output):
+    if target.startswith('linux-'):
+        run(['python3', 'agent/search/build/runtime.py', target, '--output', output]); return
+    architecture = target.split('-')[1]
+    framework = Path(work) / 'termux-packages'
+    lock = json.loads((ROOT / 'agent/search/runtime-lock.json').read_text())['termuxPackages']
+    run(['python3', 'auth/build/retained-sources.py', 'termux', '--commit', lock['commit'], '--output', framework])
+    shutil.copytree(ROOT / 'agent/packaging/termux/search/python-primp', framework / 'packages/python-primp')
+    env = {**os.environ, 'TERMUX_BUILDER_IMAGE_NAME': lock['builderImage'],
+           'TERMUX_DOCKER_RUN_EXTRA_ARGS': '--volume ' + str(ROOT) + ':/taskarian:ro',
+           'TERMUX_DOCKER_EXEC_EXTRA_ARGS': '--env TASKARIAN_SOURCE_ROOT=/taskarian'}
+    run(['scripts/run-docker.sh', './build-package.sh', '-I', '-a', architecture, 'python-primp'], cwd=framework, env=env)
+    stage = Path(work) / 'native'
+    debs = list((framework / 'output').glob('python-primp_*_' + architecture + '.deb'))
+    if len(debs) != 1:
+        raise ValueError('Expected one native primp package')
+    run(['dpkg-deb', '-x', debs[0], stage])
+    run(['python3', 'agent/search/build/runtime.py', target, '--output', output, '--termux-native',
+         stage / 'data/data/com.termux/files/usr/lib/taskarian/search/runtime/site-packages'])
+
+
+def run_component(component, target, work, output, force=False):
+    work, output = Path(work).resolve(), Path(output).resolve()
+    work.mkdir(parents=True, exist_ok=True); output.mkdir(parents=True, exist_ok=True)
+    if not force:
+        existing = restore_component(component, target, output)
+        if existing:
+            return existing
+    if os.environ.get('GITHUB_ACTIONS') != 'true':
+        raise ValueError('Native builds run only in architecture GitHub Actions workers')
+    contract = tools.contract(component, target, lambda name: (ROOT / name).read_text())
+    tools.setup(contract)
+    dependencies = []
+    architecture = target.split('-')[1]
+    if component.startswith('auth-'):
+        payload = work / 'payload'
+        run(['auth/build/' + component[5:] + '.sh', target, payload])
+        pack(payload, output / 'component.tar.gz')
+    elif component == 'node':
+        run(['python3', 'agent/packaging/node/build.py', '--platform', target.split('-')[0], '--architecture', architecture, '--output', output])
+        archives = {file.name: store.sha(file) for file in output.glob('node-*.tar.gz')}
+        provenance = output / f'node-provenance-{target}.json'
+        provenance.write_text(json.dumps({'schema': 2, 'target': target, 'producerSource': head(),
+            'inputs': inputs(component, target), 'archives': archives,
+            'producer': {'repository': os.environ['GITHUB_REPOSITORY'], 'run': os.environ['GITHUB_RUN_ID']}}, indent=2) + '\n')
+        with (output / 'SHA256SUMS').open('a') as sums:
+            sums.write(store.sha(provenance) + '  ' + provenance.name + '\n')
+    elif component == 'search':
+        build_search(target, work, output)
+    elif component.startswith('machines-'):
+        name = component[9:]; arguments = []
+        if name == 'fuse-overlayfs':
+            dependency = work / 'libfuse'
+            value = restore_component('machines-libfuse', target, dependency)
+            if value is None:
+                raise ValueError('libfuse component must finish before fuse-overlayfs')
+            dependencies.append(value)
+            for file in dependency.glob('*.tar.gz'):
+                if 'source' not in file.name and 'legal' not in file.name:
+                    extract(file, dependency)
+            arguments += ['--dependency-dir', dependency]
+        run(['python3', 'agent/packaging/machines/build.py', '--architecture', architecture, '--component', name,
+             '--work', work / 'native', '--output', output, '--jobs', '2', *arguments])
+    elif component == 'display':
+        run(['python3', 'browser/taskarian/display/build.py', '--work-dir', work / 'native', '--output', output])
+    elif component == 'runtime-guard':
+        payload = work / 'guard/bin'; payload.mkdir(parents=True)
+        run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-O2', 'agent/src/server/access/runtime-guard.c', '-o', payload / 'runtime-guard'])
+        pack(payload.parent, output / 'runtime-guard.tar.gz')
+    elif component == 'os':
+        run(['python3', 'agent/packaging/termux/os.py', '--architecture', architecture, '--work', work / 'native', '--output', output])
+    elif component in ('auth', 'machines'):
+        dependencies = aggregate(component, target, work, output)
+    elif component == 'guest':
+        build_guest(target, work, output)
+    elif component == 'loader':
+        jar = Path(os.environ['ANDROID_HOME']) / 'platforms/android-37.0/android.jar'
+        from release import CERT
+        run(['python3', 'browser/mobile/android/taskarian/display/loader/build.py', '--jdk', os.environ['JAVA_HOME_17_X64'],
+             '--android-jar', jar, '--d8', Path(os.environ['ANDROID_HOME']) / 'build-tools/37.0.0/d8',
+             '--package', 'com.taskarian', '--signer', CERT, '--output', output])
+    else:
+        raise ValueError('Unsupported native component: ' + component)
+    return publish(component, target, output, dependencies)
+
+
+def aggregate(component, target, work, output):
+    dependencies = []
+    payload = Path(work) / 'payload'; payload.mkdir(parents=True, exist_ok=True)
+    leaves = AUTH if component == 'auth' else tuple('machines-' + name for name in MACHINES)
+    for leaf in leaves:
+        incoming = Path(work) / leaf
+        result = restore_component(leaf, target, incoming, roles={'runtime', 'metadata'})
+        if result is None:
+            raise ValueError('Required native component has not finished: ' + leaf)
+        dependencies.append(result)
+        for asset in result['manifest']['assets']:
+            if asset['role'] == 'runtime':
+                extract(incoming / asset['name'], payload)
+    if component == 'auth':
+        # Existing owner makes runtime metadata/licenses; corresponding-source
+        # dependency releases are pinned beside the aggregate, not rebuilt.
+        run(['python3', 'auth/build/assemble.py', ROOT, payload, target, output, '--runtime-only'])
+    else:
+        root = payload / 'machines'; manifests = []
+        licenses = []
+        for result in dependencies:
+            archive = next(asset['name'] for asset in result['manifest']['assets'] if asset['role'] == 'runtime')
+            with tarfile.open(Path(work) / result['manifest']['component'] / archive) as source:
+                manifests.append(json.load(source.extractfile('machines/manifest.json')))
+                licenses += json.load(source.extractfile('machines/licenses.json'))
+        combined = {**manifests[0], 'sourceCommit': head(), 'components': [], 'executables': {}, 'libraries': {}, 'depends': []}
+        for manifest in manifests:
+            combined['components'] += manifest['components']; combined['executables'].update(manifest['executables'])
+            combined['libraries'].update(manifest['libraries']); combined['depends'] += manifest['depends']
+        combined['depends'] = sorted(set(combined['depends']))
+        (root / 'manifest.json').write_text(json.dumps(combined, indent=2) + '\n')
+        (root / 'licenses.json').write_text(json.dumps(licenses, indent=2) + '\n')
+        name = f'machines-runtime-{target}.tar.gz'; pack(root, Path(output) / name, 'machines')
+        (Path(output) / 'SHA256SUMS').write_text(store.sha(Path(output) / name) + '  ' + name + '\n')
+    return dependencies
+
+
+def build_guest(target, work, output):
+    architecture = target.split('-')[1]
+    image = json.loads((ROOT / 'agent/machines/image-base.json').read_text())['image']
+    version_value = (ROOT / 'browser/taskarian/config/version.txt').read_text().strip()
+    command = ('export DEBIAN_FRONTEND=noninteractive PATH=/rust-bin:$PATH; apt-get update; '
+        'apt-get install -y --no-install-recommends ca-certificates build-essential git python3 meson ninja-build gettext pkg-config libgtk-3-dev libwnck-3-dev libxfce4ui-2-dev libxfce4util-dev libxfconf-0-dev libx11-dev libxrandr-dev libdbusmenu-gtk3-dev libnotify-dev libexo-2-dev libgarcon-1-dev libgarcon-gtk3-1-dev xfce4-dev-tools wayland-protocols libwayland-dev libxkbcommon-dev libegl-dev libepoxy-dev gobject-introspection libgirepository1.0-dev libdisplay-info-dev; '
+        'python3 /source/os/packaging/build.py --target linux --architecture "$ARCH" --version "$VERSION" --source-commit "$SOURCE_COMMIT" --output /output --build-dir /cache/os --jobs 2; '
+        'python3 /source/agent/machines/build-guest.py --architecture "$ARCH" --version "$VERSION" --revision "$SOURCE_COMMIT" --output /output --work /cache/guest')
+    env = {**os.environ, 'ARCH': architecture, 'SOURCE_COMMIT': head(), 'VERSION': version_value}
+    run(['docker', 'run', '--rm', '--network=bridge', '-v', str(ROOT) + ':/source:ro', '-v', str(work) + ':/cache',
+         '-v', str(output) + ':/output', '-v', str(Path.home() / '.rustup') + ':/rustup:ro',
+         '-v', str(Path.home() / '.cargo/bin') + ':/rust-bin:ro', '-e', 'ARCH', '-e', 'SOURCE_COMMIT', '-e', 'VERSION',
+         '-e', 'RUSTUP_HOME=/rustup', '-e', 'RUSTUP_TOOLCHAIN=' + env.get('RUSTUP_TOOLCHAIN', '1.96.0'), image, 'sh', '-ec', command], env=env)
+
+
+def assembly(target, directory):
+    directory = Path(directory).resolve(); result = {}
+    required = ['auth', 'search', 'node'] + (['machines', 'display', 'guest'] if target.startswith('linux-') else ['os', 'loader'])
+    for component in required:
+        destination = directory / component
+        record = restore_component(component, target, destination, roles={'runtime', 'metadata'})
+        if record is None:
+            raise ValueError('Required durable component is missing: ' + component + '/' + target)
+        if component in ('auth', 'search', 'node'):
+            pattern = {'auth': f'auth-{target}.tar.gz', 'search': f'search-runtime-{target}.tar.zst', 'node': f'node-runtime-{target}.tar.gz'}[component]
+            result[component + '_archive'] = str(destination / pattern)
+        elif component in ('machines', 'display'):
+            result[component + '_archive'] = str(destination / f'{component}-runtime-{target}.tar.gz')
+        elif component == 'guest':
+            result['guest_packages'] = str(destination)
+        elif component == 'os':
+            packages = list(destination.glob('*.deb'))
+            if len(packages) != 1:
+                raise ValueError('Expected one Taskarian OS package')
+            result['os_package'] = str(packages[0])
+        else:
+            result['termux_display_dir'] = str(destination)
+    (directory / 'assembly-inputs.json').write_text(json.dumps(result, indent=2) + '\n')
+    return result
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('action', choices=['plan', 'run', 'assemble'])
+    parser.add_argument('component_or_target'); parser.add_argument('target', nargs='?')
+    parser.add_argument('--components', default='["all"]'); parser.add_argument('--work', type=Path)
+    parser.add_argument('--output', type=Path); parser.add_argument('--directory', type=Path)
+    parser.add_argument('--force-rebuild', action='store_true')
+    args = parser.parse_args()
+    if args.action == 'assemble':
+        print(json.dumps(assembly(args.component_or_target, args.directory))); return
+    if args.action == 'run':
+        result = run_component(args.component_or_target, args.target, args.work, args.output, args.force_rebuild)
+        print(json.dumps(result)); return
+    target = args.component_or_target
+    requested = json.loads(args.components)
+    selected = components(target) if 'all' in requested else requested
+    plan = []
+    for component in selected:
+        selected_inputs = inputs(component, target)
+        available = None if args.force_rebuild else store.lookup(component, target, selected_inputs)
+        plan.append({'component': component, 'target': target, 'inputs': selected_inputs,
+                     'version': version(component, target), 'available': bool(available)})
+    print(json.dumps(plan))
+
+
+if __name__ == '__main__':
+    main()

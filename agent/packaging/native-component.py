@@ -2,9 +2,11 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Restore native Actions artifacts whose committed build inputs are unchanged."""
 import argparse
+import ast
 import base64
 from functools import cache
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -88,36 +90,46 @@ def content(revision, path):
     return base64.b64decode(api(f'repos/{REPOSITORY}/git/blobs/{entry(revision, path)}')['content']).decode()
 
 
-def recipe(revision, workflow, job, names, commands=()):
-    """Only native execution inputs; artifact/cache policy never changes a binary."""
-    text = content(revision, '.github/workflows/' + workflow + '.yml')
-    match = re.search(r'^  ' + re.escape(job) + r':\n(.*?)(?=^  [\w-]+:|\Z)', text, re.M | re.S)
-    if not match:
-        raise ValueError('Missing native build job: ' + job)
-    block = match[1]
-    runner = re.findall(r'^    runs-on: (.*)$', block, re.M)
-    environment = re.search(r'^    env:\n((?:      .+\n)+)', block, re.M)
-    result = {'runner': runner, 'environment': environment.group(1) if environment else '', 'steps': []}
-    for step in re.split(r'^      - ', block, flags=re.M)[1:]:
-        name = re.match(r'name: (.*)', step)
-        uses = re.match(r'uses: ([^\n]+)', step)
-        if uses and any(tool in uses[1] for tool in ('setup-go@', 'setup-node@', 'setup-python@', 'pnpm/action-setup@')):
-            result['steps'].append('\n'.join(line for line in step.splitlines()
-                                            if not re.match(r'        (?:if|id):', line)))
-        elif name and name[1] in names:
-            run = re.search(r'^        run: (.*?)(?=^        [a-z][\w-]*:|\Z)', step, re.M | re.S)
-            if not run:
-                raise ValueError('Missing native execution command: ' + name[1])
-            command = run[1].rstrip()
-            if commands:
-                result['steps'] += [line.strip() for line in command.splitlines()
-                                    if any(part in line for part in commands)]
-            else:
-                env = re.search(r'^        env:\n((?:          .+\n)+)', step, re.M)
-                result['steps'].append({'run': command, 'environment': env.group(1) if env else ''})
-    if not result['steps']:
-        raise ValueError('No native execution inputs found')
-    return result
+def native_toolchain(component, target, revision):
+    owner = ROOT / 'agent/packaging/native-tools.py'
+    spec = importlib.util.spec_from_file_location('native_tools', owner)
+    tools = importlib.util.module_from_spec(spec); spec.loader.exec_module(tools)
+    value = tools.contract(component, target, lambda path: content(revision, path))
+    source = ast.parse(content(revision, 'agent/packaging/native-tools.py')) if entry(revision, 'agent/packaging/native-tools.py') else ast.parse(owner.read_text())
+    value['setup'] = ast.dump(next(node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == 'setup'), include_attributes=False)
+    return value
+
+
+def machine_recipe(revision, selected):
+    """The selected existing source unit's commands plus their common owner."""
+    source = ast.parse(content(revision, 'agent/packaging/machines/build.py'))
+    class SelectRecipe(ast.NodeTransformer):
+        def visit_If(self, node):
+            test = node.test
+            if (isinstance(test, ast.Compare) and isinstance(test.left, ast.Name) and
+                    test.left.id == 'name' and len(test.ops) == 1):
+                try:
+                    value = ast.literal_eval(test.comparators[0])
+                    matches = selected == value if isinstance(test.ops[0], ast.Eq) else selected in value if isinstance(test.ops[0], ast.In) else None
+                except (ValueError, TypeError):
+                    matches = None
+                if matches is not None:
+                    return [self.visit(item) for item in (node.body if matches else node.orelse)]
+            return self.generic_visit(node)
+    for node in source.body:
+        if isinstance(node, ast.FunctionDef) and node.name == 'build':
+            # Only name/record in this build loop chooses a native compile recipe.
+            for loop in ast.walk(node):
+                if isinstance(loop, ast.For) and isinstance(loop.target, ast.Tuple) and [getattr(value, 'id', '') for value in loop.target.elts] == ['name', 'record']:
+                    transformed = []
+                    for statement in loop.body:
+                        value = SelectRecipe().visit(statement)
+                        transformed.extend(value if isinstance(value, list) else [value])
+                    loop.body = transformed
+        elif isinstance(node, ast.Assign) and any(isinstance(value, ast.Name) and value.id == 'PART_BINARIES' for value in node.targets):
+            values = ast.literal_eval(node.value)
+            node.value = ast.parse(repr({selected: values[selected]}), mode='eval').body
+    return ast.dump(source, include_attributes=False)
 
 
 def go_sources(revision, directory):
@@ -179,10 +191,8 @@ def inputs(component, target, revision):
     if component == 'auth' or component.startswith('auth-'):
         job = 'assemble' if component == 'auth' else 'component'
         names = ('Assemble private runtime, notices and source',) if component == 'auth' else ('Native build prerequisites', 'Build tracked source for the target ABI')
-        native_recipe = recipe(revision, 'auth-native', job, names)
         if component == 'auth':
             paths += ['auth/upstreams.lock.json', 'auth/build/assemble.py', 'agent/src/server/access/runtime-guard.c']
-            records['guardRecipe'] = recipe(revision, 'auth-native', 'guard', ('Build lifecycle guard independently of the web assets',))
             # An aggregate may contain independently restored native components.
             records['components'] = {name: inputs('auth-' + name, target, revision) for name in AUTH}
         else:
@@ -217,37 +227,43 @@ def inputs(component, target, revision):
         # All native commands and pinned Python setup are part of this owner.
         names = ('Extract retained Termux framework', 'Build Android/Bionic primp using the upstream Termux build system',
                  'Assemble Termux payload with private native binding', 'Assemble locked native runtime and source')
-        native_recipe = recipe(revision, 'search-native', job, names)
+    elif component.startswith('machines-'):
+        name = component.removeprefix('machines-')
+        if name not in ('podman', 'crun', 'conmon', 'netavark', 'aardvark-dns', 'passt', 'libfuse', 'fuse-overlayfs', 'catatonit'):
+            raise ValueError('Unsupported machine source unit')
+        records['buildOwner'] = machine_recipe(revision, name)
+        paths += ['agent/machines/vendor/' + name,
+                  'agent/machines/patches/' + name, 'agent/machines/NOTICE',
+                  'agent/machines/license-supplements']
+        if name in ('netavark', 'aardvark-dns'):
+            paths += ['agent/machines/rust-toolchain']
+        if name == 'podman':
+            paths += ['auth/build/go-notices.py', 'auth/dependencies/go-toolchain']
+        if name == 'fuse-overlayfs':
+            records['libfuse'] = inputs('machines-libfuse', target, revision)
     elif component in ('machines', 'display'):
         paths += (['agent/packaging/machines', 'agent/machines/vendor', 'agent/machines/patches', 'agent/machines/license-supplements',
                    'agent/machines/rust-toolchain', 'agent/machines/NOTICE', 'auth/build/go-notices.py', 'auth/dependencies/go-toolchain']
                   if component == 'machines' else ['browser/taskarian/display', 'agent/packaging/machines/build.py',
                                                   'agent/machines/rust-toolchain', 'auth/build/go-notices.py'])
-        native_recipe = recipe(revision, 'machines-native', 'runtime',
-                               ('Install native component build tools', 'Build private engine and display from tracked sources',
-                                'Build private engine from tracked sources', 'Build private display from tracked sources'),
-                               ('apt-get ', 'rustup ', 'agent/packaging/machines/build.py' if component == 'machines' else 'browser/taskarian/display/build.py'))
     elif component == 'guest':
         paths += ['os', 'agent/machines/guest', 'agent/machines/build-guest.py', 'agent/machines/vendor/libfuse',
                   'agent/machines/upstream/buzzard-runtime', 'agent/machines/NOTICE', 'agent/packaging/machines/build.py',
-                  'agent/machines/rust-toolchain', 'agent/machines/image-base.json', 'auth/build/go-notices.py',
-                  'browser/taskarian/config/version.txt']
-        native_recipe = recipe(revision, 'machines-native', 'guest', ('Build guest packages against the pinned Debian guest ABI',))
+                  'agent/machines/rust-toolchain', 'agent/machines/image-base.json', 'auth/build/go-notices.py']
     elif component == 'os':
-        paths += ['os', 'agent/packaging/termux/os.py', 'auth/build/termux-toolchain.json', 'browser/taskarian/config/version.txt']
+        paths += ['os', 'agent/packaging/termux/os.py', 'auth/build/termux-toolchain.json']
         lock = json.loads(content(revision, 'agent/packaging/node/lock.json'))['termux']
         records['framework'] = lock['recipes']
         records['ndk'] = lock['dependency_sources']['libc++']
-        native_recipe = recipe(revision, 'machines-native', 'termux_os', ('Build native Termux desktop customization',))
     elif component == 'loader':
         paths += ['browser/mobile/android/taskarian/display/loader',
                   'browser/mobile/android/taskarian/display/src/main/java/com/taskarian/display/DisplayProtocol.java',
                   'browser/taskarian/vendor/termux-x11', 'agent/packaging/release.py']
-        native_recipe = recipe(revision, 'machines-native', 'termux_display', ('Build loader paired with the established APK publisher',))
     else:
         raise ValueError('Unsupported native component: ' + component)
     return {'schema': 1, 'component': component, 'target': target,
-            'files': {path: entry(revision, path) for path in paths}, 'records': records, 'recipe': native_recipe}
+            'files': {path: entry(revision, path) for path in paths}, 'records': records,
+            'recipe': native_toolchain(component, target, revision)}
 
 
 def sha(path):
@@ -303,6 +319,20 @@ def verify_payload(directory, component, target):
         required = {f'{prefix}-{target}.{suffix}', f'{component}-source-{target}.{suffix}' if component == 'search' else f'auth-{target}-source.tar.gz', 'SHA256SUMS'}
     elif component.startswith('auth-'):
         required = {'component.tar.gz'}
+    elif component.startswith('machines-'):
+        name = component.removeprefix('machines-')
+        if name not in ('podman', 'crun', 'conmon', 'netavark', 'aardvark-dns', 'passt', 'libfuse', 'fuse-overlayfs', 'catatonit'):
+            raise ValueError('Unsupported machine source unit')
+        records['buildOwner'] = machine_recipe(revision, name)
+        paths += ['agent/machines/vendor/' + name,
+                  'agent/machines/patches/' + name, 'agent/machines/NOTICE',
+                  'agent/machines/license-supplements']
+        if name in ('netavark', 'aardvark-dns'):
+            paths += ['agent/machines/rust-toolchain']
+        if name == 'podman':
+            paths += ['auth/build/go-notices.py', 'auth/dependencies/go-toolchain']
+        if name == 'fuse-overlayfs':
+            records['libfuse'] = inputs('machines-libfuse', target, revision)
     elif component in ('machines', 'display'):
         required = {name + '.tar.gz', 'SHA256SUMS'}
     elif component == 'loader':
@@ -358,12 +388,35 @@ def verify_payload(directory, component, target):
     return files, embedded_sources(directory) | {data['sourceCommit'] for data in archive_metadata if 'sourceCommit' in data}
 
 
+def verify_store_receipt(directory, component, target, requested, expected, producer=None):
+    path = Path(directory) / receipt_name(component, target)
+    value = json.loads(path.read_text())
+    spec = importlib.util.spec_from_file_location('native_store', ROOT / 'agent/packaging/component-store.py')
+    store = importlib.util.module_from_spec(spec); spec.loader.exec_module(store)
+    record = value['store']; manifest = record['manifest']
+    ident = store.identity(component, target, expected); store.validate(manifest, ident)
+    digest = __import__('hashlib').sha256(store.canonical(manifest) + b'\n').hexdigest()
+    if (value.get('requestedSource') != requested or value.get('inputs') != expected or
+            value.get('producerSource') != manifest['sourceCommit'] or
+            (producer is not None and producer != manifest['sourceCommit']) or
+            record.get('repository') != ident['repository'] or record.get('manifestName') != ident['manifest'] or
+            record.get('manifestSha256') != digest or not value.get('files')):
+        raise ValueError('Native durable component receipt does not match requested inputs')
+    selected = {asset['name']: asset['sha256'] for asset in manifest['assets']}
+    if any(selected.get(name) != checksum or sha(Path(directory) / name) != checksum
+           for name, checksum in value['files'].items()):
+        raise ValueError('Native durable component bytes do not match their original manifest')
+    return value
+
+
 def verify_equivalence(directory, component, target, requested, producer=None):
     """Assembly accepts a different revision only with independently checked inputs."""
     if producer == requested:
         return None
     path = directory / receipt_name(component, target)
     value = json.loads(path.read_text())
+    if value.get('store'):
+        return verify_store_receipt(directory, component, target, requested, inputs(component, target, requested), producer)
     actual = inventory(directory)
     # Other components (notably the current backend guest .deb) may be merged
     # beside this artifact. Check exactly the original producer inventory.
@@ -388,87 +441,10 @@ def artifact_name(component, target):
             'loader': 'display-loader-termux'}[component]
 
 
-def candidates(component, target, requested):
-    expected = inputs(component, target, requested)
-    name = artifact_name(component, target)
-    artifacts = api(f'repos/{REPOSITORY}/actions/artifacts?name={name}&per_page=100')['artifacts']
-    for artifact in artifacts:
-        if artifact['expired'] or artifact['name'] != name:
-            continue
-        run_id = artifact['workflow_run']['id']
-        if run_id == int(os.environ.get('GITHUB_RUN_ID', '0')):
-            continue
-        try:
-            run = api(f'repos/{REPOSITORY}/actions/runs/{run_id}')
-            if (run['head_repository']['full_name'].lower() != REPOSITORY.lower() or run['head_branch'] != 'main' or
-                    run['event'] not in ('workflow_dispatch', 'push') or run['path'] not in
-                    ('.github/workflows/packages.yml', '.github/workflows/auth-native.yml',
-                     '.github/workflows/search-native.yml', '.github/workflows/machines-native.yml')):
-                continue
-            if inputs(component, target, run['head_sha']) == expected:
-                yield artifact, run
-        except (subprocess.CalledProcessError, ValueError, KeyError) as error:
-            print(f'Unprovable optional native producer {run_id}: {error}', flush=True)
-
-
 def restore(directory, component, target, requested, selected=None):
-    """Missing or unprovable optional artifacts fall back to the normal builder."""
-    expected = inputs(component, target, requested)
-    name = artifact_name(component, target)
-    for artifact, run in candidates(component, target, requested):
-        if selected is not None and artifact['id'] != selected:
-            continue
-        run_id = run['id']
-        try:
-            with tempfile.TemporaryDirectory(prefix='restore-native-') as temporary:
-                temporary = Path(temporary)
-                archive = temporary / 'artifact.zip'
-                for attempt in range(3):
-                    with archive.open('wb') as output:
-                        download = subprocess.run(['gh', 'api', f'repos/{REPOSITORY}/actions/artifacts/{artifact["id"]}/zip'],
-                                                  stdout=output, stderr=subprocess.PIPE)
-                    if download.returncode == 0:
-                        break
-                    if re.search(rb'HTTP (?:404|410)\b', download.stderr):
-                        raise ValueError('Optional Actions artifact expired during restoration')
-                    if attempt == 2:
-                        raise MetadataUnavailable('Native artifact download interrupted; retry this job to resume reuse')
-                    time.sleep(2 ** attempt)
-                if artifact.get('digest') and artifact['digest'] != 'sha256:' + sha(archive):
-                    raise ValueError('Actions archive digest mismatch')
-                incoming = temporary / 'payload'; incoming.mkdir()
-                with zipfile.ZipFile(archive) as payload:
-                    for member in payload.infolist():
-                        path = Path(member.filename)
-                        if path.is_absolute() or '..' in path.parts or (member.external_attr >> 16) & 0o170000 == 0o120000:
-                            raise ValueError('Unsafe Actions artifact member')
-                    payload.extractall(incoming)
-                files, sources = verify_payload(incoming, component, target)
-                prior = incoming / receipt_name(component, target)
-                original = run['head_sha']
-                producer = {'runId': run_id, 'artifactId': artifact['id'], 'artifactName': name}
-                if prior.exists():
-                    value = json.loads(prior.read_text())
-                    original = value['producerSource']
-                    if (value.get('schema') != 1 or value.get('repository') != REPOSITORY or
-                            value.get('component') != component or value.get('target') != target or
-                            value.get('requestedSource') != run['head_sha'] or value.get('inputs') != expected or
-                            inputs(component, target, original) != expected or value.get('files') != files):
-                        raise ValueError('Invalid original native component receipt')
-                    producer = value['producer']
-                if sources and sources != {original}:
-                    raise ValueError('Native archive producer revision differs from Actions provenance')
-                value = {'schema': 1, 'repository': REPOSITORY, 'component': component, 'target': target,
-                         'producerSource': original, 'requestedSource': requested, 'inputs': expected,
-                         'producer': producer, 'files': files}
-                prior.write_text(json.dumps(value, indent=2) + '\n')
-                directory.mkdir(parents=True, exist_ok=True)
-                shutil.copytree(incoming, directory, dirs_exist_ok=True)
-            print(f'Reused verified {name} from original source {original} ({run["html_url"]})', flush=True)
-            return True
-        except (subprocess.CalledProcessError, OSError, ValueError, KeyError, tarfile.TarError, zipfile.BadZipFile) as error:
-            print(f'Cannot prove optional native artifact {artifact["id"]}: {error}; checking another producer', flush=True)
-    return False
+    spec = importlib.util.spec_from_file_location('native_component_owner', ROOT / 'agent/packaging/native-components.py')
+    owner = importlib.util.module_from_spec(spec); spec.loader.exec_module(owner)
+    return owner.restore_component(component, target, directory) is not None
 
 
 def output(name, value):
@@ -488,8 +464,6 @@ def main():
     parser.add_argument('--output-name', default='hit')
     args = parser.parse_args()
     revision = git('rev-parse', 'HEAD')
-    if os.environ.get('GITHUB_REPOSITORY', REPOSITORY).lower() != REPOSITORY.lower():
-        raise ValueError('Native artifact reuse requires the product repository')
     if args.action == 'materialize':
         try:
             paths = set(inputs(args.component, args.target, revision)['files'])
@@ -525,11 +499,13 @@ def main():
             candidate = None
             if args.component == 'all' and args.force != 'true':
                 try:
-                    candidate = next(candidates('auth', target, revision), None)
+                    spec = importlib.util.spec_from_file_location('native_plan_owner', ROOT / 'agent/packaging/native-components.py')
+                    owner = importlib.util.module_from_spec(spec); spec.loader.exec_module(owner)
+                    candidate = owner.store.lookup('auth', target, owner.inputs('auth', target))
                 except (subprocess.CalledProcessError, ValueError, KeyError) as error:
                     print(f'No provable auth artifact: {error}; building normally', flush=True)
             if candidate:
-                restores.append({'target': target, 'artifact': candidate[0]['id']})
+                restores.append({'target': target})
             else:
                 missing.append(target)
         output('targets', json.dumps(missing, separators=(',', ':')))

@@ -11,11 +11,11 @@ import subprocess
 import tarfile
 
 
-def archive_revision(repository, revision, destination, prefix='taskarian/'):
+def archive_revision(repository, revision, destination, prefix='taskarian/', paths=None):
     repository = Path(repository)
     commit = subprocess.check_output(['git', 'rev-parse', revision + '^{commit}'], cwd=repository, text=True).strip()
     timestamp = int(subprocess.check_output(['git', 'show', '-s', '--format=%ct', commit], cwd=repository, text=True))
-    entries = subprocess.check_output(['git', 'ls-tree', '-r', '-z', commit], cwd=repository).split(b'\0')
+    entries = subprocess.check_output(['git', 'ls-tree', '-r', '-z', commit, *(['--', *paths] if paths else [])], cwd=repository).split(b'\0')
     objects = subprocess.Popen(['git', 'cat-file', '--batch'], cwd=repository,
                                stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     try:
