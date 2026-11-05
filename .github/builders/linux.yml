@@ -19,22 +19,26 @@ run-name: Taskarian ${{ inputs.source_sha }} / ${{ inputs.request_id }}
         default: false
         type: boolean
       auth_run:
-        required: true
+        required: false
         type: string
       search_run:
-        required: true
+        required: false
         type: string
       node_run:
-        required: true
+        required: false
         type: string
       environments_run:
-        required: true
+        required: false
         type: string
       office_run:
-        required: true
+        required: false
         type: string
+      engine_only:
+        description: Build or validate the independent Gecko component without waiting for app dependencies
+        default: false
+        type: boolean
 permissions:
-  contents: read
+  contents: write
   actions: read
 jobs:
   browser:
@@ -50,6 +54,8 @@ jobs:
       PI_TELEMETRY: '0'
       PI_OFFLINE: '1'
       DO_NOT_TRACK: '1'
+      SCCACHE_MULTILEVEL_CHAIN: disk,gha
+      SCCACHE_DIR: ${{ github.workspace }}-gecko-sccache
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
@@ -72,6 +78,7 @@ jobs:
           /browser/mobile/shared/modules/geckoview/TaskarianAndroid.sys.mjs
           /browser/mobile/android/installer/package-manifest.in
           /references/runtime-payload.json
+          /browser/taskarian/config/
     - name: Select the native target
       run: |
         # Python's IPDL workers create Unix sockets below the build temp path.
@@ -85,7 +92,11 @@ jobs:
       name: Restore a matching completed browser artifact
       env:
         TASKARIAN_FORCE_FULL_BUILD: ${{ inputs.force_rebuild && '1' || '0' }}
-      run: python3 source/taskarian/agent/packaging/browser-component.py restore "$BROWSER_TARGET" --directory "$RUNNER_TEMP/browser/stage"
+        ENGINE_ONLY: ${{ inputs.engine_only }}
+      run: |
+        arguments=()
+        if [ "$ENGINE_ONLY" = true ]; then arguments+=(--force-build); fi
+        python3 source/taskarian/agent/packaging/browser-component.py restore "$BROWSER_TARGET" --directory "$RUNNER_TEMP/browser/stage" "${arguments[@]}"
     - id: native-component
       name: Restore a matching custom Gecko engine for current resources
       if: steps.component.outputs.hit != 'true'
@@ -136,6 +147,26 @@ jobs:
         test "$RUSTUP_TOOLCHAIN" = "$version"
         rustup toolchain install "$version" --profile minimal --component rust-docs --target wasm32-unknown-unknown
         printf '%s\n' "TASKARIAN_PHOTON_BUILD_CACHE=$RUNNER_TEMP/photon-cache" "TASKARIAN_SOURCE_CACHE=$RUNNER_TEMP/source-cache" >> "$GITHUB_ENV"
+    - name: Select the Gecko compiler cache contract
+      id: gecko-cache-contract
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true'
+      working-directory: source/taskarian
+      run: |
+        digest=$(python3 agent/packaging/browser-release.py cache-contract "$BROWSER_TARGET" --output "$RUNNER_TEMP/gecko-cache-contract.json")
+        printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+    - name: Restore the Gecko disk compiler cache
+      id: gecko-disk-cache
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: ${{ env.SCCACHE_DIR }}
+        key: gecko-disk-v1-${{ env.BROWSER_TARGET }}-${{ steps.gecko-cache-contract.outputs.digest }}-${{ github.run_id }}
+        restore-keys: |
+          gecko-disk-v1-${{ env.BROWSER_TARGET }}-${{ steps.gecko-cache-contract.outputs.digest }}-
+    - name: Restore compiler release backup only without an Actions copy
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-disk-cache.outputs.cache-matched-key == ''
+      working-directory: source/taskarian
+      run: python3 agent/packaging/compiler-cache.py restore sccache "$BROWSER_TARGET" --contract "$RUNNER_TEMP/gecko-cache-contract.json" --directory "$SCCACHE_DIR"
     - name: Bootstrap pinned Mozilla toolchain
       if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true'
       working-directory: source/taskarian/browser
@@ -167,70 +198,58 @@ jobs:
         path: ${{ runner.temp }}/browser/stage/
         compression-level: 0
         if-no-files-found: error
+    - name: Record native cache hits and flush the completed disk objects
+      if: always() && !cancelled() && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-cache-contract.outputs.digest != '' && env.SCCACHE_PATH != ''
+      working-directory: source/taskarian
+      run: |
+        "$SCCACHE_PATH" --show-stats --stats-format=json > "$RUNNER_TEMP/sccache-gecko.json"
+        "$SCCACHE_PATH" --show-stats >> "$GITHUB_STEP_SUMMARY"
+        "$SCCACHE_PATH" --stop-server
+    - name: Save the Gecko disk compiler cache
+      if: always() && !cancelled() && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-cache-contract.outputs.digest != ''
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: ${{ env.SCCACHE_DIR }}
+        key: gecko-disk-v1-${{ env.BROWSER_TARGET }}-${{ steps.gecko-cache-contract.outputs.digest }}-${{ github.run_id }}
+    - name: Keep the completed compiler objects as a release fallback
+      if: always() && !cancelled() && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-cache-contract.outputs.digest != ''
+      working-directory: source/taskarian
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: python3 agent/packaging/compiler-cache.py save sccache "$BROWSER_TARGET" --contract "$RUNNER_TEMP/gecko-cache-contract.json" --directory "$SCCACHE_DIR"
+    - name: Upload actual Gecko compiler cache statistics
+      if: always() && !cancelled() && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-cache-contract.outputs.digest != ''
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: gecko-compiler-cache-statistics
+        path: ${{ runner.temp }}/sccache-gecko.json
+        if-no-files-found: ignore
+    - name: Publish the verified native Gecko component
+      if: steps.component.outputs.hit != 'true'
+      working-directory: source/taskarian
+      run: python3 agent/packaging/browser-release.py publish-engine "$BROWSER_TARGET" --directory "$RUNNER_TEMP/browser/stage"
+    - name: Publish the current browser resources independently
+      working-directory: source/taskarian
+      run: python3 agent/packaging/browser-release.py publish-resources "$BROWSER_TARGET" --directory "$RUNNER_TEMP/browser/stage"
     - name: Install assembly tools
       run: sudo apt-get update && sudo apt-get install -y zstd python3
-    - name: Download native components for this source
-      timeout-minutes: 300
-      env:
-        AUTH_RUN: ${{ inputs.auth_run }}
-        SEARCH_RUN: ${{ inputs.search_run }}
-        NODE_RUN: ${{ inputs.node_run }}
-        ENVIRONMENTS_RUN: ${{ inputs.environments_run }}
-        OFFICE_RUN: ${{ inputs.office_run }}
-      run: |
-        deadline=$((SECONDS + 300 * 60))
-        for item in "auth:$AUTH_RUN:auth-$BROWSER_TARGET" "search:$SEARCH_RUN:search-runtime-$BROWSER_TARGET" "node:$NODE_RUN:node-runtime-$BROWSER_TARGET" "machines:$ENVIRONMENTS_RUN:machines-runtime-$BROWSER_TARGET" "display:$ENVIRONMENTS_RUN:display-runtime-$BROWSER_TARGET" "guest:$ENVIRONMENTS_RUN:guest-packages-$BROWSER_TARGET" "office:$OFFICE_RUN:office-$BROWSER_TARGET" "files:$OFFICE_RUN:files-$BROWSER_TARGET"; do
-          IFS=: read -r target run artifact <<< "$item"
-          while ! gh api "repos/openresearchtools/Taskarian/actions/runs/$run/artifacts?per_page=100" --jq '.artifacts[] | select(.expired == false) | .name' | grep -Fxq "$artifact"; do
-            status=$(gh api "repos/openresearchtools/Taskarian/actions/runs/$run" --jq '.status')
-            if [ "$status" = completed ]; then echo "Required $artifact is missing from completed run $run" >&2; exit 1; fi
-            if (( SECONDS >= deadline )); then echo "Shared 300-minute companion deadline expired waiting for $artifact from run $run" >&2; exit 1; fi
-            sleep 30
-          done
-          gh run download "$run" --repo openresearchtools/Taskarian --name "$artifact" --dir "$RUNNER_TEMP/companion/$target"
-        done
-    - name: Assemble matching guest browser and backend
-      run: |
-        python3 agent/packaging/build.py linux --backend-only \
-          --architecture "$BROWSER_ARCH" --output "$RUNNER_TEMP/companion/guest" \
-          --auth-archive "$RUNNER_TEMP/companion/auth/auth-$BROWSER_TARGET.tar.gz" \
-          --search-archive "$RUNNER_TEMP/companion/search/search-runtime-$BROWSER_TARGET.tar.zst" \
-          --node-archive "$RUNNER_TEMP/companion/node/node-runtime-$BROWSER_TARGET.tar.gz" \
-          --office-archive "$RUNNER_TEMP/companion/office/office-$BROWSER_TARGET.tar.xz" \
-          --files-archive "$RUNNER_TEMP/companion/files/files-$BROWSER_TARGET.tar.gz" \
-          --browser-dir "$RUNNER_TEMP/browser/stage"
+    - name: Assemble from the exact durable component modules
       working-directory: source/taskarian
-    - name: Assemble complete native package
-      run: |
-        python3 agent/packaging/build.py linux \
-          --architecture "$BROWSER_ARCH" --output "$RUNNER_TEMP/package" \
-          --auth-archive "$RUNNER_TEMP/companion/auth/auth-$BROWSER_TARGET.tar.gz" \
-          --search-archive "$RUNNER_TEMP/companion/search/search-runtime-$BROWSER_TARGET.tar.zst" \
-          --node-archive "$RUNNER_TEMP/companion/node/node-runtime-$BROWSER_TARGET.tar.gz" \
-          --office-archive "$RUNNER_TEMP/companion/office/office-$BROWSER_TARGET.tar.xz" \
-          --files-archive "$RUNNER_TEMP/companion/files/files-$BROWSER_TARGET.tar.gz" \
-          --browser-dir "$RUNNER_TEMP/browser/stage" \
-          --machines-archive "$RUNNER_TEMP/companion/machines/machines-runtime-$BROWSER_TARGET.tar.gz" \
-          --display-archive "$RUNNER_TEMP/companion/display/display-runtime-$BROWSER_TARGET.tar.gz" \
-          --guest-packages "$RUNNER_TEMP/companion/guest"
+      run: python3 agent/packaging/prepare-assembly.py build "$BROWSER_TARGET" --directory "$RUNNER_TEMP/assembly-inputs" --output "$RUNNER_TEMP/package" --browser-dir "$RUNNER_TEMP/browser/stage"
+      if: '!inputs.engine_only'
+    - name: Publish the complete application independently
       working-directory: source/taskarian
+      run: |
+        python3 agent/packaging/browser-release.py dependencies "$BROWSER_TARGET" --directory "$RUNNER_TEMP/assembly-inputs" --output "$RUNNER_TEMP/browser-dependencies.json"
+        python3 agent/packaging/application.py publish "$BROWSER_TARGET" --directory "$RUNNER_TEMP/package" --dependencies "$RUNNER_TEMP/browser-dependencies.json"
+      if: '!inputs.engine_only'
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: taskarian-${{ env.BROWSER_TARGET }}-candidate
         path: ${{ runner.temp }}/package/
         if-no-files-found: error
         compression-level: 0
-    - name: Record actual compiler cache statistics
-      if: always() && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && env.SCCACHE_PATH != ''
-      run: |
-        "$SCCACHE_PATH" --show-stats --stats-format=json > "$RUNNER_TEMP/sccache-statistics.json"
-        "$SCCACHE_PATH" --show-stats >> "$GITHUB_STEP_SUMMARY"
-    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-      if: always() && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true'
-      with:
-        name: compiler-cache-statistics
-        path: ${{ runner.temp }}/sccache-statistics.json
-        if-no-files-found: ignore
+      if: '!inputs.engine_only'
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: failure()
       with:

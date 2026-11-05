@@ -64,7 +64,7 @@ function init() {
   ]);
   let versionIdKey = "base";
   let versionAttributes = {
-    version: AppConstants.MOZ_APP_VERSION_DISPLAY,
+    version: Services.appinfo.version,
   };
 
   let arch = Services.sysinfo.get("arch");

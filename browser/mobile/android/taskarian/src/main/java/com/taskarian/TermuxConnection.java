@@ -102,7 +102,7 @@ public final class TermuxConnection {
             else throw new IllegalStateException("The setup package list is invalid.");
         }
         if (!revision.matches("[a-f0-9]{40}") || !version.matches("[0-9]+\\.[0-9]+(?:\\.[0-9]+)?") ||
-            !version.equals(backend) || !(version + "-1").equals(desktop) ||
+            !version.equals(backend) || desktop == null || !desktop.matches("[0-9][0-9A-Za-z.+:~_-]*") ||
             !Set.of("aarch64", "x86_64").contains(architecture)) throw new IllegalStateException("The setup package requirements are invalid.");
         // Repair old bootstrap libraries before invoking curl. Download completely
         // before running this APK's immutable setup script. An existing backend

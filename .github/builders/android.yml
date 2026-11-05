@@ -16,22 +16,26 @@ run-name: Taskarian ${{ inputs.source_sha }} / ${{ inputs.request_id }}
         default: false
         type: boolean
       auth_run:
-        required: true
+        required: false
         type: string
       search_run:
-        required: true
+        required: false
         type: string
       node_run:
-        required: true
+        required: false
         type: string
       environments_run:
-        required: true
+        required: false
         type: string
       office_run:
-        required: true
+        required: false
         type: string
+      engine_only:
+        description: Build or validate the independent Gecko component without waiting for app dependencies
+        default: false
+        type: boolean
 permissions:
-  contents: read
+  contents: write
   actions: read
 jobs:
   apk:
@@ -43,6 +47,7 @@ jobs:
       TASKARIAN_ANDROID_OBJDIR: ${{ github.workspace }}-obj-android
       ANDROID_NDK_HOME: ${{ github.workspace }}-mozbuild/android-ndk-r29
       PYTHONUNBUFFERED: '1'
+      GH_TOKEN: ${{ github.token }}
       DISABLE_TELEMETRY: '1'
       RUSTUP_TOOLCHAIN: 1.96.0
       MACH_SHOW_PIP_OUTPUT: '1'
@@ -50,12 +55,13 @@ jobs:
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-      # mach replaces GRADLE_OPTS; GRADLE_FLAGS is its supported argument path.
       GRADLE_FLAGS: --no-daemon --max-workers=2 --build-cache
       MOZ_SOURCE_REPO: https://github.com/openresearchtools/Taskarian
       MOZ_SOURCE_CHANGESET: ${{ inputs.source_sha }}
       SCCACHE_IDLE_TIMEOUT: '0'
       SCCACHE_BASEDIRS: ${{ github.workspace }}:${{ github.workspace }}-obj-android
+      SCCACHE_MULTILEVEL_CHAIN: disk,gha
+      SCCACHE_DIR: ${{ github.workspace }}-gecko-sccache
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
@@ -77,6 +83,7 @@ jobs:
           /browser/mobile/shared/modules/geckoview/TaskarianAndroid.sys.mjs
           /browser/mobile/android/installer/package-manifest.in
           /references/runtime-payload.json
+          /browser/taskarian/config/
     - name: Select the Android architecture
       run: |
         case "$GITHUB_REPOSITORY" in
@@ -99,7 +106,11 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
         TASKARIAN_FORCE_FULL_BUILD: ${{ inputs.force_rebuild && '1' || '0' }}
-      run: python3 agent/packaging/browser-component.py restore "$BROWSER_TARGET" --directory candidate
+        ENGINE_ONLY: ${{ inputs.engine_only }}
+      run: |
+        arguments=()
+        if [ "$ENGINE_ONLY" = true ]; then arguments+=(--force-build); fi
+        python3 agent/packaging/browser-component.py restore "$BROWSER_TARGET" --directory candidate "${arguments[@]}"
     - id: native-component
       name: Restore unchanged Android Gecko libraries
       env:
@@ -136,8 +147,7 @@ jobs:
         path: |
           ~/.gradle/caches/modules-2
           ~/.gradle/wrapper
-        key: taskarian-android-gradle-downloads-v1-${{ runner.os }}-${{ hashFiles('browser/gradle/libs.versions.toml', 'browser/mobile/android/android-components/.config.yml', 'browser/mobile/android/*/build.gradle',
-          'browser/mobile/android/fenix/app/build.gradle', 'browser/python/mozboot/mozboot/android.py', 'browser/python/mozboot/mozboot/mozconfig.py') }}
+        key: taskarian-android-gradle-downloads-v1-${{ runner.os }}-${{ hashFiles('browser/gradle/libs.versions.toml', 'browser/mobile/android/android-components/.config.yml', 'browser/mobile/android/*/build.gradle', 'browser/mobile/android/fenix/app/build.gradle', 'browser/python/mozboot/mozboot/android.py', 'browser/python/mozboot/mozboot/mozconfig.py') }}
         restore-keys: taskarian-android-gradle-downloads-v1-${{ runner.os }}-
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Stage the existing Droid signing identity
@@ -146,22 +156,14 @@ jobs:
       run: python3 browser/taskarian/android/scripts/prepare-signing.py
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Restore Gradle task outputs
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: |
-        # Task snapshots are artifacts: never consume or evict the Gecko cache.
-        runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=android-gradle-outputs&per_page=20" \
-          --jq '.artifacts[] | select(.expired == false) | .workflow_run.id')
-        for run in $runs; do
-          eligible=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run" \
-            --jq '.conclusion == "success" and .head_branch == "main" and .path == ".github/workflows/build.yml"')
-          if [ "$eligible" != true ]; then continue; fi
-          gh run download "$run" --repo "$GITHUB_REPOSITORY" --name android-gradle-outputs --dir "$RUNNER_TEMP/gradle-outputs"
-          mkdir -p "$HOME/.gradle/caches"
-          tar --zstd -xf "$RUNNER_TEMP/gradle-outputs/gradle-outputs.tar.zst" -C "$HOME/.gradle/caches"
-          break
-        done
-      if: (success()) && steps.component.outputs.hit != 'true'
+      id: gradle-task-cache
+      if: '!inputs.engine_only && (steps.component.outputs.hit != ''true'')'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: ~/.gradle/caches/build-cache-1
+        key: android-gradle-tasks-v1-${{ env.BROWSER_TARGET }}-${{ hashFiles('browser/gradle/libs.versions.toml', 'browser/gradle/wrapper/gradle-wrapper.properties') }}-${{ github.run_id }}
+        restore-keys: |
+          android-gradle-tasks-v1-${{ env.BROWSER_TARGET }}-${{ hashFiles('browser/gradle/libs.versions.toml', 'browser/gradle/wrapper/gradle-wrapper.properties') }}-
     - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
       with:
         version: v0.17.0
@@ -174,6 +176,24 @@ jobs:
         rustup target add --toolchain "$version" wasm32-unknown-unknown
         printf '%s\n' "TASKARIAN_PHOTON_BUILD_CACHE=$RUNNER_TEMP/photon-cache" "TASKARIAN_SOURCE_CACHE=$RUNNER_TEMP/source-cache" >> "$GITHUB_ENV"
       if: (success()) && steps.component.outputs.hit != 'true'
+    - name: Select the Gecko compiler cache contract
+      id: gecko-cache-contract
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true'
+      run: |
+        digest=$(python3 agent/packaging/browser-release.py cache-contract "$BROWSER_TARGET" --output "$RUNNER_TEMP/gecko-cache-contract.json")
+        printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+    - name: Restore the Gecko disk compiler cache
+      id: gecko-disk-cache
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: ${{ env.SCCACHE_DIR }}
+        key: gecko-disk-v1-${{ env.BROWSER_TARGET }}-${{ steps.gecko-cache-contract.outputs.digest }}-${{ github.run_id }}
+        restore-keys: |
+          gecko-disk-v1-${{ env.BROWSER_TARGET }}-${{ steps.gecko-cache-contract.outputs.digest }}-
+    - name: Restore compiler release backup only without an Actions copy
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-disk-cache.outputs.cache-matched-key == ''
+      run: python3 agent/packaging/compiler-cache.py restore sccache "$BROWSER_TARGET" --contract "$RUNNER_TEMP/gecko-cache-contract.json" --directory "$SCCACHE_DIR"
     - name: Bootstrap the pinned Mozilla Android toolchain
       working-directory: browser
       timeout-minutes: 30
@@ -183,44 +203,11 @@ jobs:
       working-directory: browser
       run: python3 taskarian/scripts/render-branding.py
       if: (success()) && steps.component.outputs.hit != 'true'
-    - name: Select the retained Go compiler
-      id: go-compiler
-      run: python3 -c 'import json; print("version=" + json.load(open("auth/dependencies/go-toolchain/sources.json"))["version"])' >> "$GITHUB_OUTPUT"
-      if: (success()) && steps.component.outputs.hit != 'true'
-    - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
-      with:
-        go-version: ${{ steps.go-compiler.outputs.version }}
-        cache-dependency-path: agent/native/remote/android/go.sum
-      if: (success()) && steps.component.outputs.hit != 'true'
     - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
       with:
         distribution: temurin
         java-version: '17'
       if: (success()) && steps.component.outputs.hit != 'true'
-    - name: Build the native remote client
-      run: |
-        export ANDROID_HOME="$MOZBUILD_STATE_PATH/android-sdk-linux"
-        "$ANDROID_HOME/cmdline-tools/20.0/bin/sdkmanager" 'platforms;android-31' 'cmake;3.22.1'
-        bash auth/build/remote-android.sh "$RUNNER_TEMP/remote-android"
-        echo "TASKARIAN_REMOTE_CLIENT_DIR=$RUNNER_TEMP/remote-android" >> "$GITHUB_ENV"
-      if: (success()) && steps.component.outputs.hit != 'true'
-    - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-      id: tor-native-cache
-      with:
-        path: ${{ runner.temp }}/tor-android
-        key: taskarian-android-tor-${{ env.TASKARIAN_ANDROID_ABI }}-${{ hashFiles('browser/taskarian/android/tor/**', 'browser/taskarian/android/scripts/tor.py', 'browser/taskarian/android/notices/**', 'browser/taskarian/third_party/tor.toml', 'agent/vendor/native/android-sources.json', 'agent/packaging/node/lock.json') }}
-      if: (success()) && steps.component.outputs.hit != 'true'
-    - name: Build and verify the pinned Android Tor JNI library
-      run: |
-        python3 -B browser/taskarian/android/tor/build.py --abi "$TASKARIAN_ANDROID_ABI" \
-          --jdk "$JAVA_HOME" --work "$RUNNER_TEMP/tor-build" --output "$RUNNER_TEMP/tor-android" --jobs 2
-        echo "TASKARIAN_TOR_ANDROID_DIR=$RUNNER_TEMP/tor-android" >> "$GITHUB_ENV"
-      if: (success()) && steps.component.outputs.hit != 'true'
-    - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-      with:
-        path: ${{ runner.temp }}/tor-android
-        key: ${{ steps.tor-native-cache.outputs.cache-primary-key }}
-      if: success() && steps.component.outputs.hit != 'true' && steps.tor-native-cache.outputs.cache-hit != 'true'
     - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
       with:
         node-version: '24'
@@ -244,60 +231,72 @@ jobs:
         compression-level: 0
         if-no-files-found: error
       if: (success()) && steps.component.outputs.hit != 'true'
-    - name: Record Gecko compiler cache statistics
-      if: always() && steps.component.outputs.hit != 'true' && env.SCCACHE_PATH != ''
+    - name: Record native cache hits and flush the completed disk objects
+      if: always() && !cancelled() && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-cache-contract.outputs.digest != '' && env.SCCACHE_PATH != ''
       run: |
-        "$SCCACHE_PATH" --show-stats --stats-format=json > artifacts/sccache-gecko.json
+        "$SCCACHE_PATH" --show-stats --stats-format=json > "$RUNNER_TEMP/sccache-gecko.json"
         "$SCCACHE_PATH" --show-stats >> "$GITHUB_STEP_SUMMARY"
-    - name: Obtain the actual companion component licenses
-      timeout-minutes: 300
+        "$SCCACHE_PATH" --stop-server
+    - name: Save the Gecko disk compiler cache
+      if: always() && !cancelled() && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-cache-contract.outputs.digest != ''
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: ${{ env.SCCACHE_DIR }}
+        key: gecko-disk-v1-${{ env.BROWSER_TARGET }}-${{ steps.gecko-cache-contract.outputs.digest }}-${{ github.run_id }}
+    - name: Keep the completed compiler objects as a release fallback
+      if: always() && !cancelled() && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-cache-contract.outputs.digest != ''
       env:
         GH_TOKEN: ${{ github.token }}
-        AUTH_RUN: ${{ inputs.auth_run || github.run_id }}
-        SEARCH_RUN: ${{ inputs.search_run || github.run_id }}
-        NODE_RUN: ${{ inputs.node_run || github.run_id }}
-        ENVIRONMENTS_RUN: ${{ inputs.environments_run || github.run_id }}
-        OFFICE_RUN: ${{ inputs.office_run || github.run_id }}
+      run: python3 agent/packaging/compiler-cache.py save sccache "$BROWSER_TARGET" --contract "$RUNNER_TEMP/gecko-cache-contract.json" --directory "$SCCACHE_DIR"
+    - name: Upload actual Gecko compiler cache statistics
+      if: always() && !cancelled() && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-cache-contract.outputs.digest != ''
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: gecko-compiler-cache-statistics
+        path: ${{ runner.temp }}/sccache-gecko.json
+        if-no-files-found: ignore
+    - name: Publish the verified native Gecko component
+      if: steps.component.outputs.hit != 'true'
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: python3 agent/packaging/browser-release.py publish-engine "$BROWSER_TARGET" --directory "$RUNNER_TEMP/android-gecko-artifact"
+    - name: Restore exact app-native dependencies and actual companion licenses
+      if: '!inputs.engine_only && (steps.component.outputs.hit != ''true'')'
       run: |
-        deadline=$((SECONDS + 300 * 60))
-        for item in "auth:$AUTH_RUN:auth-termux-$TERMUX_ARCH" "search:$SEARCH_RUN:search-runtime-termux-$TERMUX_ARCH" "node:$NODE_RUN:node-runtime-termux-$TERMUX_ARCH" "display:$ENVIRONMENTS_RUN:display-loader-termux" "os:$ENVIRONMENTS_RUN:os-termux-$TERMUX_ARCH" "office:$OFFICE_RUN:office-termux-$TERMUX_ARCH" "files:$OFFICE_RUN:files-termux-$TERMUX_ARCH"; do
-          IFS=: read -r target run artifact <<< "$item"
-          while true; do
-            count=$(gh api --paginate "repos/openresearchtools/Taskarian/actions/runs/$run/artifacts" --jq ".artifacts[] | select(.name == \"$artifact\" and .expired == false) | .id" | wc -l)
-            if [ "$count" = 1 ]; then break; fi
-            status=$(gh api "repos/openresearchtools/Taskarian/actions/runs/$run" --jq '.status')
-            if [ "$status" = completed ]; then echo "Required $artifact is missing from completed run $run" >&2; exit 1; fi
-            if (( SECONDS >= deadline )); then echo "Shared 300-minute companion deadline expired waiting for $artifact from run $run" >&2; exit 1; fi
-            echo "Waiting for $artifact from run $run within the shared companion deadline"
-            sleep 30
-          done
-          gh run download "$run" --repo "openresearchtools/Taskarian" --name "$artifact" --dir "$RUNNER_TEMP/companion/$target"
-        done
-        python3 agent/packaging/android-notices.py --architecture "$TERMUX_ARCH" \
-          --auth-archive "$RUNNER_TEMP/companion/auth/auth-termux-$TERMUX_ARCH.tar.gz" \
-          --search-archive "$RUNNER_TEMP/companion/search/search-runtime-termux-$TERMUX_ARCH.tar.zst" \
-          --node-archive "$RUNNER_TEMP/companion/node/node-runtime-termux-$TERMUX_ARCH.tar.gz" \
-          --office-archive "$RUNNER_TEMP/companion/office/office-termux-$TERMUX_ARCH.tar.xz" \
-          --files-archive "$RUNNER_TEMP/companion/files/files-termux-$TERMUX_ARCH.tar.gz" \
-          --termux-display-dir "$RUNNER_TEMP/companion/display" \
-          --os-package "$(find "$RUNNER_TEMP/companion/os" -maxdepth 1 -name '*.deb')" \
-          --output "$TASKARIAN_COMPANION_LICENSES"
-      if: (success()) && steps.component.outputs.hit != 'true'
+        python3 agent/packaging/android-components.py restore android-remote "termux-$TERMUX_ARCH" --wait --directory "$RUNNER_TEMP/android-leaves/remote"
+        python3 agent/packaging/android-components.py restore android-tor "termux-$TERMUX_ARCH" --wait --directory "$RUNNER_TEMP/android-leaves/tor"
+        python3 agent/packaging/android-components.py restore android-x11 "termux-$TERMUX_ARCH" --wait --directory "$RUNNER_TEMP/android-leaves/x11"
+        printf '%s\n' "TASKARIAN_REMOTE_CLIENT_DIR=$RUNNER_TEMP/android-leaves/remote" "TASKARIAN_TOR_ANDROID_DIR=$RUNNER_TEMP/android-leaves/tor" "TASKARIAN_DISPLAY_ANDROID_DIR=$RUNNER_TEMP/android-leaves/x11" >> "$GITHUB_ENV"
+        python3 agent/packaging/browser-release.py android-companion "$BROWSER_TARGET" --directory "$RUNNER_TEMP/android-companion"
     - name: Assemble the release browser
       working-directory: browser
       run: set -o pipefail; ./mach gradle :fenix:assembleRelease --profile 2>&1 | tee ../artifacts/apk-build.log
-      if: (success()) && steps.component.outputs.hit != 'true'
+      if: '!inputs.engine_only && ((success()) && steps.component.outputs.hit != ''true'')'
     - name: Sign, verify and collect the production APK
       run: python3 browser/taskarian/android/scripts/collect-artifacts.py candidate
-      if: (success()) && steps.component.outputs.hit != 'true'
+      if: '!inputs.engine_only && ((success()) && steps.component.outputs.hit != ''true'')'
     - name: Verify the Android artifact and source inputs
       run: python3 agent/packaging/browser-component.py verify "$BROWSER_TARGET" --directory candidate
+      if: '!inputs.engine_only'
+    - name: Publish the current APK resources independently
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: python3 agent/packaging/browser-release.py publish-resources "$BROWSER_TARGET" --directory candidate
+      if: '!inputs.engine_only'
+    - name: Publish the complete application independently
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        python3 agent/packaging/browser-release.py dependencies "$BROWSER_TARGET" --directory "$RUNNER_TEMP/android-leaves" --output "$RUNNER_TEMP/browser-dependencies.json"
+        python3 agent/packaging/application.py publish "$BROWSER_TARGET" --directory candidate --dependencies "$RUNNER_TEMP/browser-dependencies.json"
+      if: '!inputs.engine_only'
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: ${{ steps.component.outputs.artifact }}
         path: candidate/
         compression-level: 0
         if-no-files-found: error
+      if: '!inputs.engine_only'
     - name: Save Gradle dependency downloads
       if: (always() && !cancelled() && steps.toolchain-cache.outputs.cache-hit != 'true') && steps.component.outputs.hit != 'true'
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
@@ -305,19 +304,13 @@ jobs:
         path: |
           ~/.gradle/caches/modules-2
           ~/.gradle/wrapper
-        key: taskarian-android-gradle-downloads-v1-${{ runner.os }}-${{ hashFiles('browser/gradle/libs.versions.toml', 'browser/mobile/android/android-components/.config.yml', 'browser/mobile/android/*/build.gradle',
-          'browser/mobile/android/fenix/app/build.gradle', 'browser/python/mozboot/mozboot/android.py', 'browser/python/mozboot/mozboot/mozconfig.py') }}
-    - name: Save Gradle task outputs
-      if: success() && steps.component.outputs.hit != 'true'
-      run: |
-        tar --zstd -cf "$RUNNER_TEMP/gradle-outputs.tar.zst" -C "$HOME/.gradle/caches" build-cache-1
-    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-      if: success() && steps.component.outputs.hit != 'true'
+        key: taskarian-android-gradle-downloads-v1-${{ runner.os }}-${{ hashFiles('browser/gradle/libs.versions.toml', 'browser/mobile/android/android-components/.config.yml', 'browser/mobile/android/*/build.gradle', 'browser/mobile/android/fenix/app/build.gradle', 'browser/python/mozboot/mozboot/android.py', 'browser/python/mozboot/mozboot/mozconfig.py') }}
+    - name: Save completed Gradle task outputs
+      if: '!inputs.engine_only && (always() && !cancelled() && steps.component.outputs.hit != ''true'')'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       with:
-        name: android-gradle-outputs
-        path: ${{ runner.temp }}/gradle-outputs.tar.zst
-        compression-level: 0
-        if-no-files-found: error
+        path: ~/.gradle/caches/build-cache-1
+        key: android-gradle-tasks-v1-${{ env.BROWSER_TARGET }}-${{ hashFiles('browser/gradle/libs.versions.toml', 'browser/gradle/wrapper/gradle-wrapper.properties') }}-${{ github.run_id }}
     - name: Upload Gradle timing report
       if: always() && steps.component.outputs.hit != 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -328,12 +321,6 @@ jobs:
     - name: Remove staged signing key
       if: (always()) && steps.component.outputs.hit != 'true'
       run: rm -f "$TASKARIAN_PUBLISHER_KEYSTORE"
-    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-      if: always() && steps.component.outputs.hit != 'true'
-      with:
-        name: compiler-cache-statistics
-        path: artifacts/sccache-gecko.json
-        if-no-files-found: ignore
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       if: failure()
       with:

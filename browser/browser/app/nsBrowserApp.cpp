@@ -26,6 +26,7 @@
 
 #include <stdio.h>
 #include <stdarg.h>
+#include <string.h>
 #include <time.h>
 
 #include "nsCOMPtr.h"
@@ -242,14 +243,38 @@ static int do_main(int argc, char* argv[], char* envp[]) {
   }
 
   BootstrapConfig config;
+#ifdef MOZ_TASKARIAN
+  char taskarianAppData[MAXPATHLEN];
+#endif
 
   if (appDataFile && *appDataFile) {
     config.appData = nullptr;
     config.appDataPath = appDataFile;
   } else {
+#ifdef MOZ_TASKARIAN
+    // The engine keeps its ESR version. The ordinary XRE application data is
+    // packaged with the current Taskarian resources instead of the engine.
+    UniqueFreePtr<char> binaryPath = BinaryPath::Get();
+    char* separator = binaryPath ? strrchr(binaryPath.get(), '/') : nullptr;
+    if (!separator) {
+      Output("Couldn't find the Taskarian application directory.\n");
+      return 255;
+    }
+    *separator = '\0';
+    int length = snprintf(taskarianAppData, sizeof(taskarianAppData),
+                          "%s/" kDesktopFolder "/application.ini",
+                          binaryPath.get());
+    if (length < 0 || size_t(length) >= sizeof(taskarianAppData)) {
+      Output("Taskarian application path is too long.\n");
+      return 255;
+    }
+    config.appData = nullptr;
+    config.appDataPath = taskarianAppData;
+#else
     // no -app flag so we use the compiled-in app data
     config.appData = kStaticAppData;
     config.appDataPath = kDesktopFolder;
+#endif
   }
 
 #if defined(XP_WIN) && defined(MOZ_SANDBOX)

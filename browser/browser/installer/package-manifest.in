@@ -245,6 +245,9 @@
 #endif
 
 ; [Browser Chrome Files]
+#ifdef MOZ_TASKARIAN
+@RESPATH@/browser/application.ini
+#endif
 @RESPATH@/browser/chrome.manifest
 @RESPATH@/browser/chrome/browser@JAREXT@
 @RESPATH@/browser/chrome/browser.manifest

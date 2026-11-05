@@ -2256,7 +2256,11 @@ static inline void DumpVersion() {
 
   // Use the displayed version
   // For example, for beta, we would display 42.0b2 instead of 42.0
+#ifdef MOZ_TASKARIAN
+  printf("%s", (const char*)gAppData->version);
+#else
   printf("%s", MOZ_STRINGIFY(MOZ_APP_VERSION_DISPLAY));
+#endif
 
   if (gAppData->copyright && *gAppData->copyright) {
     printf(", %s", (const char*)gAppData->copyright);
@@ -2272,7 +2276,11 @@ static inline void DumpFullVersion() {
 
   // Use the displayed version
   // For example, for beta, we would display 42.0b2 instead of 42.0
+#ifdef MOZ_TASKARIAN
+  printf("%s ", (const char*)gAppData->version);
+#else
   printf("%s ", MOZ_STRINGIFY(MOZ_APP_VERSION_DISPLAY));
+#endif
 
   printf("%s ", (const char*)gAppData->buildID);
   printf("%s ", (const char*)PlatformBuildID());

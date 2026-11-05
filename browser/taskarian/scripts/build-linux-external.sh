@@ -98,7 +98,7 @@ object_dir="${run_root}/obj"
 log_dir="${run_root}/logs"
 state_dir="${build_root}/state"
 ccache_dir="${build_root}/ccache"
-sccache_dir="${build_root}/sccache"
+sccache_dir="${SCCACHE_DIR:-${build_root}/sccache}"
 
 mkdir -p -- \
   "${run_root}" \
@@ -198,6 +198,7 @@ run_step() {
 
 run_step branding python3 -I -B taskarian/scripts/render-branding.py
 run_step references-capture python3 -B ../agent/packaging/references-component.py
+run_step third-party-notices python3 -B taskarian/scripts/generate-third-party-notices.py
 run_step release-version python3 -I -B taskarian/scripts/firefox_release.py check --versions-only
 
 if [[ "${run_bootstrap}" == true || ! -x "${state_dir}/cbindgen/cbindgen" ]]; then

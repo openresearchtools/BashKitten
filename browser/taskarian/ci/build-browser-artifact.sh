@@ -115,9 +115,13 @@ install -m 0644 -- \
   "${artifact_dir}/browser-build-manifest.txt"
 # TASKARIAN_ARTIFACT_ONLY_BEGIN
 # Preserve the native packager's XPT sibling for subsequent resource-only builds.
-install -m 0644 -- \
-  "$(one_file "${browser_run}/obj/dist" "*.xpt_artifacts.zip")" \
-  "${artifact_dir}/"
+mapfile -d '' -t xpt_archives < <(find "${browser_run}/obj/dist" -type f -name '*.xpt_artifacts.zip' -print0)
+if ((${#xpt_archives[@]} > 1)); then
+  echo 'Expected at most one native XPT metadata archive' >&2
+  exit 1
+elif ((${#xpt_archives[@]} == 1)); then
+  install -m 0644 -- "${xpt_archives[0]}" "${artifact_dir}/"
+fi
 # TASKARIAN_ARTIFACT_ONLY_END
 
 cat >"${artifact_dir}/browser-artifact-manifest.txt" <<EOF

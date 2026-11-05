@@ -7,8 +7,10 @@ commit, and version remain in `browser/taskarian/upstreams.toml` as provenance;
 `source_commit` identifies our compact pristine-source commit and `source_tree`
 is the unchanged official Git tree. Upstream
 `browser/browser/config/version*.txt` files retain Mozilla's values. The application
-version lives in `browser/taskarian/config/version.txt` and is used for the browser's
-version display, native command output, application metadata, and package names.
+version lives in `browser/taskarian/config/version.txt` and is packaged in the
+runtime application data, Android resources, version display and package names.
+The native engine uses the pinned ESR version; its launcher reads the packaged
+Taskarian application data through the ordinary XRE application API.
 Gecko's milestone, compatibility version, and ESR build settings stay tied to
 the Firefox base.
 

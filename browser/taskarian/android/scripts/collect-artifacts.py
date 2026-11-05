@@ -210,8 +210,14 @@ with zipfile.ZipFile(destination) as apk:
     manifest['tor_android'] = tor_sources.verify_android_tor(apk, ROOT.parent)
 remote = Path(os.environ['TASKARIAN_REMOTE_CLIENT_DIR'])
 remote_manifest = json.loads((remote / 'build-manifest.json').read_text())
-if remote_manifest['source'] != revision or remote_manifest['architecture'] != abi:
-    raise SystemExit('Native remote client source/architecture does not match the APK')
+remote_spec = importlib.util.spec_from_file_location('android_components', ROOT.parent / 'agent/packaging/android-components.py')
+remote_components = importlib.util.module_from_spec(remote_spec)
+remote_spec.loader.exec_module(remote_components)
+remote_target = 'termux-x86_64' if abi == 'x86_64' else 'termux-aarch64'
+if (remote_manifest['architecture'] != abi or
+        remote_components.inputs('android-remote', remote_target, remote_manifest['source']) !=
+        remote_components.inputs('android-remote', remote_target, revision)):
+    raise SystemExit('Native remote client compiler inputs/architecture do not match the APK')
 with zipfile.ZipFile(destination) as apk:
     if hashlib.sha256(apk.read(f'lib/{abi}/libgojni.so')).hexdigest() != remote_manifest['library_sha256']:
         raise SystemExit('APK remote client differs from its built library')

@@ -34,7 +34,10 @@ def newest_published():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['prepare', 'check'])
+    parser.add_argument('--bump', action='store_true', help='Increment the product patch version for a repackage')
     args = parser.parse_args()
+    if args.bump and args.command != 'prepare':
+        parser.error('--bump applies to prepare only')
     current = firefox.validate_versions(ROOT / 'browser')
     version = current['taskarian']
     latest = newest_published()
@@ -43,10 +46,11 @@ def main():
             raise ValueError('This product version is already published or older; prepare a new candidate first')
     else:
         firefox.require_clean(ROOT / 'browser')
-        if parts(version) <= latest:
-            if parts(version)[:2] != latest[:2]:
+        if args.bump or parts(version) <= latest:
+            if parts(version)[:2] < latest[:2]:
                 raise ValueError('The source uses an older Firefox release line than the latest published version')
-            latest_version = '.'.join(map(str, latest if latest[2] else latest[:2]))
+            base = max(parts(version), latest)
+            latest_version = '.'.join(map(str, base if base[2] else base[:2]))
             version = firefox.next_product_version(latest_version, current['firefox'])
         (ROOT / 'browser/taskarian/config/version.txt').write_text(version + '\n')
         npm_version = version if version.count('.') == 2 else version + '.0'

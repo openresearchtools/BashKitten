@@ -76,8 +76,8 @@ def verify_exact_tree(root, expected):
         verify_file(root / relative, source)
 
 
-def verify_browser_identity(browser_root):
-    application_ini = browser_root / "application.ini"
+def verify_browser_identity(browser_root, relative="application.ini"):
+    application_ini = browser_root / relative
     if application_ini.is_symlink() or not application_ini.is_file():
         raise ValidationError(
             f"required application identity is missing or unsafe: {application_ini}"
@@ -104,10 +104,15 @@ def verify_browser_identity(browser_root):
             raise ValidationError(
                 f"application identity contains forbidden {forbidden_section} metadata"
             )
+    return parser
 
 
 def verify_payload(source_root, browser_root, documentation_root=None):
     verify_browser_identity(browser_root)
+    application = verify_browser_identity(browser_root, "browser/application.ini")
+    version = (source_root / "taskarian/config/version.txt").read_text().strip()
+    if application.get("App", "Version") != version:
+        raise ValidationError("runtime application version differs from the packaged resources")
     expected = expected_payloads(source_root)
     for name, source in expected.items():
         verify_file(browser_root / "notices" / name, source)

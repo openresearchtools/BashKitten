@@ -30,6 +30,17 @@ APPLICATION_PATHS = (
     'browser/mobile/android/fenix/app/src/main/res/',
 )
 COLLECTOR = 'browser/taskarian/android/scripts/collect-artifacts.py'
+NATIVE_LEAF_PATHS = (
+    'browser/third_party/tor/',
+    'browser/taskarian/third_party/tor-notices/',
+    'browser/taskarian/display/',
+    'browser/mobile/android/taskarian/display/',
+    'browser/taskarian/vendor/termux-x11/',
+    'browser/taskarian/vendor/display-dependencies/',
+    'browser/taskarian/android/tor/',
+    'browser/taskarian/android/notices/',
+    'browser/taskarian/android/sources/',
+)
 spec = importlib.util.spec_from_file_location('browser_component', ROOT / 'agent/packaging/browser-component.py')
 component = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(component)
@@ -46,14 +57,15 @@ def sha(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
-def native_recipe(workflow):
+def native_recipe(workflow, legacy_cache_environment=False):
     """Compare the actual compiler environment and commands, not cache policy."""
     runner = re.search(r'^    runs-on: (.+)$', workflow, re.M)
     environment = re.search(r'^    env:\n((?:      .+\n)+)', workflow, re.M)
     if not runner or not environment:
         raise ValueError('Android native recipe is missing its runner or environment')
     recipe = {'runner': runner[1], 'environment': [line for line in environment[1].splitlines()
-              if not re.match(r'      (?:#|ANDROID_KEY|MOZ_SOURCE_CHANGESET:)', line)]}
+              if not re.match(r'      (?:#|ANDROID_KEY|MOZ_SOURCE_CHANGESET:)', line)
+              and (legacy_cache_environment or not re.match(r'      (?:SCCACHE_[A-Z_]+|GH_TOKEN):', line))]}
     for name in ('Select the Android architecture', 'Prepare hosted runner', 'Install the compatible Rust toolchain',
                  'Bootstrap the pinned Mozilla Android toolchain', 'Generate the product artwork',
                  'Build Gecko for the selected architecture'):
@@ -64,7 +76,8 @@ def native_recipe(workflow):
         # including multiline shell, the working directory and step environment.
         recipe[name] = [line for line in block[1].splitlines()
                         if not re.match(r'      (?:if|timeout-minutes):', line)]
-    for action in ('mozilla-actions/sccache-action', 'actions/setup-java'):
+    for action in (('mozilla-actions/sccache-action', 'actions/setup-java') if legacy_cache_environment
+                   else ('actions/setup-java',)):
         block = re.search(r'^    - uses: ' + re.escape(action) + r'@(.+\n)((?:      .*\n|\n)*)', workflow, re.M)
         if not block:
             raise ValueError('Android native recipe is missing ' + action)
@@ -90,7 +103,7 @@ def native_tree(revision):
 @cache
 def native_inputs(revision, target, legacy_android_module=False,
                   legacy_fixture_metadata=False, legacy_desktop_resources=False,
-                  legacy_artifact_policy=False):
+                  legacy_artifact_policy=False, legacy_resource_scope=False):
     if not isinstance(revision, str) or not re.fullmatch('[0-9a-f]{40}', revision):
         raise ValueError('Invalid native source revision')
     if subprocess.run(['git', 'cat-file', '-e', revision + '^{commit}'], cwd=ROOT,
@@ -99,6 +112,7 @@ def native_inputs(revision, target, legacy_android_module=False,
         # sharing the current tree's blobs; never fetch Mozilla ancestry or tags.
         component.network_command(['git', 'fetch', '--filter=blob:none', '--no-tags', '--depth=1', 'origin', revision])
     entries = []
+    resources = component.packaged_resources(revision) if not legacy_resource_scope else frozenset()
     for entry in native_tree(revision).split(b'\0'):
         if not entry:
             continue
@@ -111,6 +125,10 @@ def native_inputs(revision, target, legacy_android_module=False,
             continue
         if path in component.ANDROID_DESKTOP_RESOURCES and not legacy_desktop_resources:
             continue
+        if not legacy_resource_scope and (path in resources or
+                path in (component.PRODUCT_VERSION, *component.RESOURCE_GENERATORS) or
+                path.startswith(NATIVE_LEAF_PATHS)):
+            continue
         if path == COLLECTOR or path.startswith(APPLICATION_PATHS) or '/__pycache__/' in path:
             continue
         if path in component.NATIVE_POLICY_FILES and not legacy_artifact_policy:
@@ -121,7 +139,7 @@ def native_inputs(revision, target, legacy_android_module=False,
             identity = component.blob_identity(component.artifact_policy_base(git('show', revision + ':' + path)))
             entry = mode + b' ' + kind + b' ' + identity.encode() + b'\t' + raw_path
         entries.append(entry)
-    recipe = native_recipe(git('show', revision + ':' + WORKFLOW).decode())
+    recipe = native_recipe(git('show', revision + ':' + WORKFLOW).decode(), legacy_resource_scope)
     return hashlib.sha256(target.encode() + b'\0' + b'\0'.join(entries) + b'\0' +
                           json.dumps(recipe, sort_keys=True).encode()).hexdigest()
 
@@ -156,9 +174,9 @@ def verify_native(apk, record, target):
     # Preserve old receipts, including their original digest. Validate that
     # digest under its actual producer's old/new calculation before comparing
     # current native inputs with the producer under the narrow resource rule.
-    recorded_inputs = {native_inputs(record.get('source', ''), target, module, fixtures, desktop, policy)
+    recorded_inputs = {native_inputs(record.get('source', ''), target, module, fixtures, desktop, policy, resources)
                        for module in (False, True) for fixtures in (False, True)
-                       for desktop in (False, True) for policy in (False, True)}
+                       for desktop in (False, True) for policy in (False, True) for resources in (False, True)}
     if (record.get('schema') != 1 or record.get('architecture') != abi or
             record.get('input_sha256') not in recorded_inputs or
             producer_inputs != native_inputs(current, target) or
@@ -166,9 +184,17 @@ def verify_native(apk, record, target):
         raise ValueError('Gecko native producer, inputs or library bytes do not match')
     producer = record.get('producer')
     if producer:
-        if (not isinstance(producer, dict) or producer.get('source') != record['source'] or
+        if not isinstance(producer, dict):
+            raise ValueError('Invalid Gecko producer evidence')
+        release = producer.get('release') if producer.get('kind') == 'component-release' else None
+        if release and not isinstance(release, dict):
+            raise ValueError('Invalid Gecko component release reference')
+        if (producer.get('source') != record['source'] or
                 producer.get('repository') != 'openresearchtools/taskarian-build-' + target or
-                not all(re.fullmatch('[0-9]+', str(producer.get(key, ''))) for key in ('run', 'artifact')) or
+                not re.fullmatch('[0-9]+', str(producer.get('run', ''))) or
+                (not release and not re.fullmatch('[0-9]+', str(producer.get('artifact', '')))) or
+                (release and (release.get('repository') != producer['repository'] or
+                    not re.fullmatch('[0-9a-f]{64}', release.get('manifestSha256', '')))) or
                 not all(re.fullmatch('[0-9a-f]{64}', producer.get(key, ''))
                         for key in ('manifest_sha256', 'apk_sha256'))):
             raise ValueError('Invalid original Gecko producer evidence')
@@ -335,9 +361,9 @@ def restore_early(directory, target):
                 evidence = early_producer(repository, run, artifact)
                 if not source or not evidence or native_inputs(source[1], target) != digest:
                     continue
-                accepted_names = {native_artifact(target, native_inputs(source[1], target, module, fixtures, desktop, policy))
+                accepted_names = {native_artifact(target, native_inputs(source[1], target, module, fixtures, desktop, policy, resources))
                                   for module in (False, True) for fixtures in (False, True)
-                                  for desktop in (False, True) for policy in (False, True)}
+                                  for desktop in (False, True) for policy in (False, True) for resources in (False, True)}
                 if artifact['name'] not in accepted_names:
                     continue
                 with tempfile.TemporaryDirectory(prefix='gecko-restore-', dir=directory.parent) as temporary:
@@ -464,50 +490,7 @@ def restore(directory, target):
     repository = os.environ['GITHUB_REPOSITORY']
     if repository != 'openresearchtools/taskarian-build-' + target:
         raise ValueError('Native restoration must use its matching Android builder')
-    current = git('rev-parse', 'HEAD').decode().strip()
-    digest = native_inputs(current, target)
-    run_id = int(os.environ.get('GITHUB_RUN_ID', '0'))
-    deadline = time.monotonic() + 5 * 60 * 60
-    checked_apks = False
-    while True:
-        if restore_early(directory, target):
-            return True
-        if not checked_apks:
-            try:
-                if restore_apk(directory, target):
-                    return True
-            except (OSError, ValueError, KeyError, TypeError, UnicodeError, subprocess.CalledProcessError, zipfile.BadZipFile) as error:
-                print(f'Skipping unusable completed-APK native cache: {error}', flush=True)
-                for path in directory.iterdir():
-                    shutil.rmtree(path) if path.is_dir() else path.unlink()
-            checked_apks = True
-        if not run_id or time.monotonic() >= deadline:
-            return False
-        pending = None
-        runs = component.api(f'repos/{repository}/actions/workflows/build.yml/runs?event=workflow_dispatch&per_page=100')['workflow_runs']
-        for run in sorted(runs, key=lambda item: item['id']):
-            if run['id'] >= run_id or run['status'] == 'completed' or run.get('head_branch') != 'main':
-                continue
-            source = re.match(r'^Taskarian ([0-9a-f]{40}) / ', run.get('display_title', ''))
-            recipe = component.workflow_steps(repository, run['head_sha'], 'apk')
-            # Old recipes cannot publish Gecko before unrelated APK assembly.
-            # Never wait on that unrelated stage just because it shares code.
-            if not source or not recipe or not any(step.startswith('name: Stage and verify native Gecko libraries\n') for step in recipe[0]):
-                continue
-            if native_inputs(source[1], target) != digest or early_producer(repository, run):
-                continue
-            jobs = component.api(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=100')['jobs']
-            steps = [step for job in jobs for step in job.get('steps', [])]
-            build_number = next(index + 2 for index, step in enumerate(recipe[0])
-                                if step.startswith('name: Build Gecko for the selected architecture\n'))
-            if any(step['number'] == build_number and step.get('conclusion') in ('failure', 'cancelled') for step in steps):
-                continue
-            pending = run
-            break
-        if pending is None:
-            return False
-        print(f'Waiting for matching native Gecko producer {pending["html_url"]}; no duplicate compilation.', flush=True)
-        time.sleep(30)
+    return component.browser_release().restore_engine(directory, target)
 
 
 def main():

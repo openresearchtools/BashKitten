@@ -48,7 +48,11 @@ def remoteClientAar = file("${System.getenv('TASKARIAN_REMOTE_CLIENT_DIR')}/task
 
 dependencies {
     api project(':taskarian-sdk')
-    api project(':taskarian-display')
+    if (System.getenv('TASKARIAN_DISPLAY_ANDROID_DIR')) {
+        api files("${System.getenv('TASKARIAN_DISPLAY_ANDROID_DIR')}/taskarian-display.aar")
+    } else {
+        api project(':taskarian-display')
+    }
     implementation project(':taskarian-telephony')
     implementation files(remoteClientAar)
     implementation project(':geckoview')

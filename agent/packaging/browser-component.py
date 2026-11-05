@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """Reuse verified browser artifacts without consuming the compiler-cache quota."""
 import argparse
+import ast
 import base64
 from datetime import datetime
 from functools import cache
 import hashlib
+import fnmatch
 import importlib.util
 import io
 import json
 import os
+import posixpath
 from pathlib import Path
 import re
 import shutil
@@ -28,6 +31,24 @@ NATIVE_POLICY_FILES = (
     'browser/taskarian/scripts/build-linux-external.sh',
     'browser/taskarian/ci/build-browser-artifact.sh',
     'browser/python/mozbuild/mozbuild/artifacts.py',
+)
+PRODUCT_VERSION = 'browser/taskarian/config/version.txt'
+RESOURCE_GENERATORS = (
+    'browser/AGENTS.md',
+    'browser/taskarian/README.md',
+    'browser/taskarian/UPDATING-FIREFOX.md',
+    'browser/taskarian/display/README.md',
+    'browser/LICENSE',
+    'browser/COPYING',
+    'browser/toolkit/content/license.html',
+    'browser/taskarian/third_party/tor.toml',
+    'browser/taskarian/scripts/application_ini.py',
+    'browser/taskarian/scripts/generate-third-party-notices.py',
+    'browser/taskarian/scripts/verify_browser_legal_payload.py',
+    'browser/taskarian/packaging/licenses.json',
+    'browser/taskarian/packaging/copyright',
+    'browser/taskarian/packaging/app-license-body.html',
+    'browser/browser/base/content/overrides/app-license-body.html',
 )
 ANDROID_ONLY_MODULE = 'browser/mobile/shared/modules/geckoview/TaskarianAndroid.sys.mjs'
 # Desktop DIST_SUBDIR=browser resources are not native/JNI input. The Android
@@ -200,8 +221,9 @@ def linux_native_recipe(source):
     if not environment or not runner:
         raise ValueError('Linux native recipe is missing its environment')
     recipe['runner'] = runner[1]
-    recipe['environment'] = environment[1]
-    for action in ('mozilla-actions/sccache-action', 'actions/setup-node'):
+    recipe['environment'] = '\n'.join(line for line in environment[1].splitlines()
+                                      if not re.match(r'      (?:SCCACHE_[A-Z_]+|GH_TOKEN):', line))
+    for action in ('actions/setup-node',):
         block = re.search(r'^    - uses: ' + re.escape(action) + r'@(.+\n)((?:      .*\n|\n)*)', source, re.M)
         if not block:
             raise ValueError('Linux native recipe is missing ' + action)
@@ -252,21 +274,86 @@ def blob_identity(data):
 
 
 @cache
+def packaged_resources(source):
+    """Resolve only resources declared by Taskarian's native build owners."""
+    ensure_source(source)
+    paths = network_command(['git', 'ls-tree', '-r', '--name-only', source, '--',
+                             'browser/taskarian', 'browser/browser'], binary=True).decode().splitlines()
+    existing, resources = set(paths), set()
+    resource_owners = {'EXTRA_JS_MODULES', 'JS_PREFERENCE_FILES', 'JS_PREFERENCE_PP_FILES',
+                       'FINAL_TARGET_FILES', 'FINAL_TARGET_PP_FILES', 'JAR_MANIFESTS'}
+
+    def add(owner, value):
+        if value.startswith(('!', '%')):
+            return
+        path = posixpath.normpath('browser' + value if value.startswith('/') else
+                                  posixpath.join(posixpath.dirname(owner), value))
+        if not path.startswith('browser/taskarian/'):
+            return
+        if not any(character in path for character in '*?['):
+            if path in existing:
+                resources.add(path)
+        else:
+            resources.update(candidate for candidate in existing if fnmatch.fnmatchcase(candidate, path))
+
+    for owner in paths:
+        if owner.startswith('browser/taskarian/') and owner.endswith('/moz.build'):
+            body = network_command(['git', 'show', source + ':' + owner])
+            for node in ast.walk(ast.parse(body)):
+                if not isinstance(node, ast.AugAssign):
+                    continue
+                target = node.target
+                while isinstance(target, (ast.Attribute, ast.Subscript)):
+                    target = target.value
+                if (not isinstance(target, ast.Name) or target.id not in resource_owners or
+                        not isinstance(node.value, (ast.List, ast.Tuple))):
+                    continue
+                for value in node.value.elts:
+                    if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                        add(owner, value.value)
+        elif owner.endswith('/jar.mn'):
+            # Jar manifests only map packaged data; never infer resource status
+            # from a filename suffix or from arbitrary JavaScript in Gecko.
+            resources.add(owner)
+            body = network_command(['git', 'show', source + ':' + owner])
+            for value in re.findall(r'^\s*[*+]?\s*[^#%\s][^\n]*?\(([^)]+)\)', body, re.M):
+                add(owner, value)
+    return frozenset(resources)
+
+
+@cache
+def runtime_product_version(source):
+    # Historical engines compiled the product number. Only the native launcher
+    # that reads the packaged XRE app data can treat it as a resource input.
+    launcher = network_command(['git', 'show', source + ':browser/browser/app/nsBrowserApp.cpp'])
+    configure = network_command(['git', 'show', source + ':browser/build/moz.configure/init.configure'])
+    return ('config.appDataPath = taskarianAppData;' in launcher and
+            re.search(r'"--with-version-file-path",\n(?:[^\n]*\n){1,4}\s*default=None,', configure) is not None)
+
+
+@cache
 def linux_engine_inputs(source, target):
     if target not in ('linux-amd64', 'linux-arm64'):
         raise ValueError('Linux native engine target required')
     ensure_source(source)
     workflow = '.github/builders/linux.yml'
-    paths = [path for path in input_paths(target) if not path.startswith(':')]
+    paths = ['browser', workflow, 'agent/packaging/linux/prepare-runner.sh']
     entries = network_command(['git', 'ls-tree', '-r', '-z', source, '--', *paths], binary=True)
-    excluded = {*FIXTURE_METADATA, *ANDROID_DESKTOP_RESOURCES, ANDROID_ONLY_MODULE}
+    excluded = {*FIXTURE_METADATA, *packaged_resources(source), *RESOURCE_GENERATORS,
+                ANDROID_ONLY_MODULE}
+    if runtime_product_version(source):
+        excluded.add(PRODUCT_VERSION)
     canonical = []
     for entry in entries.split(b'\0'):
         if not entry:
             continue
         header, raw_path = entry.split(b'\t', 1)
         path = raw_path.decode()
-        if (path in excluded or path.startswith(('browser/mobile/android/', 'browser/taskarian/android/'))):
+        if (path in excluded or path.startswith(('browser/mobile/android/', 'browser/taskarian/android/',
+                'browser/third_party/tor/', 'browser/taskarian/third_party/tor-notices/',
+                'browser/taskarian/vendor/termux-x11/', 'browser/taskarian/vendor/display-dependencies/',
+                'browser/taskarian/display/linux/', 'browser/taskarian/display/vendor/',
+                'browser/taskarian/display/patches/')) or path == 'browser/taskarian/display/build.py'):
             continue
         mode, kind, identity = header.decode().split()
         if path == workflow:
@@ -437,36 +524,8 @@ def restore_native_available(directory, target, digest):
 def restore_native(directory, target):
     repository = os.environ['GITHUB_REPOSITORY']
     if repository != 'openresearchtools/taskarian-build-' + target.removeprefix('linux-'):
-        raise ValueError('Native engine restoration must use the matching builder')
-    source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
-    digest = linux_engine_inputs(source, target)
-    current_run = int(os.environ.get('GITHUB_RUN_ID', '0'))
-    deadline = time.monotonic() + 5 * 60 * 60
-    while True:
-        if restore_native_available(directory, target, digest):
-            return True
-        if not current_run or time.monotonic() >= deadline:
-            return False
-        pending = None
-        runs = api(f'repos/{repository}/actions/workflows/build.yml/runs?event=workflow_dispatch&per_page=100')['workflow_runs']
-        for run in sorted(runs, key=lambda item: item['id']):
-            if run['id'] >= current_run or run['status'] == 'completed' or run.get('head_branch') != 'main':
-                continue
-            producer = re.match(r'^Taskarian ([0-9a-f]{40}) / ', run.get('display_title', ''))
-            if not producer or linux_engine_inputs(producer[1], target) != digest:
-                continue
-            if completed_producer(repository, run, target):
-                continue
-            jobs = api(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=100')['jobs']
-            if any(step.get('conclusion') in ('failure', 'cancelled') for job in jobs for step in job.get('steps', [])
-                   if step['name'] in ('Build the complete browser archive', 'Verify the browser archive and source inputs')):
-                continue
-            pending = run
-            break
-        if pending is None:
-            return False
-        print(f'Waiting for compatible native engine upload {pending["html_url"]}; no duplicate C++ compilation.', flush=True)
-        time.sleep(30)
+        raise ValueError('Native restoration must use the matching architecture builder')
+    return browser_release().restore_engine(directory, target)
 
 
 def record_native(directory, target):
@@ -487,6 +546,14 @@ def record_native(directory, target):
     with manifest_path.open('a') as output:
         output.write(f'native_engine_source={manifest["native_engine_source"]}\n'
                      f'native_engine_receipt_sha256={manifest["native_engine_receipt_sha256"]}\n')
+
+
+@cache
+def browser_release():
+    spec = importlib.util.spec_from_file_location('browser_release', ROOT / 'agent/packaging/browser-release.py')
+    value = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(value)
+    return value
 
 
 def artifact_name(target, digest):
@@ -907,38 +974,11 @@ def restore_available(directory, target, digest):
 
 def restore(directory, target, digest):
     repository = os.environ['GITHUB_REPOSITORY']
-    current_run = int(os.environ.get('GITHUB_RUN_ID', '0'))
-    deadline = time.monotonic() + 5 * 60 * 60
-    while True:
-        if restore_available(directory, target, digest):
-            return True
-        if not current_run or target.startswith('android'):
-            return False
-        # Older run IDs form an acyclic producer chain. Wait only through its
-        # native stage; a verified upload is consumed on the next iteration.
-        runs = api(f'repos/{repository}/actions/workflows/build.yml/runs?event=workflow_dispatch&per_page=100')['workflow_runs']
-        pending = None
-        for run in sorted(runs, key=lambda item: item['id']):
-            if run['id'] >= current_run or run['status'] == 'completed' or run.get('head_branch') != 'main':
-                continue
-            source = re.match(r'^Taskarian ([0-9a-f]{40}) / ', run.get('display_title', ''))
-            if not source or not equivalent_source(source[1], target):
-                continue
-            jobs = api(f'repos/{repository}/actions/runs/{run["id"]}/attempts/{run["run_attempt"]}/jobs?per_page=100')['jobs']
-            native = [step for job in jobs for step in job.get('steps', [])
-                      if step['name'] in ('Build the complete browser archive', 'Verify the browser archive and source inputs')]
-            if any(step.get('conclusion') in ('failure', 'cancelled') for step in native):
-                continue
-            # A published native stage with an unavailable/invalid artifact is
-            # a cache miss, not a reason to wait for unrelated package assembly.
-            if completed_producer(repository, run, target):
-                continue
-            pending = run
-            break
-        if pending is None or time.monotonic() >= deadline:
-            return False
-        print(f'Waiting for matching native browser producer {pending["html_url"]}; no duplicate compilation.', flush=True)
-        time.sleep(30)
+    if repository != 'openresearchtools/taskarian-build-' + target.removeprefix('linux-'):
+        raise ValueError('Browser restoration must use the matching architecture builder')
+    if not browser_release().engine_available(target):
+        return False
+    return browser_release().restore_resources(directory, target)
 
 
 def main():

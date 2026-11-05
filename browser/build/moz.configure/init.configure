@@ -1029,9 +1029,7 @@ option(
     "--with-version-file-path",
     nargs=1,
     help="Specify a custom path to app version files instead of auto-detecting",
-    default=depends(build_project)(
-        lambda project: "taskarian/config" if project == "browser" else None
-    ),
+    default=None,
 )
 
 
