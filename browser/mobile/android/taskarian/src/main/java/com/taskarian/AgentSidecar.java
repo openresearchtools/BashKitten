@@ -33,6 +33,9 @@ public final class AgentSidecar {
     private final ScrollView scroll;
     private final LinearLayout body;
     private final TextView notice;
+    private final LinearLayout noticeRow;
+    private final ImageButton noticeClose;
+    private final Set<String> dismissedNotices = new HashSet<>();
     private final FrameLayout drawer;
     private final View backdrop;
     private final PaneDivider divider;
@@ -59,6 +62,12 @@ public final class AgentSidecar {
         readPalette();
         body = column(); body.setPadding(dp(8), dp(7), dp(8), dp(16)); scroll.addView(body);
         notice = text(""); notice.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        noticeRow = row(); noticeRow.setGravity(Gravity.TOP); noticeRow.setVisibility(View.GONE);
+        noticeRow.addView(notice, new LinearLayout.LayoutParams(0, -2, 1));
+        noticeClose = icon("Dismiss notice", android.R.drawable.ic_menu_close_clear_cancel, () -> {
+            dismissedNotices.add(notice.getText().toString()); noticeRow.setVisibility(View.GONE);
+        });
+        noticeRow.addView(noticeClose);
         drawer = new FrameLayout(activity); drawer.setVisibility(View.GONE);
         backdrop = new View(activity); backdrop.setBackgroundColor(0x66000000); backdrop.setContentDescription("Close sidebar"); backdrop.setOnClickListener(ignored -> close());
         drawer.addView(backdrop, new FrameLayout.LayoutParams(-1, -1));
@@ -128,7 +137,11 @@ public final class AgentSidecar {
         EditText input = new EditText(dialog().getContext()); input.setTextColor(foreground); input.setHintTextColor(muted);
         input.setBackgroundTintList(ColorStateList.valueOf(accent)); return input;
     }
-    private void error(String value) { notice.setText(value); notice.setVisibility(value == null || value.isEmpty() ? View.GONE : View.VISIBLE); }
+    private void error(String value) {
+        notice.setText(value);
+        noticeRow.setVisibility(value == null || value.isEmpty() || dismissedNotices.contains(value) ? View.GONE : View.VISIBLE);
+    }
+    private void actionError(String value) { dismissedNotices.remove(value); error(value); }
     private JSONObject value(Object... pairs) { JSONObject value = new JSONObject(); try { for (int i = 0; i < pairs.length; i += 2) value.put((String) pairs[i], pairs[i + 1]); } catch (JSONException error) { throw new IllegalArgumentException(error); } return value; }
     void attach(FrameLayout content, View chatBody) {
         this.content = content; this.chatBody = chatBody;
@@ -235,7 +248,7 @@ public final class AgentSidecar {
             if (owner != sharingAdapter || !isOpen()) return;
             sharingChanging = false;
             if (failure == null) acceptSharing(state);
-            else { error(failure.getMessage()); sharingChecked = 0; refreshSharing(); }
+            else { actionError(failure.getMessage()); sharingChecked = 0; refreshSharing(); }
             render();
         }));
     }
@@ -243,13 +256,13 @@ public final class AgentSidecar {
         if (epoch != generation || !backend.equals(runtime.selected)) return;
         runtime.navigation(application ? "application-ready" : "snapshot", value(), snapshot -> {
             if (epoch != generation || !backend.equals(runtime.selected)) return;
-            if (application && !snapshot.optBoolean("authenticated")) { cancelSelection(); error("Sign in to this backend first."); return; }
+            if (application && !snapshot.optBoolean("authenticated")) { cancelSelection(); actionError("Sign in to this backend first."); return; }
             if (!application) snapshots.put(backend, snapshot);
             ready.run();
         }, message -> {
             if (epoch != generation || !backend.equals(runtime.selected)) return;
             if (!runtime.state.equals("on")) { cancelSelection(); render(); return; }
-            if (android.os.SystemClock.elapsedRealtime() >= until) { cancelSelection(); error(message); return; }
+            if (android.os.SystemClock.elapsedRealtime() >= until) { cancelSelection(); actionError(message); return; }
             app.main.postDelayed(() -> awaitReady(backend, ready, epoch, until, application), 200);
         });
     }
@@ -281,7 +294,7 @@ public final class AgentSidecar {
         select(backend, () -> runtime.openFiles(value(), () -> {
             openingFiles.remove(backend); close();
         }, message -> {
-            openingFiles.remove(backend); error(message); render();
+            openingFiles.remove(backend); actionError(message); render();
         }), () -> { openingFiles.remove(backend); render(); }, true);
         render();
     }
@@ -292,7 +305,7 @@ public final class AgentSidecar {
         final String previousBackend = runtime.selected;
         runtime.phoneVoice.messageTarget(eventId).whenComplete((target, failure) -> app.main.post(() -> {
             if (opening != generation || !previousBackend.equals(runtime.selected)) return;
-            if (failure != null) { error(failure.getCause() == null ? failure.getMessage() : failure.getCause().getMessage()); return; }
+            if (failure != null) { actionError(failure.getCause() == null ? failure.getMessage() : failure.getCause().getMessage()); return; }
             String backend = target.optString("backend");
             select(backend, () -> {
                 final int epoch = generation;
@@ -300,12 +313,12 @@ public final class AgentSidecar {
                 // and registration, and never override a later user selection.
                 runtime.phoneVoice.messageTarget(eventId).whenComplete((current, rejected) -> app.main.post(() -> {
                     if (epoch != generation || !backend.equals(runtime.selected)) return;
-                    if (rejected != null) { error(rejected.getCause() == null ? rejected.getMessage() : rejected.getCause().getMessage()); return; }
-                    if (!backend.equals(current.optString("backend")) || !target.optString("id").equals(current.optString("id"))) { error("The message's original chat is unavailable"); return; }
+                    if (rejected != null) { actionError(rejected.getCause() == null ? rejected.getMessage() : rejected.getCause().getMessage()); return; }
+                    if (!backend.equals(current.optString("backend")) || !target.optString("id").equals(current.optString("id"))) { actionError("The message's original chat is unavailable"); return; }
                     runtime.navigation("open", value("id", current.optString("id")), snapshot -> {
                         if (epoch != generation) return;
                         snapshots.put(backend, snapshot); close();
-                    }, this::error);
+                    }, this::actionError);
                 }));
             });
         }));
@@ -314,7 +327,7 @@ public final class AgentSidecar {
         select(backend, () -> runtime.navigation(action, value, snapshot -> {
             if (snapshot.has("sessions")) snapshots.put(backend, snapshot);
             render(); if (dismiss && compact) close();
-        }, this::error));
+        }, this::actionError));
     }
     private void render() {
         final int y = scroll.getScrollY(); body.removeAllViews();
@@ -322,7 +335,9 @@ public final class AgentSidecar {
         controls.addView(button("Hide Agent", hideAgent), new LinearLayout.LayoutParams(0, dp(41), 1));
         controls.addView(icon("Configuration", R.drawable.ic_agent_gear, openSettingsMenu));
         body.addView(controls);
-        notice.setVisibility(notice.getText().length() == 0 ? View.GONE : View.VISIBLE); body.addView(notice);
+        notice.setTextColor(muted); noticeClose.setImageTintList(ColorStateList.valueOf(muted)); rowBackground(noticeClose, false, 17);
+        noticeRow.setVisibility(notice.getText().length() == 0 || dismissedNotices.contains(notice.getText().toString()) ? View.GONE : View.VISIBLE);
+        body.addView(noticeRow);
         backend("local", "Local", false);
         divider();
         section("Remotes", "Connect to remote", () -> AgentSettingsActivity.open(activity, "remotes"));
@@ -355,7 +370,7 @@ public final class AgentSidecar {
         power.setOnCheckedChangeListener((button, checked) -> {
             if (checked == on) return;
             button.setChecked(on); // Requests do not claim the backend has changed yet.
-            runtime.setBackendOn(id, checked, this::error);
+            runtime.setBackendOn(id, checked, this::actionError);
         }); heading.addView(power);
         if (!remote && sharing.optBoolean("configured")) {
             if (!on) sharing = value("configured", true, "running", false, "available", sharing.optBoolean("available"), "error", sharing.optString("error"));
@@ -500,9 +515,9 @@ public final class AgentSidecar {
     }
     private void remoteActions(String id, String name) {
         dialog().setTitle(name).setItems(new String[]{"Rename", "Connect to phone", "Delete remote"}, (dialog, which) -> {
-            if (which == 0) name("Rename remote", name, value -> runtime.renameRemote(id, value, this::refresh, this::error));
-            if (which == 1) runtime.connectToPhone(id, this::refresh, this::error);
-            if (which == 2) dialog().setTitle("Delete remote?").setMessage("Forget its saved login? Its machine and chats are kept.").setNegativeButton("Cancel", null).setPositiveButton("Delete", (confirm, index) -> { try { runtime.removeRemote(id, () -> { snapshots.remove(id); refresh(); }, this::error); } catch (Exception error) { error(error.getMessage()); } }).show();
+            if (which == 0) name("Rename remote", name, value -> runtime.renameRemote(id, value, this::refresh, this::actionError));
+            if (which == 1) runtime.connectToPhone(id, this::refresh, this::actionError);
+            if (which == 2) dialog().setTitle("Delete remote?").setMessage("Forget its saved login? Its machine and chats are kept.").setNegativeButton("Cancel", null).setPositiveButton("Delete", (confirm, index) -> { try { runtime.removeRemote(id, () -> { snapshots.remove(id); refresh(); }, this::actionError); } catch (Exception error) { actionError(error.getMessage()); } }).show();
         }).show();
     }
 }
