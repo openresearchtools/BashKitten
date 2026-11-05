@@ -241,7 +241,7 @@ def restore_cache(args):
     # one-gigabyte compiler-cache ceiling.
     available = shutil.disk_usage(args.work).free
     capacity = max(64, available // (6 * 1024 ** 2))
-    run(['ccache', '--max-size', str(capacity) + 'Mi'])
+    run(['ccache', '--max-size', str(capacity) + 'MiB'])
     contract = cache_contract(args.target, args.source)
     empty = hashlib.sha256().hexdigest()
     if not os.environ.get('TASKARIAN_OFFICE_ACTIONS_CACHE_MATCHED') and cache_objects(cache) == empty:
@@ -495,8 +495,7 @@ def build_integration(component, args, payload):
 def source_assets(component, args, output, assets):
     """Keep tracked build owners and original downloads, never generated substitutes."""
     source_cache = module('application_source_cache', ROOT / 'agent/packaging/source_cache.py')
-    paths = ['LICENSE', 'agent/packaging/office', 'agent/packaging/source_cache.py',
-             'agent/packaging/applications.py', 'agent/packaging/npm-sources.py']
+    paths = ['LICENSE', 'agent/packaging', '.github/builders/native.yml', '.github/builders/office.yml']
     if args.target.startswith('termux-'):
         paths += ['agent/packaging/termux/native_toolchain.py', 'agent/packaging/node/lock.json',
                   'agent/vendor/node/libcxx']
@@ -660,6 +659,30 @@ def seed_office(args):
     producer.update({'repository': 'openresearchtools/office-builds', 'runId': args.producer_run,
                      'workflowCommit': run_record['head_sha'], 'sourceCommit': args.producer_source,
                      'archiveSha256': checksum, 'manifestSha256': manifest_checksum})
+    def function(revision, path, name):
+        text = native.content(revision, 'agent/packaging/office/' + path)
+        match = re.search(r'^def ' + name + r'\([^\n]*\):\n[\s\S]*?(?=^def |\Z)', text, re.M)
+        if not match:
+            raise ValueError('Original native phase definition is absent: ' + path + ':' + name)
+        return match[0].strip()
+    # This one-time source migration moved the native configure functions;
+    # require their complete original text, apart from the new function name.
+    for old_path, new_name in [('build.py', 'configure_linux'), ('termux.py', 'configure_termux')]:
+        previous = function(args.producer_source, old_path, 'configure_engine')
+        current = function(args.source, 'engine.py', new_name)
+        if previous.replace('def configure_engine(', 'def ' + new_name + '(', 1) != current:
+            raise ValueError('Original native engine configure recipe changed')
+    if args.target.startswith('termux-'):
+        for name in ('build_libcap', 'build_libiconv', 'online_make_inputs',
+                     'materialize_native_inputs', 'build_environment'):
+            if function(args.producer_source, 'termux.py', name) != function(args.source, 'termux.py', name):
+                raise ValueError('Original Termux compiler/library recipe changed: ' + name)
+    old_path, new_name = ('termux.py', 'build_termux') if args.target.startswith('termux-') else ('build.py', 'build_linux')
+    pattern = r"run\(\['\./configure',[\s\S]*?cwd=source, env=(?:env|native)\)"
+    previous = re.search(pattern, function(args.producer_source, old_path, 'build_online'))
+    current = re.search(pattern, function(args.source, 'server.py', new_name))
+    if previous is None or current is None or previous[0] != current[0]:
+        raise ValueError('Original native server configure options changed')
     args.directory = args.directory.resolve(); args.directory.mkdir(parents=True, exist_ok=True)
     args.work = args.work.resolve(); args.work.mkdir(parents=True, exist_ok=True)
     args.cache = args.cache.resolve(); args.cache.mkdir(parents=True, exist_ok=True)
@@ -721,6 +744,10 @@ def seed_office(args):
                 source_assets(component, args, output, assets)
             finally:
                 args.source = requested_source
+            publisher_source = output / 'seed-publisher-source.tar.gz'
+            run(['git', 'archive', '--format=tar.gz', '--output=' + str(publisher_source), args.source,
+                 '--', 'agent/packaging', '.github/builders/office-seed.yml'], cwd=ROOT)
+            assets[publisher_source.name] = 'source'
             dependencies = [] if component == 'office-engine' else [reference(restored('office-engine', args))]
             result = store().publish(component, args.target, version(component, args.producer_source),
                 inputs(component, args.target, args.source), output, assets=assets,

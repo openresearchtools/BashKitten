@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Optional compiler-object backup; compiled runtime releases remain immutable."""
 import argparse
+from datetime import datetime, timezone
 import hashlib
 import importlib.util
 import json
@@ -122,7 +123,50 @@ def save(engine, target, contract, directory, repository=None):
         # Only this cache pointer is mutable; immutable runtime manifests never are.
         file = temporary / pointer; file.write_bytes(store.canonical(metadata) + b'\n')
         store.gh('release', 'upload', store.TAG, str(file), '--repo', repository, '--clobber')
+    cleanup(engine, target, repository)
     return True
+
+
+def cleanup(engine, target, repository):
+    """Keep two compiler contracts and a day for readers of replaced pointers."""
+    try:
+        release = store.gh('api', f'repos/{repository}/releases/tags/{store.TAG}')
+        assets, page = [], 1
+        while True:
+            batch = store.gh('api', f'repos/{repository}/releases/{release["id"]}/assets?per_page=100&page={page}')
+            assets.extend(batch)
+            if len(batch) < 100:
+                break
+            page += 1
+        prefix = f'compiler-cache-{engine}-{target}-'
+        pointers = [item for item in assets if re.fullmatch(re.escape(prefix) + r'[a-f0-9]{64}\.json', item['name'])]
+        pointers.sort(key=lambda item: item['updated_at'], reverse=True)
+        now = datetime.now(timezone.utc)
+        def age(item):
+            return (now - datetime.fromisoformat(item['updated_at'].replace('Z', '+00:00'))).total_seconds()
+        protected, parts = set(), set()
+        for index, item in enumerate(pointers):
+            if index >= 2 and age(item) >= 86400:
+                continue
+            raw = store.read_url(f'https://github.com/{repository}/releases/download/{store.TAG}/{item["name"]}')
+            if raw is None:
+                raise ValueError('Compiler cache pointer changed during cleanup')
+            metadata = json.loads(raw)
+            _, expected, _ = identity(engine, target, metadata['contract'], repository)
+            if metadata['schema'] != 1 or metadata['engine'] != engine or metadata['target'] != target or expected != item['name']:
+                raise ValueError('Compiler cache pointer metadata differs')
+            protected.add(item['name'])
+            for part in metadata['parts']:
+                if not re.fullmatch(re.escape(f'cache-{engine}-{target}-') + r'[a-f0-9]{64}\.tar\.zst\.part', part['name']):
+                    raise ValueError('Compiler cache part leaves its target')
+                parts.add(part['name'])
+        removable = {item['name'] for item in pointers} - protected
+        for item in assets:
+            is_part = re.fullmatch(re.escape(f'cache-{engine}-{target}-') + r'[a-f0-9]{64}\.tar\.zst\.part', item['name'])
+            if age(item) > 86400 and (item['name'] in removable or is_part and item['name'] not in parts):
+                store.gh('api', f'repos/{repository}/releases/assets/{item["id"]}', '--method', 'DELETE')
+    except (store.StoreUnavailable, ValueError, KeyError, TypeError) as error:
+        print('Compiler backup published; old-cache cleanup deferred: ' + str(error), flush=True)
 
 
 def main():
