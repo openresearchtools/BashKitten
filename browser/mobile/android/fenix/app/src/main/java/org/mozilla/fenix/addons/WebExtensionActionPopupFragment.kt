@@ -125,7 +125,7 @@ class WebExtensionActionPopupFragment : AddonPopupBaseFragment(), EngineSession.
         if (referencesDialog != null && windowRequest.type == WindowRequest.Type.CLOSE) {
             closePopup()
         } else {
-            super.onWindowRequest(windowRequest)
+            super<AddonPopupBaseFragment>.onWindowRequest(windowRequest)
         }
     }
 
