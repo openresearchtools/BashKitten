@@ -44,7 +44,7 @@ def verify_workflow(revision):
 def verify_run(run, source, request):
     if (run['event'] != 'workflow_dispatch' or run['head_branch'] != 'main'
             or run['display_title'] != f'Office {source} / {request}'
-            or run['repository']['full_name'].lower() != REPOSITORY):
+            or run['repository']['full_name'].lower() != REPOSITORY.lower()):
         raise ValueError('Office build does not match the exact collection request')
 
 

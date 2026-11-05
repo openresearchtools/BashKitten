@@ -308,7 +308,7 @@ def main():
     parser.add_argument('target', choices=['linux-amd64', 'linux-arm64', 'termux-aarch64', 'termux-x86_64'])
     parser.add_argument('--directory', type=Path, required=True)
     args = parser.parse_args()
-    if os.environ.get('GITHUB_REPOSITORY', REPOSITORY).lower() != REPOSITORY:
+    if os.environ.get('GITHUB_REPOSITORY', REPOSITORY).lower() != REPOSITORY.lower():
         raise ValueError('Node component reuse requires the product repository')
     args.directory.mkdir(parents=True, exist_ok=True)
     if args.action == 'restore':
