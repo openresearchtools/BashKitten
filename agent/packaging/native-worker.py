@@ -31,15 +31,59 @@ def providers():
     return app, office
 
 
+def materialize(plan):
+    paths = {'agent/packaging', 'LICENSE', 'agent/package.json', 'agent/package-lock.json',
+             'auth/upstreams.lock.json', 'auth/dependencies/go-toolchain/sources.json',
+             'agent/machines/rust-toolchain/sources.json', 'browser/taskarian/config/version.txt'}
+    for item in plan:
+        component, value = item['component'], item['inputs']
+        paths.update(name for key in ('files', 'sources', 'trees') for name, oid in value.get(key, {}).items() if oid)
+        if component.startswith('auth-'):
+            paths.add('auth/build')
+            if component in owner.tools.AUTH_GO:
+                retained = json.loads(owner.native.content(owner.head(), 'auth/dependencies/go/sources.json'))
+                paths.update(retained['locks']); paths.add('auth/dependencies/go')
+        elif component.startswith('machines'):
+            paths.add('auth/build/go-notices.py')
+        elif component in ('node', 'search'):
+            paths.update(('auth/build', 'auth/dependencies/termux'))
+        elif component in ('guest', 'os'):
+            paths.add('os')
+        elif component == 'display':
+            paths.add('browser/taskarian/display')
+        elif component == 'loader':
+            paths.update(('browser/mobile/android/taskarian/display/loader',
+                          'browser/mobile/android/taskarian/display/src/main/java/com/taskarian/display/DisplayProtocol.java',
+                          'browser/taskarian/vendor/termux-x11'))
+        elif component in ('office-engine', 'office-server', 'office-ui'):
+            paths.update(('office', 'files/patches/collabora', 'auth/build', 'auth/dependencies/go-toolchain',
+                          'agent/machines/rust-toolchain', 'browser/taskarian/browser/branding'))
+        elif component.startswith('files-'):
+            paths.update(('files', 'auth/build', 'auth/dependencies/go-toolchain'))
+        elif component in ('references', 'office-integration'):
+            paths.update(('references', 'office/package.json', 'office/package-lock.json', 'office/vendor/npm'))
+        elif component in owner.APP:
+            paths.update(('agent', 'os/skills/desktop-use'))
+    # Git objects identify directories recursively; selected source units do not
+    # require unrelated Mozilla, LibreOffice or other component source trees.
+    selected = [path for path in sorted(paths) if owner.native.entry(owner.head(), path)]
+    subprocess.run(['git', 'sparse-checkout', 'set', '--no-cone', '--stdin'], cwd=ROOT,
+                   input='\n'.join('/' + path + ('/' if owner.native.git('cat-file', '-t', owner.native.entry(owner.head(), path)) == 'tree' else '') for path in selected) + '\n',
+                   text=True, check=True, env={**os.environ, 'GIT_LFS_SKIP_SMUDGE': '1'})
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['plan', 'build'])
+    parser.add_argument('action', choices=['plan', 'materialize', 'build'])
     parser.add_argument('target'); parser.add_argument('--components', default='["all"]')
     parser.add_argument('--plan', type=Path, required=True); parser.add_argument('--work', type=Path)
     parser.add_argument('--output', type=Path); parser.add_argument('--force-rebuild', action='store_true')
     args = parser.parse_args()
     if os.environ.get('GITHUB_REPOSITORY') != store.repository(args.target):
         raise ValueError('Use the existing matching architecture repository')
+    if args.action == 'materialize':
+        materialize(json.loads(args.plan.read_text()))
+        return
     app, office = providers()
     if args.action == 'plan':
         selected = json.loads(args.components)

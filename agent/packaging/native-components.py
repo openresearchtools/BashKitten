@@ -123,7 +123,8 @@ def source_bundle(component, target, output):
     paths = [path for path, identity in values.get('files', {}).items() if identity]
     if component.startswith('machines-'):
         paths.append('agent/packaging/machines/build.py')
-    paths += ['LICENSE', 'agent/packaging/native-components.py', 'agent/packaging/native-tools.py',
+    paths += ['LICENSE', 'agent/packaging/component-store.py', 'agent/packaging/native-component.py',
+              'agent/packaging/native-components.py', 'agent/packaging/native-tools.py',
               'agent/packaging/source_archive.py', 'agent/packaging/source_cache.py']
     original = Path(output) / f'{component}-tracked-source.tar.gz'
     archive_revision(ROOT, head(), original, paths=paths)

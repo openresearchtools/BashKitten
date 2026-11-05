@@ -34,14 +34,15 @@ jobs:
           persist-credentials: false
           path: source
           filter: blob:none
+          sparse-checkout-cone-mode: false
           sparse-checkout: |
-            agent/packaging
-            agent/package.json
-            agent/package-lock.json
-            agent/vendor/npm/sources.json
-            agent/vendor/pi/source.json
-            agent/machines/rust-toolchain/sources.json
-            auth/dependencies/go-toolchain/sources.json
+            /agent/packaging/
+            /agent/package.json
+            /agent/package-lock.json
+            /agent/vendor/npm/sources.json
+            /agent/vendor/pi/source.json
+            /agent/machines/rust-toolchain/sources.json
+            /auth/dependencies/go-toolchain/sources.json
       - name: Resolve exact direct component manifests before build setup
         id: plan
         working-directory: source
@@ -57,7 +58,7 @@ jobs:
       - name: Materialize current build owners only after a component miss
         if: steps.plan.outputs.build == 'true'
         working-directory: source
-        run: git sparse-checkout disable
+        run: python3 agent/packaging/native-worker.py materialize "${{ inputs.target }}" --plan "$RUNNER_TEMP/components.json"
       - uses: actions/setup-go@v6
         if: steps.plan.outputs.needs_go == 'true'
         with:
