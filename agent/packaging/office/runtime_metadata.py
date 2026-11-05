@@ -258,3 +258,31 @@ def linux_dependencies(runtime, work):
     if not values or not any(value.startswith('libc6') for value in values):
         raise ValueError('Native library dependency inventory is empty')
     return sorted(set(values + ['fontconfig', 'cpio', 'coreutils', 'findutils', 'util-linux']))
+
+
+def termux_notices(source, args, runtime, toolchain):
+    import termux
+    legal = runtime / 'legal'
+    legal.mkdir(exist_ok=True)
+    notices = []
+    notices.append({'name': 'Android NDK libc++ shared runtime',
+                    'license': toolchain['pin']['license'],
+                    'source': toolchain['pin']['url'],
+                    'text': (args.ndk / 'NOTICE').read_text() + '\n' + (args.ndk / 'NOTICE.toolchain').read_text()})
+    llvm_source = ROOT / 'agent/vendor/node/libcxx'
+    llvm_pin = json.loads((llvm_source / 'source.json').read_text())
+    notices.append({'name': 'Android NDK compiler-rt builtins',
+                    'license': 'Apache-2.0 WITH LLVM-exception',
+                    'source': llvm_pin['archive'], 'revision': llvm_pin['commit'],
+                    'text': (llvm_source / 'source/compiler-rt/LICENSE.TXT').read_text()})
+    notices.append({'name': 'Termux POSIX semaphore compatibility library', 'license': 'MIT',
+                    'source': json.loads((termux.PATCH_ROOT / 'donor.json').read_text())['donor']['url'],
+                    'text': (source / 'engine/external/python3/termux/LICENSE').read_text()})
+    notices.append({'name': 'Termux native build configuration and Python compatibility patches', 'license': 'MIT',
+                    'source': json.loads((termux.PATCH_ROOT / 'donor.json').read_text())['donor']['url'],
+                    'text': (source / 'engine/external/python3/termux/FRAMEWORK-LICENSE').read_text()})
+    for component in termux.native_dependencies()['components']:
+        notices.extend(termux.native_dependency_notices(component))
+        for record in termux.native_dependency_licenses(component):
+            shutil.copy2(termux.NATIVE_DEPENDENCIES / record['file'], legal / record['file'])
+    return notices

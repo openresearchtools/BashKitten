@@ -134,7 +134,10 @@ def inputs(component, target, revision):
         if group == 'ui':
             recipes.append('agent/packaging/office/web-prepare-runner.sh')
         if termux:
-            paths += ['office/patches/termux/donor.json', 'office/upstream/dependencies/native-termux']
+            if group == 'engine':
+                paths.append('office/patches/termux/donor.json')
+            elif group == 'server':
+                paths.append('office/upstream/dependencies/native-termux')
             recipes.append('agent/packaging/office/termux.py')
         selected['recipes'] = {path: native.entry(revision, path) for path in recipes}
     elif component == 'office-integration':
@@ -412,6 +415,8 @@ def build_office(component, args, payload):
                      'text': '\n\n'.join((payload / 'engine' / name).read_text(errors='replace')
                                          for name in ('LICENSE', 'NOTICE'))}]
         licenses.extend(runtime_metadata.python_notices(payload))
+        if platform == 'termux':
+            licenses.extend(runtime_metadata.termux_notices(source, args, payload, toolchain))
         write_json(payload / 'licenses.json', licenses)
     else:
         engine = restored('office-engine', args)
@@ -462,9 +467,12 @@ def build_office(component, args, payload):
             runtime_metadata.notices(source, payload)
             shutil.rmtree(payload / 'engine')
         else:
-            write_json(payload / 'licenses.json', [{'name': 'Collabora Online native server',
+            licenses = [{'name': 'Collabora Online native server',
                 'version': version(component, args.source), 'license': 'MPL-2.0 and component-specific terms',
-                'text': '\n\n'.join(path.read_text(errors='replace') for path in sorted(legal.iterdir()))}])
+                'text': '\n\n'.join(path.read_text(errors='replace') for path in sorted(legal.iterdir()))}]
+            if platform == 'termux':
+                licenses.extend(runtime_metadata.termux_notices(source, args, payload, toolchain))
+            write_json(payload / 'licenses.json', licenses)
     if component != 'office-ui':
         depends = runtime_metadata.linux_dependencies(payload, args.work) if platform == 'linux' else termux.SYSTEM_PACKAGES
         write_json(payload / 'native-metadata.json', {'depends': depends})
@@ -713,6 +721,16 @@ def seed_office(args):
                 if not source.exists():
                     continue
                 shutil.copytree(source, payload / name, symlinks=True) if source.is_dir() else shutil.copy2(source, payload / name)
+            if args.target.startswith('termux-'):
+                if component == 'office-engine':
+                    for pattern in ('libcap.so*', 'libiconv.so*'):
+                        for path in (payload / 'engine/program').glob(pattern):
+                            path.unlink()
+                elif component == 'office-server':
+                    libraries = payload / 'engine/program'; libraries.mkdir(parents=True, exist_ok=True)
+                    for pattern in ('libcap.so*', 'libiconv.so*'):
+                        for path in (native_root / 'engine/program').glob(pattern):
+                            shutil.copy2(path, libraries / path.name, follow_symlinks=False)
             if component == 'office-server':
                 shutil.rmtree(payload / 'share/coolwsd/browser', ignore_errors=True)
                 # Extension output belongs to the freshly built integration component.

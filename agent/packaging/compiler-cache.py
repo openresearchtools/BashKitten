@@ -83,7 +83,8 @@ def save(engine, target, contract, directory, repository=None):
     directory = Path(directory).resolve()
     if not directory.is_dir() or not any(directory.iterdir()):
         return False
-    if store.gh('api', f'repos/{repository}/releases/tags/{store.TAG}') is None:
+    release = store.gh('api', f'repos/{repository}/releases/tags/{store.TAG}')
+    if release is None:
         try:
             store.gh('release', 'create', store.TAG, '--repo', repository, '--title', 'Taskarian build components',
                      '--notes', store.NOTE, '--prerelease', '--latest=false')
@@ -91,6 +92,8 @@ def save(engine, target, contract, directory, repository=None):
             # Parallel architecture jobs may create their shared release first.
             if store.gh('api', f'repos/{repository}/releases/tags/{store.TAG}') is None:
                 raise
+        release = store.gh('api', f'repos/{repository}/releases/tags/{store.TAG}')
+    uploaded = {item['name']: item for item in release_assets(repository, release['id'])}
     with tempfile.TemporaryDirectory(prefix='compiler-cache-publish-', dir=directory.parent) as temporary:
         temporary = Path(temporary)
         archive = temporary / 'objects.tar.zst'
@@ -117,7 +120,12 @@ def save(engine, target, contract, directory, repository=None):
                 checksum = store.sha(part)
                 name = f'cache-{engine}-{target}-{checksum}.tar.zst.part'
                 renamed = temporary / name; part.rename(renamed)
-                store.gh('release', 'upload', store.TAG, str(renamed), '--repo', repository, '--clobber')
+                previous = uploaded.get(name)
+                if previous:
+                    if previous['size'] != size or previous.get('digest') != 'sha256:' + checksum:
+                        raise ValueError('Immutable compiler cache part checksum differs: ' + name)
+                else:
+                    store.gh('release', 'upload', store.TAG, str(renamed), '--repo', repository)
                 metadata['parts'].append({'name': name, 'size': size, 'sha256': checksum})
                 renamed.unlink()
         # Only this cache pointer is mutable; immutable runtime manifests never are.
@@ -127,17 +135,21 @@ def save(engine, target, contract, directory, repository=None):
     return True
 
 
+def release_assets(repository, release_id):
+    result, page = [], 1
+    while True:
+        batch = store.gh('api', f'repos/{repository}/releases/{release_id}/assets?per_page=100&page={page}')
+        result.extend(batch)
+        if len(batch) < 100:
+            return result
+        page += 1
+
+
 def cleanup(engine, target, repository):
     """Keep two compiler contracts and a day for readers of replaced pointers."""
     try:
         release = store.gh('api', f'repos/{repository}/releases/tags/{store.TAG}')
-        assets, page = [], 1
-        while True:
-            batch = store.gh('api', f'repos/{repository}/releases/{release["id"]}/assets?per_page=100&page={page}')
-            assets.extend(batch)
-            if len(batch) < 100:
-                break
-            page += 1
+        assets = release_assets(repository, release['id'])
         prefix = f'compiler-cache-{engine}-{target}-'
         pointers = [item for item in assets if re.fullmatch(re.escape(prefix) + r'[a-f0-9]{64}\.json', item['name'])]
         pointers.sort(key=lambda item: item['updated_at'], reverse=True)
