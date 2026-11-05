@@ -244,9 +244,9 @@ All released APKs use one privately held Android signing identity, including
 Taskarian and every Termux add-on. Keep `com.termux`, `com.termux.api`,
 `com.termux.x11` and the other upstream add-on IDs. Taskarian's application ID
 is **`com.taskarian`**. Derive its component names and provider authorities from
-that ID. The user owns **`taskarian.com`**; record it as the product domain for
-future website/verified-link configuration. The localhost app remains usable
-without that domain being configured or reachable.
+that ID. Keep future website/verified-link configuration separate from the
+application ID. The localhost app remains usable without a public domain being
+configured or reachable.
 
 Preserve Termux's `/data/data/com.termux/files/usr` prefix and its upstream
 shared-UID relationship with compatible add-ons. Taskarian has its own UID; it

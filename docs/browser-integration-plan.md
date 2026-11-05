@@ -913,7 +913,7 @@ See [Authelia's Caddy integration](https://www.authelia.com/integration/proxies/
 dynamic, unprivileged port obtained from the existing verified service discovery.
 `<port>` is not a new fixed port or a permanent part of the server's identity.
 There is no public domain, DNS lookup, domain registration, hosts-file edit or
-dependency on `taskarian.com`; that domain remains the user's website. The
+dependency on the product website. The
 earlier claim that the pinned Authelia version needs a registered hostname was incorrect:
 Authelia v4.39.20 explicitly accepts IP cookie scopes, including `127.0.0.1`, in
 its [validator](https://github.com/authelia/authelia/blob/v4.39.20/internal/configuration/validator/session.go#L124-L142)

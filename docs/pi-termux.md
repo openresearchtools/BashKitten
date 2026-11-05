@@ -88,11 +88,7 @@ backend returns to the app for its normal coordinated replacement at idle.
 These are testing releases. The callback resumes Android permission/start setup;
 the APK verifies the backend's source revision and OS package identity before
 starting work. Missing matching published packages produce an error.
-Already-shipped APKs use a one-argument command through
-`https://termux.taskarian.com`; that entry remains supported. On a fresh Termux
-installation it initially installs the signed repository candidate, then the
-installed APK's existing reconciler restores its exact pair before activation.
-Only new commands carry the APK's versions into the first install transaction.
+New setup commands carry the APK's versions into the first install transaction.
 
 Configuration → Updates checks stable APKs, or stable and nightly APKs when
 Include pre-releases is enabled. It selects the device ABI from `release.json`
