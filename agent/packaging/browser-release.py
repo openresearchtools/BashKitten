@@ -3,7 +3,6 @@
 """Durable browser components through the existing architecture releases."""
 import argparse
 from functools import cache
-import gzip
 import hashlib
 import importlib.util
 import io
@@ -263,21 +262,15 @@ def source_legal(directory, revision, target):
     browser.ensure_source(revision)
     name = 'browser-source-' + revision + '.tar.gz'
     paths = ['browser', 'references/connector', 'references/vendor/translators', 'references/legal',
-             'references/web/theme.css', 'agent/packaging', 'agent/machines/rust-toolchain', 'LICENSE', 'AGENTS.md']
-    with (directory / name).open('wb') as raw, gzip.GzipFile(fileobj=raw, mode='wb', mtime=0) as compressed:
-        process = subprocess.Popen(['git', 'archive', revision, '--', *paths], cwd=ROOT, stdout=subprocess.PIPE)
-        shutil.copyfileobj(process.stdout, compressed, 8 * 1024 ** 2)
-        if process.wait():
-            raise ValueError('Could not archive corresponding browser source')
+             'references/web/theme.css', 'agent/packaging', 'agent/machines/rust-toolchain',
+             'agent/search/third_party/unsloth-studio', 'LICENSE', 'AGENTS.md']
+    module('source_archive').archive_revision(ROOT, revision, directory / name, paths=paths)
     legal = 'browser-licenses-' + revision + '.tar.gz'
-    paths = ['browser/LICENSE', 'browser/COPYING', 'browser/taskarian/packaging',
+    paths = ['LICENSE', 'browser/LICENSE', 'browser/COPYING', 'browser/taskarian/packaging',
              'browser/taskarian/android/notices', 'browser/toolkit/content/license.html',
-             'browser/taskarian/SOURCE-NOTICE', 'agent/machines/rust-toolchain']
-    with (directory / legal).open('wb') as raw, gzip.GzipFile(fileobj=raw, mode='wb', mtime=0) as compressed:
-        process = subprocess.Popen(['git', 'archive', revision, '--', *paths], cwd=ROOT, stdout=subprocess.PIPE)
-        shutil.copyfileobj(process.stdout, compressed, 8 * 1024 ** 2)
-        if process.wait():
-            raise ValueError('Could not archive full browser license inputs')
+             'browser/taskarian/SOURCE-NOTICE', 'agent/machines/rust-toolchain',
+             'agent/search/third_party/unsloth-studio']
+    module('source_archive').archive_revision(ROOT, revision, directory / legal, paths=paths)
     pin = json.loads(text(revision, 'agent/machines/rust-toolchain/sources.json'))
     rust = module('source_cache').fetch(pin)
     shutil.copy2(rust, directory / pin['file'])

@@ -122,6 +122,10 @@ fi
 # Firefox's multi-gigabyte history; all generated files still stay external.
 git clone --shared --no-checkout -- "${source_repo}" "${checkout_repo}"
 browser_inputs=(browser references/connector references/vendor/translators references/legal references/web agent/packaging)
+# TASKARIAN_ARTIFACT_ONLY_BEGIN
+# These full notice texts feed the packaged browser license page.
+browser_inputs+=(agent/search/third_party/unsloth-studio)
+# TASKARIAN_ARTIFACT_ONLY_END
 git -C "${checkout_repo}" sparse-checkout set "${browser_inputs[@]}"
 git -C "${checkout_repo}" checkout --detach "${commit}"
 

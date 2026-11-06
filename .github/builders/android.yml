@@ -268,7 +268,10 @@ jobs:
       run: |
         "$SCCACHE_PATH" --show-stats --stats-format=json > "$RUNNER_TEMP/sccache-gecko.json"
         "$SCCACHE_PATH" --show-stats >> "$GITHUB_STEP_SUMMARY"
-        "$SCCACHE_PATH" --stop-server
+        if ! "$SCCACHE_PATH" --stop-server 2> "$RUNNER_TEMP/sccache-stop.log"; then
+          cat "$RUNNER_TEMP/sccache-stop.log" >&2
+          if ! grep -q "couldn't connect to server" "$RUNNER_TEMP/sccache-stop.log"; then exit 1; fi
+        fi
     - name: Save the Gecko disk compiler cache
       if: always() && !cancelled() && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-cache-contract.outputs.digest != ''
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
