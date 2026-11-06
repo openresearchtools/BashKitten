@@ -193,7 +193,7 @@ jobs:
     - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
       with:
         version: v0.17.0
-      if: (success()) && steps.component.outputs.hit != 'true'
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true'
     - name: Install the compatible Rust toolchain
       run: |
         version=$(python3 -c 'import json; print(json.load(open("agent/machines/rust-toolchain/sources.json"))["version"])')
@@ -201,7 +201,9 @@ jobs:
         rustup toolchain install "$version" --profile minimal --component rust-docs --target "$TASKARIAN_ANDROID_TARGET"
         rustup target add --toolchain "$version" wasm32-unknown-unknown
         printf '%s\n' "TASKARIAN_PHOTON_BUILD_CACHE=$RUNNER_TEMP/photon-cache" "TASKARIAN_SOURCE_CACHE=$RUNNER_TEMP/source-cache" >> "$GITHUB_ENV"
-      if: (success()) && steps.component.outputs.hit != 'true'
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true'
+    - name: Select the source archive cache for component assembly
+      run: echo "TASKARIAN_SOURCE_CACHE=$RUNNER_TEMP/source-cache" >> "$GITHUB_ENV"
     - name: Select the Gecko compiler cache contract
       id: gecko-cache-contract
       if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true'
@@ -224,7 +226,12 @@ jobs:
       working-directory: browser
       timeout-minutes: 30
       run: set -o pipefail; ./mach --no-interactive bootstrap --application-choice mobile_android 2>&1 | tee ../artifacts/bootstrap.log
-      if: (success()) && steps.component.outputs.hit != 'true'
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true'
+    - name: Bootstrap Mozilla Android resource assembly tools
+      working-directory: browser
+      timeout-minutes: 30
+      run: set -o pipefail; ./mach --no-interactive bootstrap --application-choice mobile_android_artifact_mode 2>&1 | tee ../artifacts/bootstrap-artifact.log
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit == 'true'
     - name: Generate the product artwork
       working-directory: browser
       run: python3 taskarian/scripts/render-branding.py
