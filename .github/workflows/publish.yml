@@ -72,6 +72,52 @@ jobs:
           /LICENSE
     - name: Download small pinned release plan
       run: gh run download "$CANDIDATE_RUN" --name taskarian-complete-candidate --dir release-plan
+    - name: Check version and publishing authority before installer downloads
+      id: draft
+      env:
+        GH_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}
+        CANDIDATE_REVISION: ${{ steps.candidate.outputs.revision }}
+      run: |
+        python3 -B agent/packaging/release_version.py check
+        python3 - <<'PY'
+        import json, os, subprocess
+        from pathlib import Path
+        repository = os.environ['GH_REPO']
+        revision = os.environ['CANDIDATE_REVISION']
+        tag = 'v' + Path('browser/taskarian/config/version.txt').read_text().strip()
+        def api(route, body=None):
+            command = ['gh', 'api', 'repos/' + repository + '/' + route]
+            if body is not None:
+                command += ['--method', 'POST', '--input', '-']
+            result = subprocess.run(command, input=json.dumps(body) if body is not None else None,
+                                    text=True, capture_output=True, check=False)
+            if result.returncode:
+                if body is None and 'HTTP 404' in result.stderr:
+                    return None
+                raise RuntimeError(result.stderr)
+            return json.loads(result.stdout)
+        ref = api('git/ref/tags/' + tag)
+        if ref is None:
+            ref = api('git/refs', {'ref': 'refs/tags/' + tag, 'sha': revision})
+        target = ref['object']
+        seen = set()
+        while target['type'] == 'tag':
+            if target['sha'] in seen:
+                raise RuntimeError('Cyclic release tag')
+            seen.add(target['sha'])
+            target = api('git/tags/' + target['sha'])['object']
+        if target.get('type') != 'commit' or target.get('sha') != revision:
+            raise RuntimeError('Release tag does not identify the successful candidate')
+        release = api('releases/tags/' + tag)
+        if release is None:
+            subprocess.run(['gh', 'release', 'create', tag, '--verify-tag', '--draft', '--prerelease',
+                            '--latest=false', '--title', 'Taskarian ' + tag[1:] + ' · Testing release',
+                            '--notes', 'Preparing verified Taskarian installers.'], check=True)
+        elif not release['draft']:
+            raise RuntimeError('A published release is immutable; prepare a new product version')
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+            output.write('tag=' + tag + '\n')
+        PY
     - name: Download shipped installers once and verify original native release contracts
       run: |
         python3 agent/packaging/remote-components.py materialize --plan release-plan/candidate-plan.json --directory candidates
@@ -104,12 +150,15 @@ jobs:
       run: python3 -B agent/packaging/release_version.py check
     - name: Publish installers and permanent source/license index
       env:
+        GH_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}
         RELEASE_TAG: ${{ steps.release.outputs.tag }}
-        CANDIDATE_REVISION: ${{ steps.candidate.outputs.revision }}
+        VERIFIED_TAG: ${{ steps.draft.outputs.tag }}
       run: |
-        flags=(--latest)
+        [[ "$RELEASE_TAG" == "$VERIFIED_TAG" ]]
+        [[ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" == true ]]
+        gh release upload "$RELEASE_TAG" release/* --clobber
+        flags=(--prerelease=false --latest)
         if [ "$PRERELEASE" = true ]; then flags=(--prerelease --latest=false); fi
-        gh release create "$RELEASE_TAG" release/* \
-          --target "$CANDIDATE_REVISION" \
+        gh release edit "$RELEASE_TAG" --draft=false \
           --title "Taskarian ${RELEASE_TAG#v} · Testing release" \
           --notes-file release/release-notes.md "${flags[@]}"
