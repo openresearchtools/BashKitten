@@ -237,9 +237,11 @@ def cache_restore(plan, directory):
             archive = temporary / 'compiler-cache.tar.zst'
             with archive.open('wb') as combined:
                 for part in record['parts']:
-                    if Path(part['name']).name != part['name'] or not part['name'].startswith('compiler-cache.tar.zst'):
+                    if not re.fullmatch(r'compiler-cache(?:-[0-9]+-[0-9]+)?\.tar\.zst(?:\.part[0-9]+)?', part['name']):
                         raise ValueError('Invalid compiler cache asset')
-                    path = temporary / part['name']
+                    # The original unsplit asset has the same name as the
+                    # combined archive; keep its download inode separate.
+                    path = temporary / 'part'
                     store.download(base + part['name'], path, part['size'], part['sha256'])
                     with path.open('rb') as source:
                         shutil.copyfileobj(source, combined)
@@ -251,62 +253,223 @@ def cache_restore(plan, directory):
                     source.extractall(directory, filter='data')
                 if decoder.wait():
                     raise ValueError('LocalAI compiler cache decompression failed')
-    except (store.StoreUnavailable, OSError, ValueError, KeyError, tarfile.TarError) as error:
+    except (store.StoreUnavailable, OSError, ValueError, KeyError, TypeError, tarfile.TarError) as error:
         print('Optional LocalAI compiler cache unavailable: ' + str(error), flush=True)
 
 
+def cache_parts(archive):
+    maximum = 1900 * 1024 ** 2
+    if archive.stat().st_size <= maximum:
+        return [archive]
+    paths = []
+    with archive.open('rb') as source:
+        while True:
+            path = archive.with_name(archive.name + f'.part{len(paths):03d}')
+            with path.open('wb') as output:
+                remaining = maximum
+                while remaining:
+                    block = source.read(min(8 * 1024 ** 2, remaining))
+                    if not block:
+                        break
+                    output.write(block)
+                    remaining -= len(block)
+            if not path.stat().st_size:
+                path.unlink()
+                break
+            paths.append(path)
+    archive.unlink()
+    return paths
+
+
+def failed_cache_sources(plan, temporary, stem):
+    """Retain matching inputs and full notices without running a compiler."""
+    source, recipe = ROOT.parent / 'src', Path(os.environ['RUNNER_TEMP']) / 'localai-recipe'
+    if (subprocess.check_output(['git', '-C', str(source), 'rev-parse', 'HEAD'], text=True).strip() != plan['pin']['commit']
+            or json.loads((recipe / 'upstreams.json').read_text())[plan['engine']] != plan['pin']
+            or (recipe / 'LICENSE.Taskarian').read_bytes() != (ROOT / 'LICENSE').read_bytes()):
+        raise ValueError('Failed compiler cache inputs differ from the pinned source/recipe')
+    spec = importlib.util.spec_from_file_location('localai_cache_notices', recipe / 'native_sources.py')
+    native = importlib.util.module_from_spec(spec)
+    exec(compile(spec.loader.get_source(spec.name), str(recipe / 'native_sources.py'), 'exec'), native.__dict__)
+    evidence = temporary / 'failed-build-evidence'
+    evidence.mkdir()
+    retained = native.retained_sources(recipe, plan['os'], plan['backend'])
+    write(evidence / 'retained-sources.json', retained)
+    notices = ['===== Taskarian build integration (MIT) =====\n' + (recipe / 'LICENSE').read_text(),
+               '===== Taskarian application (AGPL-3.0-only) =====\n' + (recipe / 'LICENSE.Taskarian').read_text(),
+               '===== MIT build recipe provenance =====\n' + (recipe / 'DONOR-LICENSE').read_text()]
+    if not (source / 'LICENSE').is_file():
+        raise ValueError('Failed compiler cache requires the original upstream license')
+    for file in sorted(source.rglob('*')):
+        if '.git' in file.parts or not file.is_file():
+            continue
+        if file.name.lower().startswith(('license', 'licence', 'copying', 'notice', 'copyright')):
+            try:
+                notices.append('===== ' + str(file.relative_to(source)) + ' =====\n' + file.read_text())
+            except UnicodeDecodeError:
+                pass
+        elif file.suffix == '.h':
+            for notice in re.findall(r'/\*[\s\S]*?\*/', file.read_text(errors='replace')):
+                if 'Permission is hereby granted' in notice:
+                    notices.append('===== ' + str(file.relative_to(source)) + ' =====\n' + notice)
+    notices.extend(native.native_notices(recipe, retained))
+    if plan['engine'] == 'whisper':
+        for name in ('SILERO-LICENSE', 'upstream/whisper/LICENSE'):
+            notices.append('===== VAD ' + name + ' =====\n' + (recipe / 'vad' / name).read_text())
+    if plan['os'] == 'android':
+        for name in ('NOTICE', 'NOTICE.toolchain'):
+            notices.append('===== Android NDK ' + name + ' =====\n' + (recipe / 'native-sources/android-r29/provenance' / name).read_text())
+    if plan['backend'] == 'cuda':
+        script = ('import sys\nfrom pathlib import Path\nsys.path.insert(0,"/recipe")\nfrom cuda import prepare\n'
+                  '_,notices=prepare(Path("/recipe"),Path("/evidence"),sys.argv[1])\n'
+                  'Path("/evidence/CUDA-NOTICES.txt").write_text("\\n\\n".join(notices))\n')
+        subprocess.run(['docker', 'run', '--rm', '--pull=never', '--user', f'{os.getuid()}:{os.getgid()}',
+                        '-v', f'{recipe}:/recipe:ro', '-v', f'{evidence}:/evidence',
+                        'localai-builder', 'python3', '-c', script, plan['arch']], check=True)
+        notices.append((evidence / 'CUDA-NOTICES.txt').read_text())
+    legal = temporary / (stem + '-LICENSES.txt')
+    legal.write_text('\n\n'.join(notices))
+    write(evidence / 'SOURCE.json', {'engine': plan['engine'], 'upstream': plan['pin'],
+          'buildRepository': 'https://github.com/openresearchtools/Taskarian',
+          'buildCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
+          'status': 'Partial compiler cache from a failed build; no runtime was published'})
+    archive = temporary / 'source.tar.gz'
+    with tarfile.open(archive, 'w:gz') as output:
+        output.add(source, arcname='source', filter=lambda item: None if '.git' in Path(item.name).parts else item)
+        output.add(recipe, arcname='build')
+        output.add(evidence, arcname='build-evidence')
+        output.add(legal, arcname='LICENSES.txt')
+    checksum, size = store.sha(archive), archive.stat().st_size
+    return legal, {'sha256': checksum, 'size': size, 'parts': cache_parts(archive)}
+
+
+def cache_source(plan, temporary, stem, notices):
+    """Publish failure sources once per official version/package revision."""
+    recipe = Path(os.environ['RUNNER_TEMP']) / 'localai-recipe'
+    native = importlib.util.spec_from_file_location('localai_cache_source_hash', recipe / 'native_sources.py')
+    helper = importlib.util.module_from_spec(native)
+    # Read the existing owner without creating host bytecode in its staged inputs.
+    exec(compile(native.loader.get_source(native.name), str(recipe / 'native_sources.py'), 'exec'), helper.__dict__)
+    inputs = {str(path.relative_to(recipe)): helper.sha256(path)
+              for path in recipe.rglob('*') if '__pycache__' not in path.parts and (path.is_file() or path.is_symlink())}
+    tag = plan['release'].replace('localai-', 'localai-source-', 1)
+    base = f'https://github.com/{plan["repository"]}/releases/download/{tag}/'
+    raw = store.read_url(base + 'source.json')
+    if raw:
+        record = json.loads(raw)
+        if (record.get('version') != 1 or record.get('upstream') != plan['pin'] or
+                record.get('variant') != [plan[key] for key in ('engine', 'os', 'arch', 'backend')] or
+                record.get('recipeSHA256') != inputs):
+            raise ValueError('Published failure-source inputs differ; changed native recipes require a package revision bump')
+        legal = record['licenses']
+        if legal.get('name') != 'LICENSES.txt':
+            raise ValueError('Invalid failure-source license filename')
+        path = temporary / (stem + '-LICENSES.txt')
+        store.download(base + legal['name'], path, legal['size'], legal['sha256'])
+        return path, {'manifest': base + 'source.json', 'manifestSHA256': hashlib.sha256(raw).hexdigest()}
+    artifacts = Path(os.environ['RUNNER_TEMP']) / 'artifacts'
+    if notices.is_file() and (artifacts / 'manifest.json').is_file():
+        entry = validate(json.loads((artifacts / 'manifest.json').read_text()), plan)
+        original = artifacts / entry['sourceFile']
+        if store.sha(original) != entry['sourceSHA256']:
+            raise ValueError('Interrupted runtime publication source archive differs')
+        legal = temporary / (stem + '-LICENSES.txt')
+        shutil.copy2(notices, legal)
+        archive = temporary / 'source.tar.gz'
+        os.link(original, archive)
+        source = {'sha256': entry['sourceSHA256'], 'size': archive.stat().st_size, 'parts': cache_parts(archive)}
+    else:
+        legal, source = failed_cache_sources(plan, temporary, stem)
+    license_file = temporary / 'LICENSES.txt'
+    shutil.copy2(legal, license_file)
+    record = {'version': 1, 'variant': [plan[key] for key in ('engine', 'os', 'arch', 'backend')],
+              'upstream': plan['pin'], 'recipeSHA256': inputs,
+              'buildCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
+              'source': {'sha256': source['sha256'], 'size': source['size'],
+                         'parts': [{'name': path.name, 'size': path.stat().st_size, 'sha256': store.sha(path),
+                                    'url': base + path.name} for path in source['parts']]},
+              'licenses': {'name': license_file.name, 'size': license_file.stat().st_size, 'sha256': store.sha(license_file)}}
+    release = store.ensure_release(plan['repository'], tag, tag)
+    uploaded = {item['name']: item for item in store.release_assets(plan['repository'], release['id'])}
+    if 'source.json' in uploaded:
+        raise store.StoreUnavailable('Published failure-source metadata is not available from its direct URL yet; retry the cache backup')
+    write(temporary / 'source.json', record)
+    for path in [*source['parts'], license_file, temporary / 'source.json']:
+        # Without the final source.json, a previous upload was incomplete and
+        # has no committed cache reference. Completed source releases are immutable.
+        previous = uploaded.get(path.name)
+        if previous and (previous['size'] != path.stat().st_size or previous.get('digest') != 'sha256:' + store.sha(path)):
+            store.gh('release', 'upload', tag, str(path), '--repo', plan['repository'], '--clobber')
+            uploaded = {item['name']: item for item in store.release_assets(plan['repository'], release['id'])}
+            store.upload_file(plan['repository'], tag, path, uploaded)
+        else:
+            store.upload_file(plan['repository'], tag, path, uploaded)
+    raw = (temporary / 'source.json').read_bytes()
+    return legal, {'manifest': base + 'source.json', 'manifestSHA256': hashlib.sha256(raw).hexdigest()}
+
+
 def cache_save(plan, directory):
-    directories = [name for name in ('ccache', 'build', 'npm') if (directory / name).is_dir()]
-    if not directories:
-        return
     try:
+        directories = [name for name in ('ccache', 'build', 'npm') if (directory / name).is_dir()]
+        objects = any(file.is_file() and file.stat().st_size and
+                      (name == 'ccache' and file.name.endswith('R') or name == 'build' and file.suffix in ('.o', '.obj', '.a', '.so', '.ptx', '.cubin'))
+                      for name in ('ccache', 'build') for file in (directory / name).rglob('*'))
+        if not directories or not objects:
+            return
         with tempfile.TemporaryDirectory(dir=directory.parent, prefix='localai-cache-') as temporary:
             temporary = Path(temporary)
-            archive = temporary / 'compiler-cache.tar.zst'
+            run, attempt = os.environ['GITHUB_RUN_ID'], os.environ.get('GITHUB_RUN_ATTEMPT', '1')
+            if not run.isdigit() or not attempt.isdigit():
+                raise ValueError('Compiler cache requires its readable workflow run and attempt')
+            stem = f'compiler-cache-{run}-{attempt}'
+            tag = cache_tag(plan)
+            base = f'https://github.com/{plan["repository"]}/releases/download/{tag}/'
+            previous = store.read_url(base + 'compiler-cache.json')
+            previous = json.loads(previous) if previous else {}
+            if previous and previous.get('variant') != [plan[key] for key in ('engine', 'os', 'arch', 'backend')]:
+                raise ValueError('Previous compiler cache belongs to another variant')
+            notices = directory / 'payload' / '-'.join(plan[key] for key in ('engine', 'os', 'arch', 'backend')) / 'LICENSES.txt'
+            published = store.read_url(plan['manifest']) if notices.is_file() else None
+            if published:
+                validate(json.loads(published), plan)
+            sources = list(previous.get('sources', []))
+            for link in (previous.get('sourceRelease'), plan['manifest'] if published else None):
+                if link and {'manifest': link} not in sources:
+                    sources.append({'manifest': link})
+            failure_source = None
+            if notices.is_file() and published:
+                legal = temporary / (stem + '-LICENSES.txt')
+                shutil.copy2(notices, legal)
+            else:
+                legal, failure_source = cache_source(plan, temporary, stem, notices)
+                if failure_source not in sources:
+                    sources.append(failure_source)
+            archive = temporary / (stem + '.tar.zst')
             subprocess.run(['tar', '-I', 'zstd -T2 -3', '-cf', str(archive), '-C', str(directory), *directories], check=True)
             checksum = store.sha(archive)
-            parts = []
-            # Keep small archives whole. Split only files approaching the 2 GiB limit.
-            maximum = 1900 * 1024 ** 2
-            if archive.stat().st_size <= maximum:
-                paths = [archive]
-            else:
-                paths = []
-                with archive.open('rb') as source:
-                    while True:
-                        path = temporary / f'compiler-cache.tar.zst.part{len(paths):03d}'
-                        with path.open('wb') as output:
-                            remaining = maximum
-                            while remaining:
-                                block = source.read(min(8 * 1024 ** 2, remaining))
-                                if not block:
-                                    break
-                                output.write(block)
-                                remaining -= len(block)
-                        if not path.stat().st_size:
-                            path.unlink()
-                            break
-                        paths.append(path)
-            tag = cache_tag(plan)
+            paths = cache_parts(archive)
             release = store.ensure_release(plan['repository'], tag, tag)
-            notices = directory / 'payload' / '-'.join(plan[key] for key in ('engine', 'os', 'arch', 'backend')) / 'LICENSES.txt'
-            if not notices.is_file():
-                raise ValueError('Compiler backup requires the successful runtime license notices')
-            store.gh('release', 'upload', tag, str(notices), '--repo', plan['repository'], '--clobber')
+            store.gh('release', 'upload', tag, str(legal), '--repo', plan['repository'], '--clobber')
+            parts = []
             for path in paths:
                 store.gh('release', 'upload', tag, str(path), '--repo', plan['repository'], '--clobber')
                 parts.append({'name': path.name, 'size': path.stat().st_size, 'sha256': store.sha(path)})
             record = {'version': 1, 'variant': [plan[key] for key in ('engine', 'os', 'arch', 'backend')],
-                      'sourceRelease': plan['manifest'], 'sha256': checksum, 'parts': parts}
+                      'sourceRelease': plan['manifest'] if failure_source is None else None, 'sources': sources,
+                      'licenses': {'name': legal.name, 'sha256': store.sha(legal), 'size': legal.stat().st_size},
+                      'producer': {'run': run, 'attempt': attempt, 'engineCommit': plan['pin']['commit'],
+                                   'buildCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()},
+                      'sha256': checksum, 'parts': parts}
             write(temporary / 'compiler-cache.json', record)
             store.gh('release', 'upload', tag, str(temporary / 'compiler-cache.json'), '--repo', plan['repository'], '--clobber')
-            # Only replace disposable cache assets; permanent runtime/source releases stay intact.
-            current = {path.name for path in paths} | {'compiler-cache.json'}
+            # Commit the pointer before retiring old object parts. Source evidence
+            # stays in its permanent source release, never in this rolling cache.
+            current = {path.name for path in paths} | {'compiler-cache.json', legal.name}
             for asset in store.release_assets(plan['repository'], release['id']):
-                if asset['name'].startswith('compiler-cache.') and asset['name'] not in current:
+                if asset['name'].startswith(('compiler-cache.', 'compiler-cache-')) and asset['name'] not in current:
                     store.gh('release', 'delete-asset', tag, asset['name'], '--repo', plan['repository'], '--yes')
-    except (store.StoreUnavailable, OSError, subprocess.CalledProcessError, ValueError) as error:
-        print('Optional LocalAI cache backup failed; published runtime remains usable: ' + str(error), flush=True)
+    except (store.StoreUnavailable, OSError, subprocess.CalledProcessError, ValueError, KeyError, TypeError, tarfile.TarError) as error:
+        print('Optional LocalAI cache backup failed; existing cache and runtime releases are retained: ' + str(error), flush=True)
 
 
 def dispatch(engine, target, backend):

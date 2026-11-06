@@ -103,7 +103,7 @@ jobs:
         run: |
           python3 agent/packaging/localai.py publish --engine "$ENGINE" --target "$TARGET" --backend "$BACKEND" --directory "$RUNNER_TEMP/artifacts"
       - name: Archive compiler objects outside Actions cache
-        if: always() && steps.native.outcome == 'success'
+        if: always() && steps.plan.outputs.build == 'true' && steps.native.outcome != 'skipped'
         working-directory: source
         run: |
           python3 agent/packaging/localai.py cache-save --engine "$ENGINE" --target "$TARGET" --backend "$BACKEND" --directory "$RUNNER_TEMP/localai-cache"
