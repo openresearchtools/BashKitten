@@ -4,7 +4,7 @@ run-name: Component storage ${{ inputs.action }} / ${{ inputs.source_sha }}
   workflow_dispatch:
     inputs:
       source_sha: {required: true, type: string}
-      action: {required: true, type: choice, options: [migrate, verify], default: verify}
+      action: {required: true, type: choice, options: [migrate, repack, verify], default: verify}
 permissions:
   contents: write
 concurrency:

@@ -202,9 +202,81 @@ def verify(metadata, repo, work, *, native=False):
             'nativeCheckpointRestores': native_verified if restore else []}
 
 
+def repack_components(repo, work):
+    """Adopt only a source-directory packaging change; never compile Go/JNI."""
+    layout, native, android = (module(name) for name in ('runtime-layout', 'native-components', 'android-components'))
+    import subprocess
+    source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=HERE.parents[1], text=True).strip()
+    targets = [target for target in ('linux-amd64', 'linux-arm64', 'termux-aarch64', 'termux-x86_64')
+               if store.repository(target) == repo]
+    results = []
+    for target in targets:
+        selected = ['auth-authelia', 'auth-caddy', 'auth-chisel', 'auth-remote']
+        if target.startswith('termux-'):
+            selected.append('android-remote')
+        selected.append('auth')  # Its dependency map now selects the clean leaves.
+        for component in selected:
+            wanted = android.inputs(component, target, source) if component == 'android-remote' else native.inputs(component, target, source)
+            previous_inputs = layout.without_layout(wanted)
+            if previous_inputs == wanted:
+                raise ValueError('Runtime packaging input marker is missing: ' + component)
+            original = store.lookup(component, target, previous_inputs)
+            if original is None:
+                raise ValueError('Exact native inputs changed beyond source staging; cannot adopt: ' + component)
+            manifest = original['manifest']
+            if manifest['inputs'] != previous_inputs:
+                raise ValueError('Native input equivalence failed')
+            ref = {key: original[key] for key in ('repository', 'manifestName', 'manifestSha256')}
+            with tempfile.TemporaryDirectory(prefix='runtime-repack-', dir=work) as temporary:
+                temporary = Path(temporary)
+                existing = store.lookup(component, target, wanted)
+                if existing is None:
+                    store.fetch(original, temporary, roles=('runtime', 'legal', 'metadata', 'build-support'))
+                    assets = {item['name']: item['role'] for item in manifest['assets']
+                              if store.runtime_owner().effective_role(item) != 'source'}
+                    proof = {'schema': 1, 'component': component, 'target': target,
+                             'previous': ref, 'producerSource': manifest['sourceCommit'], 'packagingSource': source,
+                             'previousInputs': previous_inputs, 'inputs': wanted,
+                             'scope': 'Only source staging layout changed; original native CPU inputs are identical',
+                             'nativeCompilation': False, 'sourceArchiveDownloaded': False}
+                    file = temporary / 'runtime-input-equivalence.json'
+                    file.write_bytes(store.canonical(proof) + b'\n'); assets[file.name] = 'metadata'
+                    dependencies = [*manifest.get('dependencies', []), ref]
+                    if component == 'auth':
+                        for leaf in ('auth-authelia', 'auth-caddy', 'auth-chisel', 'auth-remote'):
+                            dependency = store.lookup(leaf, target, native.inputs(leaf, target, source))
+                            if dependency is None:
+                                raise ValueError('Runtime leaf packaging must finish first')
+                            dependencies.append({key: dependency[key] for key in ('repository', 'manifestName', 'manifestSha256')})
+                    from source_archive import archive_revision
+                    recipe = temporary / 'runtime-adoption-source.tar.gz'
+                    archive_revision(HERE.parents[1], source, recipe, paths=['LICENSE', layout.RECIPE,
+                        'agent/packaging/component-migrate.py', 'agent/packaging/native-component.py',
+                        'agent/packaging/android-components.py', 'agent/packaging/component-store.py'])
+                    assets[recipe.name] = 'source'
+                    existing = store.publish(component, target, manifest['version'], wanted, temporary,
+                        assets=assets, source_commit=manifest['sourceCommit'], producer=manifest['producer'],
+                        dependencies=dependencies)
+                else:
+                    store.fetch(existing, temporary, roles=('runtime', 'legal', 'metadata', 'build-support'))
+                # Exercise the owning ABI/ELF checks on the actual repacked bytes.
+                if component == 'android-remote':
+                    import tarfile
+                    with tarfile.open(temporary / 'android-remote.tar.gz') as archive:
+                        archive.extractall(temporary, filter='data')
+                    android.verify_payload(component, target, temporary)
+                else:
+                    native.validate_outputs(component, target, temporary)
+                results.append({'component': component, 'target': target, 'state': 'packaged-without-compilation',
+                    **{key: existing[key] for key in ('repository', 'manifestName', 'manifestSha256', 'tag')}})
+                print('Source-free runtime adopted: ' + component + '/' + target, flush=True)
+    return {'repository': repo, 'nativeCompilation': False, 'sourceArchivesDownloaded': False,
+            'runtimePackaging': results}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=('migrate', 'verify'))
+    parser.add_argument('action', choices=('migrate', 'repack', 'verify'))
     parser.add_argument('--directory', type=Path, required=True)
     parser.add_argument('--receipt', type=Path, required=True)
     args = parser.parse_args()
@@ -212,6 +284,12 @@ def main():
     if os.environ.get('GITHUB_ACTIONS') != 'true' or repo not in store.REPOSITORIES:
         raise ValueError('Use one of the four architecture builders')
     args.directory.mkdir(parents=True, exist_ok=True)
+    if args.action == 'repack':
+        result = repack_components(repo, args.directory)
+        args.receipt.parent.mkdir(parents=True, exist_ok=True)
+        args.receipt.write_text(json.dumps(result, indent=2) + '\n')
+        print(json.dumps(result, indent=2))
+        return
     releases, roots, metadata = inventory()
     if args.action == 'migrate':
         for (owner, name), (raw, manifest) in sorted(metadata.items()):

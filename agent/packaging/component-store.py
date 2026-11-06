@@ -548,6 +548,66 @@ def publish_runtime(manifest, directory, tag, uploaded, temporary):
     return sha(file)
 
 
+def normalize_runtime(component, target, inputs, directory, assets, source_commit):
+    """Strip build-only source staging while preserving every runtime byte."""
+    marker = inputs.get('records', {}).get('runtimeLayout')
+    if marker is None and component == 'auth':
+        markers = [value.get('records', {}).get('runtimeLayout')
+                   for value in inputs.get('records', {}).get('components', {}).values()
+                   if value.get('records', {}).get('runtimeLayout')]
+        if markers:
+            marker = markers[0]
+            if any(value != marker for value in markers):
+                raise ValueError('Aggregate runtime packaging recipes differ')
+    if marker is None:
+        return dict(assets)
+    spec = importlib.util.spec_from_file_location('component_runtime_layout', Path(__file__).with_name('runtime-layout.py'))
+    layout = importlib.util.module_from_spec(spec); spec.loader.exec_module(layout)
+    root = Path(__file__).resolve().parents[2]
+    recipe = subprocess.check_output(['git', 'hash-object', str(root / layout.RECIPE)], cwd=root, text=True).strip()
+    if component not in layout.COMPONENTS or marker != {'version': 1, 'recipe': recipe}:
+        raise ValueError('Runtime packaging inputs do not match their actual recipe')
+    assets = dict(assets)
+    proofs = []
+    for name, role in sorted(assets.items()):
+        if role != 'runtime' or not name.endswith('.tar.gz'):
+            continue
+        archive = Path(directory) / name
+        temporary = archive.with_name(archive.name + '.runtime-only')
+        proof = layout.repack(component, archive, temporary, source_commit=source_commit)
+        temporary.replace(archive)
+        proof['runtimeArchive']['name'] = archive.name
+        proofs.append(proof)
+    if not proofs:
+        raise ValueError('Marked native component lacks its runtime archive')
+    revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
+    receipt = Path(directory) / 'runtime-layout-proof.json'
+    receipt.write_bytes(canonical({'schema': 1, 'component': component, 'target': target,
+        'runtimeLayout': marker, 'packagingSource': revision, 'producerSource': source_commit,
+        'nativeBytesChanged': False, 'archives': proofs}) + b'\n')
+    assets[receipt.name] = 'metadata'
+    from source_archive import archive_revision
+    source = Path(directory) / 'runtime-layout-source.tar.gz'
+    archive_revision(root, revision, source, paths=['LICENSE', layout.RECIPE,
+        'agent/packaging/component-store.py', 'agent/packaging/component-runtime.py'])
+    assets[source.name] = 'source'
+    # Original checksum inventories describe the same filenames. Refresh only
+    # their changed archives, without introducing extra flat checkpoint members.
+    changed = {name: sha(Path(directory) / name) for name in assets if assets[name] == 'runtime'}
+    for name in assets:
+        if name != 'SHA256SUMS' and not name.endswith('.sha256'):
+            continue
+        path = Path(directory) / name
+        lines = []
+        for line in path.read_text().splitlines():
+            if '  ' in line:
+                checksum, filename = line.split('  ', 1)
+                line = changed.get(filename, checksum) + '  ' + filename
+            lines.append(line)
+        path.write_text('\n'.join(lines) + '\n')
+    return assets
+
+
 def publish(component, target, version, inputs, directory, *, assets, source_commit, producer=None, dependencies=(), validation_only=False):
     ident = identity(component, target, inputs); directory = Path(directory)
     if os.environ.get('GITHUB_ACTIONS') != 'true' or os.environ.get('GITHUB_REPOSITORY') != ident['repository']:
@@ -567,6 +627,7 @@ def publish(component, target, version, inputs, directory, *, assets, source_com
         if existing['manifest']['version'] != version or any(sha(directory / item['name']) != item['sha256'] for item in existing['manifest']['assets']):
             raise ValueError('An immutable component already exists with different producer bytes')
         return existing
+    assets = normalize_runtime(component, target, inputs, directory, assets, source_commit)
     publisher = {'repository': ident['repository'], 'run': os.environ.get('GITHUB_RUN_ID'),
                  'attempt': os.environ.get('GITHUB_RUN_ATTEMPT'), 'job': os.environ.get('GITHUB_JOB'),
                  'workflowCommit': os.environ.get('GITHUB_SHA')}
