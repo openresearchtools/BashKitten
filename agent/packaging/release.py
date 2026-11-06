@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import subprocess
 import tarfile
@@ -122,6 +123,107 @@ def copy_asset(file, output, tag):
                 raise
             shutil.copy2(file, destination)
     return asset_record(destination, tag)
+
+
+def source_guide(index, version):
+    """Render complete source downloads without fetching any source payload."""
+    revision = index['sourceCommit']
+    roots = [item for item in index['components'] if item['component'] == 'corresponding-source']
+    current = next(item for item in roots if item['sourceCommit'] == revision)
+    baselines = [item for item in roots if item['sourceCommit'] != revision]
+    selected = [*roots, *[item for item in index['components']
+                         if item['component'] == 'application' and item['sourceCommit'] == revision]]
+    archives = {}
+    for component in selected:
+        for asset in component['assets']:
+            if asset['role'] != 'source':
+                continue
+            key = (asset['name'], asset['sha256'], asset['size'])
+            if any(Path(asset['name']).name != asset['name'] or not part.get('url') for part in asset['parts']):
+                raise ValueError('Source guide requires safe filenames and permanent download URLs')
+            archives[key] = asset
+    current_name = 'taskarian-source-' + revision[:12] + '.tar.gz'
+    baseline_name = ('taskarian-source-' + baselines[0]['sourceCommit'][:12] + '.tar.gz') if baselines else None
+    def order(asset):
+        return (0 if asset['name'] == (baseline_name or current_name) else
+                1 if asset['name'] == current_name else 2, asset['name'])
+    ordered = sorted(archives.values(), key=order)
+    lines = [f'# Taskarian {version} source downloads', '', f'Application source revision: `{revision}`.', '']
+    if baselines:
+        lines += ['## Complete baseline and repository update', '',
+                  'The current repository archive is a Git binary patch bundle. It is **not a standalone full source snapshot**. '
+                  'Download the complete baseline snapshot and the current patch bundle listed first below; together they reconstruct every tracked file for this release.', '',
+                  'The baseline also retains its original dependency bundles. Updated external dependencies come from the exact component versions in the component table below.', '']
+    else:
+        lines += ['## Complete repository snapshot', '',
+                  f'`{current_name}` is the complete Taskarian repository snapshot for this release, including every tracked file, '
+                  'pristine vendored donor sources, licenses, patches and build recipes. It is not a patch bundle. '
+                  'The other downloads retain the matching original external dependencies and Android native sources.', '']
+    lines += [f'## Source downloads ({len(ordered)})', '',
+              'Archive names and complete SHA-256 values are preserved. GitHub transport filenames may end in `.part`: '
+              'save a single-part download under the original archive name shown here. For multiple parts, use the reconstruction commands below.', '',
+              '| Original source archive | Download | Bytes | Complete archive SHA-256 |',
+              '|---|---|---:|---|']
+    for asset in ordered:
+        links = ' · '.join(f'[Part {number}]({part["url"]})' for number, part in enumerate(asset['parts'], 1))
+        if len(asset['parts']) == 1:
+            links = f'[{asset["name"]}]({asset["parts"][0]["url"]})'
+        lines.append(f'| `{asset["name"]}` | {links} | {asset["size"]:,} | `{asset["sha256"]}` |')
+    lines += ['', '## Verify and reconstruct', '',
+              'For a single-part download, its part is the complete original archive. Rename it as shown above and verify before extraction:', '',
+              '```sh', 'sha256sum --check <<\'SHA256\'', '<complete SHA-256>  <original archive filename>', 'SHA256', '```', '',
+              'For split downloads, the commands below fetch each part, verify every part, concatenate in its recorded order, '
+              'and verify the complete archive. Individual parts cannot be extracted separately. Stop if a checksum fails.', '']
+    for asset in ordered:
+        if len(asset['parts']) == 1:
+            continue
+        lines += [f'### {asset["name"]}', '', '```sh']
+        filenames, sums = [], []
+        for number, part in enumerate(asset['parts'], 1):
+            filename = asset['name'] + f'.part{number:04d}'
+            filenames.append(filename)
+            sums.append(part['sha256'] + '  ' + filename)
+            lines.append('curl --fail --location --retry 3 ' + shlex.quote(part['url']) + ' --output ' + shlex.quote(filename))
+        lines += ["sha256sum --check <<'SHA256'", *sums, 'SHA256',
+                  'cat -- ' + ' '.join(map(shlex.quote, filenames)) + ' > ' + shlex.quote(asset['name']),
+                  "sha256sum --check <<'SHA256'", asset['sha256'] + '  ' + asset['name'], 'SHA256', '```', '']
+    if baselines:
+        lines += ['## Apply the repository update', '',
+                  'After verifying and reconstructing both archives, extract the complete baseline and the patch bundle separately. '
+                  'Apply the patch from the baseline repository directory:', '', '```sh', 'mkdir -p baseline patch',
+                  'tar -xf ' + shlex.quote(baseline_name) + ' -C baseline',
+                  'tar -xf ' + shlex.quote(current_name) + ' -C patch', 'cd baseline/taskarian',
+                  'git apply --binary ../../patch/taskarian-source/taskarian.patch', '```', '',
+                  'The patch bundle also contains `source.json`, the full Taskarian license and a README with the exact baseline, '
+                  'target revision and Git-tree verification metadata. Source archives for updated external components remain available below.', '']
+    labels = {'gecko': 'Gecko engine', 'office-engine': 'LibreOffice core', 'office-server': 'Collabora server / document workers',
+              'office-ui': 'Collabora Office web UI', 'references': 'References', 'auth-tor': 'Tor', 'auth-caddy': 'Caddy',
+              'auth-authelia': 'Authelia', 'auth-valkey': 'Valkey', 'auth-chisel': 'Chisel', 'node': 'Node + npm',
+              'npm-runtime': 'Pi and locked npm runtime', 'photon': 'Photon WASM', 'browser-resources': 'Taskarian browser UI / Android resources',
+              'agent-resources': 'Taskarian agent backend and UI', 'files-server': 'Files Quantum backend', 'files-ui': 'Files Quantum web UI',
+              'application': 'Taskarian app assembly', 'corresponding-source': 'Complete corresponding source'}
+    platforms = {'linux-amd64': 'Linux AMD64', 'linux-arm64': 'Linux ARM64', 'android': 'Android ARM64',
+                 'android-x86_64': 'Android x86_64', 'termux-aarch64': 'Termux aarch64', 'termux-x86_64': 'Termux x86_64'}
+    groups = {}
+    for component in index['components']:
+        groups.setdefault((component['component'], component['version']), []).append(component)
+    lines += ['## Individual component sources', '',
+              'These links open the exact versioned component releases used by this application. They retain the component files, '
+              'full license notices and matching source inventory. A component manifest also identifies its exact dependency releases. '
+              f'The [machine-readable source and checksum index](https://github.com/openresearchtools/Taskarian/releases/download/v{version}/component-sources.json) records every archive and ordered part.', '',
+              '<details>', f'<summary>Versioned component releases ({len(groups)} component/version groups)</summary>', '',
+              '| Component | Version | Platform source releases |', '|---|---|---|']
+    for (name, official_version), components in sorted(groups.items(), key=lambda pair: (labels.get(pair[0][0], pair[0][0]).casefold(), pair[0][1])):
+        links = []
+        for component in sorted(components, key=lambda item: (item['target'], item['inputSha256'])):
+            url = component['manifest']['url'].rsplit('/', 1)[0].replace('/releases/download/', '/releases/tag/')
+            label = platforms.get(component['target'], component['target'])
+            if sum(item['target'] == component['target'] for item in components) > 1:
+                label += ' build ' + component['inputSha256'][:8]
+            links.append(f'[{label}]({url})')
+        lines.append('| ' + labels.get(name, name.replace('-', ' ').title()) + ' | `' + official_version.replace('|', '\\|') + '` | ' + ' · '.join(links) + ' |')
+    lines += ['', '</details>', '', 'Full Taskarian and applicable upstream license texts are also included in the shipped installers and runtime component archives.', '']
+    return '\n'.join(lines)
 
 
 def package(file):
@@ -368,6 +470,9 @@ def main():
         raise ValueError('Permanent source archives require checksums and downloadable parts')
     sources = [part for archive in archives for part in archive['parts']]
     source_manifest = copy(source_file)
+    guide = source_guide(source_index, version)
+    (args.output / 'SOURCES.md').write_text(guide)
+    source_guide_asset = asset_record(args.output / 'SOURCES.md', tag)
     # Share the README's warning instead of allowing release notes to imply
     # that a candidate build has passed retail-device acceptance.
     readme = (ROOT / 'README.md').read_text()
@@ -380,7 +485,7 @@ def main():
              '- **Linux:** install the AMD64 or ARM64 `.deb`, which includes the browser and Agent server.\n'
              '- **Updating Android:** update both the APK and the Taskarian package in Termux. Provider logins and chat history are retained.\n\n'
              'Local Agent opens without an account login. Publishing from Linux and connecting to remotes still require Tor authorization and account two-factor authentication.\n\n'
-             'Checksums are attached. `component-sources.json` links to the permanent matching component sources and license texts.\n')
+             f'Checksums are attached. [Download the source guide](https://github.com/openresearchtools/Taskarian/releases/download/{tag}/SOURCES.md) for complete source archives, component releases and verification steps.\n')
     (args.output / 'release-notes.md').write_text(notes)
     # Full build inputs remain in each installer and its pinned component manifest.
     # Keep the main release index small instead of copying every dependency lock.
@@ -390,7 +495,7 @@ def main():
     result = {'schema': 2, 'tag': tag, 'version': version, 'firefoxVersion': engine, 'testingRelease': True, 'packageVersion': package_version,
               'sourceCommit': revision, 'buildRun': args.run or os.environ.get('GITHUB_RUN_ID'),
               'apps': apps, 'packages': published_packages, 'sources': sources,
-              'sourceManifest': source_manifest, 'sourceArchives': archives}
+              'sourceManifest': source_manifest, 'sourceGuide': source_guide_asset, 'sourceArchives': archives}
     (args.output / 'release.json').write_text(json.dumps(result, indent=2) + '\n')
     (args.output / 'SHA256SUMS').write_text(''.join(
         sha(file) + '  ' + file.name + '\n' for file in sorted(args.output.iterdir()) if file.name != 'SHA256SUMS'))
