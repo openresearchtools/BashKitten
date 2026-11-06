@@ -16,6 +16,86 @@
       "url": "https://proxy.golang.org/golang.org/x/telemetry/@v/v0.0.0-20260908163034-4bcc4b2ee518.info",
       "sha256": "b1dc3dbdce12f427a27c7aecff78d0cee3ce6d4cee05cff8d875f242a2439675",
       "size": 197
+    },
+    {
+      "name": "golang.org/x/telemetry",
+      "version": "v0.0.0-20260908163034-4bcc4b2ee518",
+      "file": "proxy/golang.org/x/telemetry/@v/v0.0.0-20260908163034-4bcc4b2ee518.mod",
+      "url": "https://proxy.golang.org/golang.org/x/telemetry/@v/v0.0.0-20260908163034-4bcc4b2ee518.mod",
+      "sha256": "b3db3a6093c95190ba4c799a41b18ed8cab5f9d5329e6d327eecd8bb54d7ff76",
+      "size": 133
+    },
+    {
+      "name": "golang.org/x/crypto",
+      "version": "v0.57.0",
+      "file": "proxy/golang.org/x/crypto/@v/v0.57.0.mod",
+      "sha256": "93438fc90cca15b1b253be9df648ca54fb80838400239cc294f794ca2f242575",
+      "size": 192,
+      "url": "https://proxy.golang.org/golang.org/x/crypto/@v/v0.57.0.mod"
+    },
+    {
+      "name": "golang.org/x/crypto",
+      "version": "v0.57.0",
+      "file": "proxy/golang.org/x/crypto/@v/v0.57.0.info",
+      "sha256": "b5711159f8090af77db970774d86305791718dae7c54256a898a9b432e98375a",
+      "size": 193,
+      "url": "https://proxy.golang.org/golang.org/x/crypto/@v/v0.57.0.info"
+    },
+    {
+      "name": "golang.org/x/crypto",
+      "version": "v0.57.0",
+      "file": "proxy/golang.org/x/crypto/@v/v0.57.0.zip",
+      "sha256": "856c916b92f1fc5b53983c04f6249f632f56c47ebc003bbcdfc503500dfb58b8",
+      "size": 2312809,
+      "url": "https://proxy.golang.org/golang.org/x/crypto/@v/v0.57.0.zip"
+    },
+    {
+      "name": "golang.org/x/term",
+      "version": "v0.46.0",
+      "file": "proxy/golang.org/x/term/@v/v0.46.0.mod",
+      "sha256": "f94c7bd036a7d189950b7759a3f105e7bcc7164dc89d80d186c7e8a903d6c332",
+      "size": 70,
+      "url": "https://proxy.golang.org/golang.org/x/term/@v/v0.46.0.mod"
+    },
+    {
+      "name": "golang.org/x/term",
+      "version": "v0.46.0",
+      "file": "proxy/golang.org/x/term/@v/v0.46.0.info",
+      "sha256": "9cc8085269ff2b8089d9b7e91363a1dd9d822d94e5c33c79bfc768cae41de5eb",
+      "size": 191,
+      "url": "https://proxy.golang.org/golang.org/x/term/@v/v0.46.0.info"
+    },
+    {
+      "name": "golang.org/x/term",
+      "version": "v0.46.0",
+      "file": "proxy/golang.org/x/term/@v/v0.46.0.zip",
+      "sha256": "9147fdd982f1aed1392183d5b48055f4f74c85d496604766c7f0b1d3bbd61c7c",
+      "size": 22601,
+      "url": "https://proxy.golang.org/golang.org/x/term/@v/v0.46.0.zip"
+    },
+    {
+      "name": "golang.org/x/text",
+      "version": "v0.42.0",
+      "file": "proxy/golang.org/x/text/@v/v0.42.0.mod",
+      "sha256": "4756c4b8eeeae2a20cb43c198c10701d20c53493bd90b91c6632153c9cbac240",
+      "size": 190,
+      "url": "https://proxy.golang.org/golang.org/x/text/@v/v0.42.0.mod"
+    },
+    {
+      "name": "golang.org/x/text",
+      "version": "v0.42.0",
+      "file": "proxy/golang.org/x/text/@v/v0.42.0.info",
+      "sha256": "5b9b61f55293ec161f0cce9c4357abf80071864a801f8971490c68b84019df87",
+      "size": 191,
+      "url": "https://proxy.golang.org/golang.org/x/text/@v/v0.42.0.info"
+    },
+    {
+      "name": "golang.org/x/text",
+      "version": "v0.42.0",
+      "file": "proxy/golang.org/x/text/@v/v0.42.0.zip",
+      "sha256": "a7b64e003056b6470303f408202098d8f3714a115f23091b8cac85edeb265476",
+      "size": 7337550,
+      "url": "https://proxy.golang.org/golang.org/x/text/@v/v0.42.0.zip"
     }
   ]
 }
