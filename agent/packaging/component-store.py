@@ -370,7 +370,25 @@ def fetch(reference, directory, roles=None, names=None):
                 descriptor.get('assets') != expected):
             raise ValueError('Component runtime descriptor differs from canonical manifest')
         archive = fetch_asset(repo, tag, descriptor['archive'], directory)
-        runtime_owner().unpack(archive, directory, descriptor)
+        with tempfile.TemporaryDirectory(prefix='.component-unpack-', dir=directory.parent) as temporary:
+            temporary = Path(temporary)
+            runtime_owner().unpack(archive, temporary, descriptor)
+            selected_names = {item['name'] for item in selected}
+            for item in descriptor['assets']:
+                # Preserve each caller's native artifact inventory. The full
+                # transport still contains every license; unrequested legal or
+                # metadata files live outside the original flat checkpoint.
+                destination = (directory / item['name'] if item['name'] in selected_names else
+                               directory / '.component-provenance' / 'assets' / item['name'])
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                if not destination.parent.resolve().is_relative_to(directory.resolve()):
+                    raise ValueError('Component restore destination escapes its directory')
+                (temporary / item['name']).replace(destination)
+            license_destination = directory / descriptor['license']['name']
+            license_destination.parent.mkdir(parents=True, exist_ok=True)
+            if not license_destination.parent.resolve().is_relative_to(directory.resolve()):
+                raise ValueError('Component license destination escapes its directory')
+            (temporary / descriptor['license']['name']).replace(license_destination)
         archive.unlink()
     for item in missing:
         if role(item) == 'source' or not use_bundle:
@@ -384,7 +402,9 @@ def fetch(reference, directory, roles=None, names=None):
         parts_directory.rmdir()
     reference = {'repository': repo, 'tag': tag, 'manifestName': name,
                  'manifestSha256': hashlib.sha256(raw).hexdigest(), 'url': url}
-    (directory / '.component-reference.json').write_bytes(canonical(reference) + b'\n')
+    provenance = directory / '.component-provenance'
+    provenance.mkdir(exist_ok=True)
+    (provenance / 'reference.json').write_bytes(canonical(reference) + b'\n')
     return {'manifest': manifest, **reference, 'directory': str(directory)}
 
 

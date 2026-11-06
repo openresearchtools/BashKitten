@@ -116,7 +116,35 @@ def migrate_one(repo, name, raw, manifest, work):
         return {'repository': repo, 'manifestName': name, 'manifestSha256': hashlib.sha256(raw).hexdigest(), 'tag': tag}
 
 
-def verify(metadata, repo, work):
+def verify_native_checkpoints(metadata, repo, work):
+    browser_release = module('browser-release')
+    browser = module('browser-component')
+    verified = []
+    for (owner, name), (_, manifest) in sorted(metadata.items()):
+        if owner != repo or manifest['component'] != 'gecko':
+            continue
+        target = manifest['target']
+        directory = work / ('native-' + target) / 'producer'
+        ref = store.lookup('gecko', target, manifest['inputs'])
+        result = store.fetch(ref, directory, roles=('runtime', 'metadata', 'build-support', 'legal'))
+        browser_release.engine_record(result, directory, target)
+        verified.append({'component': 'gecko', 'target': target, 'manifestName': name,
+                         'nativeOwnerVerification': 'passed', 'compiled': False})
+    for (owner, name), (_, manifest) in sorted(metadata.items()):
+        if owner != repo or manifest['component'] != 'browser-resources' or not manifest['target'].startswith('linux-'):
+            continue
+        target = manifest['target']
+        directory = work / ('resources-' + target)
+        ref = store.lookup('browser-resources', target, manifest['inputs'])
+        result = store.fetch(ref, directory, roles=('runtime', 'metadata', 'build-support', 'legal'))
+        browser_release.checkpoint_inventory(result, directory)
+        browser.verify(directory, target, browser.fingerprint(target))
+        verified.append({'component': 'browser-resources', 'target': target, 'manifestName': name,
+                         'nativeOwnerVerification': 'passed', 'compiled': False})
+    return verified
+
+
+def verify(metadata, repo, work, *, native=False):
     verified = []
     restore = []
     for (owner, name), (raw, manifest) in sorted(metadata.items()):
@@ -160,14 +188,18 @@ def verify(metadata, repo, work):
             downloads.append(url)
             return original_download(url, *args)
         store.download = runtime_download
+        native_verified = []
         try:
             result = store.fetch(representative, work / 'restored-runtime', roles=('runtime', 'legal', 'metadata', 'build-support'))
             if not (Path(result['directory']) / 'licenses/Taskarian/LICENSE').is_file():
                 raise ValueError('Standalone component runtime lacks the Taskarian license')
+            if native:
+                native_verified = verify_native_checkpoints(metadata, repo, work)
         finally:
             store.download = original_download
     return {'repository': repo, 'compilation': 'unavailable in this workflow', 'canonicalManifests': verified,
-            'runtimeRestore': representative['manifestName'] if restore else None, 'runtimeDownloads': downloads if restore else []}
+            'runtimeRestore': representative['manifestName'] if restore else None, 'runtimeDownloads': downloads if restore else [],
+            'nativeCheckpointRestores': native_verified if restore else []}
 
 
 def main():
@@ -193,7 +225,7 @@ def main():
             record = json.loads(raw)
             if not cache.migrate(record['engine'], record['target'], record['contract'], args.directory / 'cache'):
                 raise ValueError('Exact compiler cache migration failed: ' + name)
-    result = verify(metadata, repo, args.directory)
+    result = verify(metadata, repo, args.directory, native=args.action == 'verify')
     if args.action == 'verify':
         result['crossRepositoryDependencies'] = []
         for (owner, name), (_, manifest) in metadata.items():
