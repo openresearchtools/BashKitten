@@ -448,7 +448,10 @@ def ensure_release(repo, tag, title):
     if release is None:
         try:
             release = gh('api', endpoint, '--method', 'POST', data={'tag_name': tag,
-                'target_commitish': os.environ['GITHUB_SHA'], 'name': title, 'body': NOTE,
+                # This tag anchors storage in the builder. Actual component source and
+                # producer/workflow revisions remain pinned in the manifest. An old
+                # workflow tree would require GitHub workflows:write to tag.
+                'target_commitish': 'main', 'name': title, 'body': NOTE,
                 'draft': False, 'prerelease': True, 'make_latest': 'false'})
         except FileExistsError:
             release = gh('api', endpoint + '/tags/' + tag)
