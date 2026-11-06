@@ -72,9 +72,8 @@ def prepare(args):
             bundle.add(prefix, arcname='poco')
         sources = output / 'office-web-support-source.tar'
         tracked = output / 'office-web-support-recipe.tar.gz'
-        archive_revision(ROOT, args.source, tracked, paths=['LICENSE', 'agent/packaging/office',
-            'agent/packaging/source_archive.py', 'agent/packaging/source_cache.py',
-            'agent/packaging/component-store.py', 'office/upstream/dependencies/sources.json'])
+        archive_revision(ROOT, args.source, tracked, paths=['LICENSE', 'agent/packaging',
+            '.github/builders/native.yml', 'office/upstream/dependencies/sources.json'])
         with tarfile.open(sources, 'w') as bundle:
             bundle.add(original, arcname=pin['name']); bundle.add(tracked, arcname=tracked.name)
         tracked.unlink()
