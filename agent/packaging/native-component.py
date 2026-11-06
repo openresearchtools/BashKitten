@@ -202,7 +202,7 @@ def inputs(component, target, revision):
                        framework={key: lock['termuxPackages'][key] for key in ('commit', 'builderImage', 'patches')}, rust=lock['rustRuntimeVersions'][target])
         retained = json.loads(content(revision, 'agent/search/vendor/sources/sources.json'))
         records['crates'] = [{key: item[key] for key in ('filename', 'sha256')} for item in retained['components'] if item['filename'].endswith('.crate')]
-        paths += ['agent/packaging/native-components.py', 'agent/packaging/termux/search/python-primp',
+        paths += ['agent/packaging/termux/search/build.py', 'agent/packaging/termux/search/python-primp',
                   'agent/search/build/termux-inputs.py', 'auth/build/retained-sources.py']
     elif component == 'search':
         paths += ['agent/search', 'agent/packaging/machines/build.py', 'auth/build/go-notices.py']

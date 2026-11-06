@@ -7,6 +7,10 @@ run-name: Taskarian components ${{ inputs.target }} / ${{ inputs.source_sha }} /
       target: {required: true, type: string}
       request_id: {required: true, type: string}
       components: {default: '["all"]', type: string}
+      seed_input_scope:
+        description: One-time verified adoption after native input scope corrections; never compile
+        default: false
+        type: boolean
       force_rebuild:
         description: Validate fresh native compilation; retain published canonical outputs
         default: false
@@ -15,7 +19,7 @@ permissions:
   contents: write
   actions: read
 concurrency:
-  group: native-components-${{ inputs.target }}
+  group: ${{ inputs.seed_input_scope && 'native-input-scope' || 'native-components' }}-${{ inputs.target }}
   cancel-in-progress: false
   queue: max
 jobs:
@@ -40,6 +44,7 @@ jobs:
           filter: blob:none
           sparse-checkout-cone-mode: false
           sparse-checkout: |
+            /LICENSE
             /agent/packaging/
             /agent/package.json
             /agent/package-lock.json
@@ -48,7 +53,17 @@ jobs:
             /agent/machines/rust-toolchain/sources.json
             /auth/dependencies/go-toolchain/sources.json
             /files/go_runtime.py
+      - name: Adopt only verified completed outputs after an explicit input scope correction
+        if: inputs.seed_input_scope
+        working-directory: source
+        env:
+          COMPONENTS: ${{ inputs.components }}
+          TASKARIAN_COMPONENT_TARGET: ${{ inputs.target }}
+        run: |
+          python3 agent/packaging/native-scope.py "$TASKARIAN_COMPONENT_TARGET" --components "$COMPONENTS" \
+            --work "$RUNNER_TEMP/component-scope-work" --output "$RUNNER_TEMP/component-scope-output"
       - name: Resolve exact direct component manifests before build setup
+        if: ${{ !inputs.seed_input_scope }}
         id: plan
         working-directory: source
         env:
