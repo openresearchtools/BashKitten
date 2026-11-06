@@ -154,7 +154,7 @@ def source_bundle(component, target, output):
         for item in selected.get('modules', []):
             pins += list(item['files'].values())
         pins += selected.get('moduleMetadata', [])
-        if name in ('authelia', 'caddy', 'chisel', 'remote'):
+        if name in ('authelia', 'caddy', 'chisel', 'remote', 'cloudflared'):
             pins.append(json.loads((ROOT / 'auth/dependencies/go-toolchain/sources.json').read_text()))
         if name == 'authelia':
             pins += json.loads((ROOT / 'auth/dependencies/frontend/sources.json').read_text())['components']
@@ -275,7 +275,8 @@ def run_component(component, target, work, output, force=False):
         raise ValueError('Build components from their committed source inputs')
     for path in output.iterdir():
         shutil.rmtree(path) if path.is_dir() else path.unlink()
-    contract = tools.contract(component, target, lambda name: (ROOT / name).read_text())
+    tool_component = 'auth-remote' if component == 'auth-cloudflared' else component
+    contract = tools.contract(tool_component, target, lambda name: (ROOT / name).read_text())
     tools.setup(contract)
     dependencies = []
     architecture = target.split('-')[1]

@@ -5,7 +5,7 @@ name: Native authentication components
       component:
         type: choice
         default: all
-        options: [all, authelia, caddy, tor, valkey, chisel, remote]
+        options: [all, authelia, caddy, tor, valkey, chisel, remote, cloudflared]
       target:
         type: choice
         default: all

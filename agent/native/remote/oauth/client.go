@@ -15,10 +15,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/openresearchtools/Taskarian/remote/transport"
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -32,7 +32,6 @@ const maxBody = 64 << 10
 const RefreshBefore = 5 * time.Minute
 
 var ErrLoginRequired = errors.New("OAuth login required")
-var onionHost = regexp.MustCompile(`^[a-z2-7]{56}\.onion$`)
 
 // Token belongs only to its issuer/client registration. Never expose it to a
 // browser bridge or log. Save must atomically encrypt it in the private profile.
@@ -68,14 +67,14 @@ type Client struct {
 
 func New(config Config) (*Client, error) {
 	u, err := url.Parse(config.Issuer)
-	if err != nil || u.Scheme != "https" || !onionHost.MatchString(u.Host) || u.User != nil ||
+	if err != nil || u.Scheme != "https" || !transport.ValidHost(u.Host) || u.User != nil ||
 		u.RawQuery != "" || u.Fragment != "" || u.Path != "/login" || u.RawPath != "" {
-		return nil, errors.New("OAuth issuer must be the profile's HTTPS onion login URL")
+		return nil, errors.New("OAuth issuer must be the profile's enrolled HTTPS login URL")
 	}
 	audience, err := url.Parse(config.Audience)
 	if err != nil || audience.Scheme != "https" || audience.Host != u.Host || audience.User != nil ||
 		audience.Fragment != "" || audience.RawQuery != "" || audience.RawPath != "" {
-		return nil, errors.New("OAuth audience must be an exact URL on the profile's onion")
+		return nil, errors.New("OAuth audience must be an exact URL on the profile's enrolled host")
 	}
 	if !safeValue(config.ClientID) || config.HTTP == nil || config.HTTP.Transport == nil || config.Save == nil {
 		return nil, errors.New("OAuth requires a client id, explicit secure transport and private token persistence")

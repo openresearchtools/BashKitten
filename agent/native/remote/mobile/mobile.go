@@ -53,6 +53,12 @@ func ReadImage(data []byte) (string, error) { return bundle.ReadImage(data) }
 // Open takes the actual owned Tor SOCKS endpoint, never a system/direct proxy.
 // A missing saved token is nil/empty; it requires native browser authorization.
 func Open(enrollment []byte, socksNetwork, socksAddress string, savedToken []byte, store TokenStore) (*Connection, error) {
+	return OpenProfile(enrollment, socksNetwork, socksAddress, "", savedToken, store)
+}
+
+// OpenProfile additionally supplies private persistent state for an embedded
+// Tailscale node. Other carriers never read or create that directory.
+func OpenProfile(enrollment []byte, socksNetwork, socksAddress, profileDirectory string, savedToken []byte, store TokenStore) (*Connection, error) {
 	if store == nil {
 		return nil, errors.New("native encrypted token store required")
 	}
@@ -66,6 +72,7 @@ func Open(enrollment []byte, socksNetwork, socksAddress string, savedToken []byt
 		}
 	}
 	config.SOCKSNetwork, config.SOCKSAddress = socksNetwork, socksAddress
+	config.StateDir = profileDirectory
 	config.Save = func(token oauth.Token) error {
 		var value any
 		if token != (oauth.Token{}) {
@@ -107,7 +114,7 @@ func BrowserIdentity(enrollment []byte) ([]byte, error) {
 		URL               string            `json:"url"`
 		Identity          map[string]string `json:"identity"`
 		ClientCertificate map[string][]byte `json:"clientCertificate"`
-	}{"https://" + record.Onion,
+	}{"https://" + record.TLSHost(),
 		map[string]string{"caPem": record.RootCA, "caSha256": hex.EncodeToString(fingerprint[:]), "instanceId": record.ID},
 		map[string][]byte{"certificate": tlsConfig.Certificates[0].Certificate[0], "pkcs8": key}})
 }
@@ -116,7 +123,19 @@ func (c *Connection) BeginLogin() (string, error) { return c.client.BeginLogin(c
 func (c *Connection) CompleteLogin(callback, form string) error {
 	return c.client.CompleteLogin(context.Background(), callback, form)
 }
-func (c *Connection) CancelLogin() { c.client.CancelLogin() }
+func (c *Connection) CancelLogin()            { c.client.CancelLogin() }
+func (c *Connection) LoginPort() (int, error) { return c.client.LoginPort() }
+func (c *Connection) CloseLoginRoute()        { c.client.CloseLoginRoute() }
+func (c *Connection) TransportStatus() (string, error) {
+	status, err := c.client.TransportStatus()
+	if err != nil {
+		return "", err
+	}
+	data, err := json.Marshal(status)
+	return string(data), err
+}
+func (c *Connection) BeginTransportLogin() error { return c.client.BeginTransportLogin() }
+func (c *Connection) CancelOperations()          { c.client.CancelOperations() }
 func (c *Connection) Authorize() (bool, error) {
 	return c.client.Authorize(context.Background())
 }

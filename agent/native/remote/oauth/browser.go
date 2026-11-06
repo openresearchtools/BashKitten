@@ -5,6 +5,7 @@ package oauth
 import (
 	"context"
 	"errors"
+	"github.com/openresearchtools/Taskarian/remote/transport"
 	"net/url"
 	"strings"
 	"sync"
@@ -119,7 +120,7 @@ func exactScopes(values []string) bool {
 // Registration is the matching native public-client registration for Authelia.
 // Remote reset removes it with the entire remote generation's token storage.
 func Registration(clientID, onion string) (map[string]any, error) {
-	if !safeValue(clientID) || !onionHost.MatchString(onion) {
+	if !safeValue(clientID) || !transport.ValidHost(onion) {
 		return nil, errors.New("invalid native OAuth registration")
 	}
 	return map[string]any{

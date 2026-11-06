@@ -1,0 +1,155 @@
+--- a/cmd/cloudflared/main.go
++++ b/cmd/cloudflared/main.go
+@@ -6,7 +6,6 @@
+ 	"strings"
+ 	"time"
+ 
+-	"github.com/getsentry/sentry-go"
+ 	"github.com/urfave/cli/v2"
+ 	"go.uber.org/automaxprocs/maxprocs"
+ 
+@@ -35,17 +34,6 @@
+ 	Version   = "DEV"
+ 	BuildTime = "unknown"
+ 	BuildType = ""
+-	// Mostly network errors that we don't want reported back to Sentry, this is done by substring match.
+-	ignoredErrors = []string{
+-		"connection reset by peer",
+-		"An existing connection was forcibly closed by the remote host.",
+-		"use of closed connection",
+-		"You need to enable Argo Smart Routing",
+-		"3001 connection closed",
+-		"3002 connection dropped",
+-		"rpc exception: dial tcp",
+-		"rpc exception: EOF",
+-	}
+ )
+ 
+ func main() {
+@@ -172,26 +160,8 @@
+ 		if isEmptyInvocation(c) {
+ 			return handleServiceMode(c, graceShutdownC)
+ 		}
+-		func() {
+-			defer sentry.Recover()
+-			err = tunnel.TunnelCommand(c)
+-		}()
+-		if err != nil {
+-			captureError(err)
+-		}
+-		return err
++		return tunnel.TunnelCommand(c)
+ 	})
+-}
+-
+-// In order to keep the amount of noise sent to Sentry low, typical network errors can be filtered out here by a substring match.
+-func captureError(err error) {
+-	errorMessage := err.Error()
+-	for _, ignoredErrorMessage := range ignoredErrors {
+-		if strings.Contains(errorMessage, ignoredErrorMessage) {
+-			return
+-		}
+-	}
+-	sentry.CaptureException(err)
+ }
+ 
+ // cloudflared was started without any flags
+--- a/cmd/cloudflared/access/cmd.go
++++ b/cmd/cloudflared/access/cmd.go
+@@ -11,7 +11,6 @@
+ 	"text/template"
+ 	"time"
+ 
+-	"github.com/getsentry/sentry-go"
+ 	"github.com/pkg/errors"
+ 	"github.com/rs/zerolog"
+ 	"github.com/urfave/cli/v2"
+@@ -53,8 +52,6 @@
+ `
+ 	fedrampFlag = "fedramp"
+ )
+-
+-const sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b@sentry.io/189878"
+ 
+ var (
+ 	shutdownC chan struct{}
+@@ -241,13 +238,7 @@
+ 
+ // login pops up the browser window to do the actual login and JWT generation
+ func login(c *cli.Context) error {
+-	err := sentry.Init(sentry.ClientOptions{
+-		Dsn:     sentryDSN,
+-		Release: c.App.Version,
+-	})
+-	if err != nil {
+-		return err
+-	}
++	var err error
+ 
+ 	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
+ 
+@@ -297,13 +288,7 @@
+ 
+ // curl provides a wrapper around curl, passing Access JWT along in request
+ func curl(c *cli.Context) error {
+-	err := sentry.Init(sentry.ClientOptions{
+-		Dsn:     sentryDSN,
+-		Release: c.App.Version,
+-	})
+-	if err != nil {
+-		return err
+-	}
++	var err error
+ 	log := logger.CreateLoggerFromContext(c, logger.EnableTerminalLog)
+ 
+ 	args := c.Args()
+@@ -382,13 +367,7 @@
+ 
+ // token dumps provided token to stdout
+ func generateToken(c *cli.Context) error {
+-	err := sentry.Init(sentry.ClientOptions{
+-		Dsn:     sentryDSN,
+-		Release: c.App.Version,
+-	})
+-	if err != nil {
+-		return err
+-	}
++	var err error
+ 	appURL, err := getAppURLFromArgs(c)
+ 	if err != nil {
+ 		fmt.Fprintln(os.Stderr, "Please provide a url.")
+--- a/cmd/cloudflared/tunnel/cmd.go
++++ b/cmd/cloudflared/tunnel/cmd.go
+@@ -13,7 +13,6 @@
+ 
+ 	"github.com/coreos/go-systemd/v22/daemon"
+ 	"github.com/facebookgo/grace/gracenet"
+-	"github.com/getsentry/sentry-go"
+ 	"github.com/mitchellh/go-homedir"
+ 	"github.com/pkg/errors"
+ 	"github.com/rs/zerolog"
+@@ -44,9 +43,6 @@
+ )
+ 
+ const (
+-	//nolint:gosec // This is the Sentry DSN for cloudflared which is safe to be public
+-	sentryDSN = "https://56a9c9fa5c364ab28f34b14f35ea0f1b:3e8827f6f9f740738eb11138f7bebb68@sentry.io/189878"
+-
+ 	LogFieldExpandedPath        = "expandedPath"
+ 	LogFieldPIDPathname         = "pidPathname"
+ 	LogFieldTmpTraceFilename    = "tmpTraceFilename"
+@@ -325,13 +321,7 @@
+ 	namedTunnel *connection.TunnelProperties,
+ 	log *zerolog.Logger,
+ ) error {
+-	err := sentry.Init(sentry.ClientOptions{
+-		Dsn:     sentryDSN,
+-		Release: c.App.Version,
+-	})
+-	if err != nil {
+-		return err
+-	}
++	var err error
+ 	var wg sync.WaitGroup
+ 	listeners := gracenet.Net{}
+ 	errC := make(chan error)

@@ -72,7 +72,7 @@ def write_toolchain_notices(toolchain, destination):
 def main():
     source, output, component = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
     command = {'authelia': ['./cmd/authelia'], 'caddy': ['./cmd/caddy'], 'chisel': ['.'],
-               'remote': ['./cmd/taskarian-remote'],
+               'remote': ['./cmd/taskarian-remote'], 'cloudflared': ['./cmd/cloudflared'],
                'remote-client': ['github.com/openresearchtools/Taskarian/remote/mobile',
                                  'golang.org/x/mobile/bind/seq',
                                  'golang.org/x/mobile/internal/mobileinit']}[component]

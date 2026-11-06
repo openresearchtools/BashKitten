@@ -47,7 +47,7 @@ def materialize(plan):
             paths.update(name for key in ('files', 'sources', 'trees') for name, oid in value.get(key, {}).items() if oid)
         if component.startswith('auth-'):
             paths.add('auth/build')
-            if component in owner.tools.AUTH_GO:
+            if component in owner.tools.AUTH_GO | {'auth-cloudflared'}:
                 retained = json.loads(owner.native.content(owner.head(), 'auth/dependencies/go/sources.json'))
                 paths.update(retained['locks']); paths.add('auth/dependencies/go')
         elif component.startswith('machines'):
@@ -197,7 +197,7 @@ def main():
                 needs_rust = bool(ids & ((owner.tools.MACHINE_RUST - {'machines'}) | {'photon'}))
                 output.write('needs_rust=' + str(needs_rust).lower() + '\n')
                 output.write('rust=' + json.loads(owner.native.content(owner.head(), 'agent/machines/rust-toolchain/sources.json'))['version'] + '\n')
-                output.write('needs_go=' + str(bool(ids & (owner.tools.AUTH_GO | (owner.tools.MACHINE_GO - {'machines'}) | {'files-server', 'files-office-addon', 'android-remote'}))).lower() + '\n')
+                output.write('needs_go=' + str(bool(ids & (owner.tools.AUTH_GO | (owner.tools.MACHINE_GO - {'machines'}) | {'files-server', 'files-office-addon', 'android-remote', 'auth-cloudflared'}))).lower() + '\n')
                 output.write('needs_node=' + str(bool(ids & {'auth-authelia', 'npm-runtime', 'office-ui', 'files-ui', 'references', 'office-integration', 'files-integration'})).lower() + '\n')
                 build_tools = json.loads(owner.native.content(owner.head(), 'auth/upstreams.lock.json'))['build']
                 node_pin = json.loads(owner.native.content(owner.head(), 'agent/packaging/node/lock.json'))['linux']['node_version']

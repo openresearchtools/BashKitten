@@ -178,7 +178,7 @@ export async function collectLicenses(root, { target, version, browser, 'backend
   const auth = await json(path.join(root, 'auth/share/metadata/runtime.json'));
   if (auth.target !== `${target}-${auth.architecture}` || !(target === 'termux' ? ['aarch64', 'x86_64'] : ['amd64', 'arm64']).includes(auth.architecture)) throw Error('Native access stack does not match the package target');
   const components = new Set(auth.components?.map(value => value.name));
-  for (const name of ['authelia', 'caddy', 'tor', 'valkey', 'chisel', 'remote']) {
+  for (const name of ['authelia', 'caddy', 'tor', 'valkey', 'chisel', 'remote', 'cloudflared']) {
     if (!components.has(name)) throw Error('Missing native access component: ' + name);
     await fs.access(path.join(root, 'auth/bin', { valkey: 'valkey-server', remote: 'taskarian-remote' }[name] || name));
     const license = name === 'remote' ? 'remote/github.com__openresearchtools__Taskarian__remote/LICENSE' : name + '/LICENSE';

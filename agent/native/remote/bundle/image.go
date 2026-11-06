@@ -10,7 +10,6 @@ import (
 	"image/draw"
 	_ "image/jpeg"
 	"image/png"
-	"strings"
 
 	"github.com/boombuler/barcode"
 	"github.com/boombuler/barcode/qr"
@@ -21,7 +20,7 @@ import (
 // PNG encodes the complete encrypted payload or returns the encoder's capacity
 // error. The four-module quiet zone is part of the downloadable image.
 func PNG(text string) ([]byte, error) {
-	if !strings.HasPrefix(text, "TK2:") {
+	if !encryptedText(text) {
 		return nil, errors.New("encrypted connection required")
 	}
 	code, err := qr.Encode(text, qr.M, qr.Auto)
@@ -59,7 +58,7 @@ func ReadImage(data []byte) (string, error) {
 	code, err := qrcode.NewQRCodeReader().Decode(bmp, map[gozxing.DecodeHintType]interface{}{
 		gozxing.DecodeHintType_PURE_BARCODE: true,
 	})
-	if err != nil || !strings.HasPrefix(code.GetText(), "TK2:") {
+	if err != nil || !encryptedText(code.GetText()) {
 		return "", errors.New("connection QR code not found")
 	}
 	return code.GetText(), nil

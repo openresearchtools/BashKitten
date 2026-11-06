@@ -6,7 +6,7 @@ component=${1:?component required}
 output=${2:?output directory required}
 architecture=${3:?Termux architecture required}
 case "$architecture" in aarch64|x86_64) ;; *) echo "Unsupported Termux architecture: $architecture" >&2; exit 2 ;; esac
-case "$component" in caddy|tor|authelia|valkey|chisel|remote) ;; *) echo "Unsupported component: $component" >&2; exit 2 ;; esac
+case "$component" in caddy|tor|authelia|valkey|chisel|remote|cloudflared) ;; *) echo "Unsupported component: $component" >&2; exit 2 ;; esac
 executable=$component
 [[ $component != valkey ]] || executable=valkey-server
 [[ $component != remote ]] || executable=taskarian-remote

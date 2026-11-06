@@ -2019,3 +2019,73 @@ restart/token expiry, interruption/recovery, remote manager revocation and
 cross-device/Linux client flows remain separate acceptance gates. This result
 establishes the same-guest encrypted QR → Tor/TLS/mTLS → Authelia/TOTP/consent →
 Chisel → protected Agent path; it does not establish physical-phone GPU behavior.
+
+### 6 November independent sharing instances
+
+The user explicitly extends remote sharing with Cloudflare Quick Tunnel, Tailcat
+instant and embedded normal Tailscale, retaining Tor. These are independent
+instances, not automatic failover transports. Preserve the existing Share Local
+page and account/password, TOTP setup, protected connection image, client image
+import/password and genuine Authelia login/consent flow. Add transport choices in
+that same page and small active codes (`Tor | CF | Tcat | TS`) inside the existing
+per-backend sidebar share toggle. That toggle controls the configured selections
+as a group; Off preserves those choices for the next On. Per-instance settings
+remain independently selectable and simultaneous sharing is supported.
+
+Each new instance has separate runtime/configuration directories, account/session
+storage, CA/client grant, Chisel key and process ownership. Reuse the packaged
+Caddy, Authelia, Valkey, Chisel and native helper components and the existing Agent,
+Files, Office and service process owners. An Off instance must have no running
+sharing stack. An enabled host retains its ingress while waiting for clients.
+Closing a client connection does not stop its remote host. Whole-group shutdown
+must stop every owned instance without touching unrelated host processes.
+
+The native stream boundary carries the complete existing HTTPS gateway, including
+browser login, OAuth, service actions and Chisel WebSocket traffic. Keep the private
+application TLS identity separate from provider/network addresses. Tailcat and
+`tsnet` provide userspace streams without a system VPN or separate vendor app.
+Cloudflare Quick Tunnel uses native TCP ingress over its outer WebSocket transport;
+Taskarian's original verified TLS/mTLS remains inside those bytes, ending at its
+own Caddy listener. The outer Cloudflare HTTPS connection does not replace that
+client-certificate check. Do not send Authelia credentials or carrier tokens
+outside the inner authenticated TLS connection.
+
+Keep TK2 Tor images and saved connections compatible. New TK3 images carry a
+strict tagged transport descriptor and exact private TLS identity, encrypted by
+the existing age/scrypt and QR owners. Only native protected contexts receive
+client credentials. Imported transport/network addresses never authorize arbitrary
+host destinations or bypass the approved service-ID mapping. Provider sign-in
+uses its own origin without Taskarian's private CA/client certificate or controller.
+Tailscale authorization may require a human; it must not block work on other modes.
+
+A Cloudflare Quick URL changes after its connector fully stops. Preserve account
+and server identity, but mark an outdated connection image explicitly. Refresh
+its endpoint using the existing password/export action and stored encrypted
+bundle; do not retain the password/plaintext client grant, silently keep a
+connector alive while Off, or invent an unrequested rendezvous service. Clients
+need the refreshed connection image after that temporary address changes.
+
+File sharing remains explicitly default Off per owning Local/container backend,
+with independent instance policy and live server-side enforcement. Transport setup,
+group publishing and remote login do not enable it. Apply that policy to Files,
+Office-dependent file exposure, manager APIs, discovery and native Chisel allowlists;
+ordinary chat attachments and authorized Pi tools keep their existing boundaries.
+
+Use the four architecture build repositories and current permanent component
+publication policy. Pin official upstream tags/peeled commits and complete pristine
+sources; keep necessary patches outside them. Cloudflared is an independently
+reusable native leaf. Embedded Tailcat/tsnet source and dependencies belong to the
+native host/Android remote component input graph. Package matching complete source,
+Go runtime/transitive notices, checksums and actual target build provenance; ordinary
+runtime/assembly downloads do not fetch source or compiler-cache archives. Disable
+external developer logging/crash reporting using native build/configuration where
+available, with narrow documented staged patches only when upstream lacks a switch.
+
+Acceptance must establish actual protected QR import, wrong-password handling,
+verified TLS/mTLS, genuine Authelia/TOTP/consent, approved Chisel services and Agent
+access through each available transport; also independent simultaneous start/stop,
+identity persistence, default-Off files and live revocation, restart/reissue and
+owned-process cleanup. Build all four backend targets and both Android client ABIs,
+then check the installed Linux/Android UI. Record missing human/provider/platform
+coverage honestly and continue every independent implementation/build/check; never
+label compilation or backend-only evidence as installed end-to-end acceptance.

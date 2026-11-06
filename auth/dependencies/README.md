@@ -1,7 +1,7 @@
 # Retained authentication build inputs
 
 These are original dependency archives for the existing authentication and
-remote-service builds. They supplement the already tracked upstream trees; they
+remote-service and sharing-transport builds. They supplement the already tracked upstream trees; they
 do not update their versions or replace the existing component locks.
 
 * `go/sources.json` records the union of the component `go.sum` inventories,
@@ -16,7 +16,7 @@ do not update their versions or replace the existing component locks.
 * `frontend/sources.json` covers every package in the existing Authelia web
   `pnpm-lock.yaml`, including build and optional platform dependencies. Original
   npm tarballs retain their locked integrity plus an independent SHA-256 hash.
-* `go-toolchain/sources.json` pins the official Go 1.27.2 source release and
+* `go-toolchain/sources.json` pins the official Go 1.27.3 source release and
   peeled release commit used by the authentication build, including the standard
   library sources linked into the runtime and their full license texts.
 * `termux/sources.json` retains the two exact Termux build-framework revisions

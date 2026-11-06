@@ -93,7 +93,7 @@ func Run() error {
 					if c := p.connection.Load(); c != nil {
 						// Closing cancels the outstanding network operation. Keep
 						// reading so its final token-save acknowledgement can drain.
-						go c.Close()
+						go c.CancelOperations()
 					}
 				}
 				select {
@@ -156,16 +156,17 @@ func Run() error {
 
 func (p *pipe) action(r request) (any, error) {
 	var value struct {
-		Text         string          `json:"text"`
-		Password     string          `json:"password"`
-		Enrollment   json.RawMessage `json:"enrollment"`
-		Token        json.RawMessage `json:"token"`
-		SOCKSAddress string          `json:"socksAddress"`
-		Callback     string          `json:"callback"`
-		Form         string          `json:"form"`
-		ID           string          `json:"id"`
-		Port         int             `json:"port"`
-		Action       string          `json:"action"`
+		Text             string          `json:"text"`
+		Password         string          `json:"password"`
+		Enrollment       json.RawMessage `json:"enrollment"`
+		Token            json.RawMessage `json:"token"`
+		SOCKSAddress     string          `json:"socksAddress"`
+		ProfileDirectory string          `json:"profileDirectory"`
+		Callback         string          `json:"callback"`
+		Form             string          `json:"form"`
+		ID               string          `json:"id"`
+		Port             int             `json:"port"`
+		Action           string          `json:"action"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(r.Params))
 	decoder.DisallowUnknownFields()
@@ -188,12 +189,12 @@ func (p *pipe) action(r request) (any, error) {
 		if err := json.Unmarshal(value.Enrollment, &record); err != nil {
 			return nil, errors.New("invalid enrollment")
 		}
-		connection, err := mobile.Open(value.Enrollment, "tcp", value.SOCKSAddress, value.Token, p)
+		connection, err := mobile.OpenProfile(value.Enrollment, "tcp", value.SOCKSAddress, value.ProfileDirectory, value.Token, p)
 		if err != nil {
 			return nil, err
 		}
 		p.connection.Store(connection)
-		p.onion = record.Onion
+		p.onion = record.TLSHost()
 		if p.ctx.Err() != nil {
 			connection.Close()
 			return nil, p.ctx.Err()
@@ -205,6 +206,26 @@ func (p *pipe) action(r request) (any, error) {
 		return nil, errors.New("connection is not open")
 	}
 	switch r.Method {
+	case "transport-status":
+		data, err := c.TransportStatus()
+		return json.RawMessage(data), err
+	case "begin-transport-login":
+		return true, c.BeginTransportLogin()
+	case "login-route":
+		if p.gateway != nil {
+			return nil, errors.New("Agent route already open")
+		}
+		port, err := c.LoginPort()
+		if err != nil {
+			return nil, err
+		}
+		gateway, route, err := startGateway(p.onion, port)
+		if err != nil {
+			c.CloseLoginRoute()
+			return nil, err
+		}
+		p.gateway = gateway
+		return route, nil
 	case "authorize":
 		return c.Authorize()
 	case "begin-login":
@@ -231,8 +252,10 @@ func (p *pipe) action(r request) (any, error) {
 		return json.RawMessage(data), err
 	case "agent-route":
 		if p.gateway != nil {
-			return nil, errors.New("Agent route already open")
+			p.gateway.Close()
+			p.gateway = nil
 		}
+		c.CloseLoginRoute()
 		data, err := c.Map("agent", 0)
 		if err != nil {
 			return nil, err

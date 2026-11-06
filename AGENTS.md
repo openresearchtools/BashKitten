@@ -1,5 +1,30 @@
 # Taskarian · native Pi / Linux and Termux
 
+## 6 November independent sharing instances
+
+The user explicitly adds Cloudflare Quick Tunnel, Tailcat instant and embedded
+Tailscale alongside Tor. Preserve Tor's existing enrollment and transport. Each
+sharing instance owns its configuration, identities, Caddy/Authelia/session-store/
+Chisel processes and transport lifetime, while reusing the pinned component
+sources/binaries and the same underlying Agent and application services. Instances
+may run simultaneously; Off stops their owned processes without erasing accounts.
+Keep the existing Share Local layout and password, encrypted connection-image,
+real Authelia/TOTP/consent flow, adding only the requested transport choices and
+compact active transport text inside the existing per-backend sharing toggle.
+File sharing is an explicit default-Off switch for each owning backend; enabling
+sharing must not grant file access. Preserve server-side checks and revocation.
+Use raw byte transport to retain end-to-end private TLS/mTLS and pinned Chisel
+authentication, including through Cloudflare's outer HTTPS proxy. New transport
+enrollment must be versioned and keep TK2 imports compatible. Cloudflare Quick
+hostnames change after complete shutdown: expose the actual session state and
+refresh the encrypted connection image without storing its password. Do not keep
+a disabled connector alive or silently change transports to conceal this.
+Build and validate through the four current architecture repositories and their
+permanent component releases below. If human Tailscale account authorization is
+pending, continue implementation, builds and verification for every other mode.
+The dated remote-plan amendment records this addition; source and build checks
+alone do not establish installed app or authenticated provider acceptance.
+
 ## 6 November permanent component releases
 
 Build components and assemble applications only in the four existing architecture

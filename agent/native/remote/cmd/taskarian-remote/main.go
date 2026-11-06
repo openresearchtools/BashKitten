@@ -21,6 +21,7 @@ import (
 	"github.com/openresearchtools/Taskarian/remote/desktop"
 	"github.com/openresearchtools/Taskarian/remote/host"
 	"github.com/openresearchtools/Taskarian/remote/oauth"
+	"github.com/openresearchtools/Taskarian/remote/transport"
 	"github.com/openresearchtools/Taskarian/remote/tunnel"
 )
 
@@ -82,7 +83,11 @@ func run() error {
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
 	defer signal.Stop(signals)
 	var running *host.Host
+	var publisher *transport.Publisher
 	defer func() {
+		if publisher != nil {
+			publisher.Close()
+		}
 		if running != nil {
 			running.Close()
 		}
@@ -104,7 +109,7 @@ func run() error {
 		case <-stopped:
 			return errors.New("private tunnel listener stopped")
 		case r := <-input:
-			value, err := action(&running, r)
+			value, err := action(&running, &publisher, r)
 			clear(r.Params)
 			response := reply{ID: r.ID, Result: value}
 			if err != nil {
@@ -120,8 +125,59 @@ func run() error {
 	}
 }
 
-func action(running **host.Host, r request) (any, error) {
+func action(running **host.Host, publisher **transport.Publisher, r request) (any, error) {
 	switch r.Method {
+	case "transport-start":
+		if *publisher != nil {
+			return nil, errors.New("publishing transport already running")
+		}
+		var config transport.PublishConfig
+		if err := decode(r.Params, &config); err != nil {
+			return nil, err
+		}
+		p, err := transport.StartPublisher(config)
+		if err != nil {
+			return nil, err
+		}
+		*publisher = p
+		return p.Status()
+	case "transport-status":
+		if *publisher == nil {
+			return transport.Status{State: "stopped"}, nil
+		}
+		return (*publisher).Status()
+	case "transport-login":
+		if *publisher == nil {
+			return nil, errors.New("publishing transport is stopped")
+		}
+		return true, (*publisher).BeginLogin()
+	case "transport-stop":
+		if *publisher != nil {
+			(*publisher).Close()
+			*publisher = nil
+		}
+		return true, nil
+	case "decrypt":
+		var p struct {
+			Text     string `json:"text"`
+			Image    []byte `json:"image"`
+			Password string `json:"password"`
+		}
+		if err := decode(r.Params, &p); err != nil {
+			return nil, err
+		}
+		if (p.Text == "") == (len(p.Image) == 0) {
+			return nil, errors.New("one encrypted connection text or image is required")
+		}
+		if len(p.Image) != 0 {
+			var err error
+			p.Text, err = bundle.ReadImage(p.Image)
+			clear(p.Image)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return bundle.Decrypt(p.Text, p.Password)
 	case "hash-password":
 		var p struct {
 			Password string `json:"password"`
@@ -226,6 +282,10 @@ func action(running **host.Host, r request) (any, error) {
 		}
 		return true, nil
 	case "shutdown":
+		if *publisher != nil {
+			(*publisher).Close()
+			*publisher = nil
+		}
 		if *running != nil {
 			(*running).Close()
 			*running = nil

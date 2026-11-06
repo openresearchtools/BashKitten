@@ -16,6 +16,7 @@ termux_step_make() {
     *) echo "Unsupported Termux architecture: $TERMUX_ARCH" >&2; exit 2 ;;
   esac
   export GOOS=android CGO_ENABLED=1 GOTOOLCHAIN=local GOTELEMETRY=off
+  export GOFLAGS='-mod=readonly -tags=ts_omit_logtail,ts_omit_netlog'
   export CGO_CFLAGS="$CFLAGS" CGO_CPPFLAGS="$CPPFLAGS"
   export CGO_LDFLAGS="$LDFLAGS -Wl,-z,max-page-size=16384"
   cd "$TERMUX_PKG_SRCDIR"
@@ -25,7 +26,10 @@ termux_step_make() {
     -replace github.com/jpillora/chisel="$TASKARIAN_SOURCE_ROOT/auth/chisel" \
     -replace filippo.io/age="$TASKARIAN_SOURCE_ROOT/auth/age" \
     -replace github.com/boombuler/barcode="$TASKARIAN_SOURCE_ROOT/auth/barcode" \
-    -replace github.com/makiuchi-d/gozxing="$TASKARIAN_SOURCE_ROOT/auth/gozxing"
+    -replace github.com/makiuchi-d/gozxing="$TASKARIAN_SOURCE_ROOT/auth/gozxing" \
+    -replace github.com/tailscale/tailcat="$TASKARIAN_SOURCE_ROOT/auth/tailcat" \
+    -replace tailscale.com="$TASKARIAN_SOURCE_ROOT/auth/tailscale" \
+    -replace github.com/cloudflare/cloudflared="$TASKARIAN_SOURCE_ROOT/auth/cloudflared"
   go build -p 2 -mod=readonly -trimpath -buildvcs=false -buildmode=pie \
     -ldflags='-s -w -linkmode=external -extldflags=-Wl,-z,max-page-size=16384' \
     -o "$TERMUX_PKG_BUILDDIR/taskarian-remote" ./cmd/taskarian-remote

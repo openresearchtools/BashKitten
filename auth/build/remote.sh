@@ -13,6 +13,7 @@ fi
 case "$target:$(uname -m)" in linux-amd64:x86_64|linux-arm64:aarch64) ;; *) echo "Use a native runner for $target." >&2; exit 2 ;; esac
 cd "$source_dir"
 export CGO_ENABLED=0 GOTOOLCHAIN=local GOTELEMETRY=off
+export GOFLAGS='-mod=readonly -tags=ts_omit_logtail,ts_omit_netlog'
 mkdir -p "$output/bin"
 go build -p "${TASKARIAN_BUILD_JOBS:-2}" -mod=readonly -trimpath -buildvcs=false \
   -ldflags='-s -w' -o "$output/bin/taskarian-remote" ./cmd/taskarian-remote

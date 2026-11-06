@@ -1,0 +1,1 @@
+{"Version":"v0.65.0","Time":"2026-04-03T08:30:03Z","Origin":{"VCS":"git","URL":"https://github.com/open-telemetry/opentelemetry-go","Subdir":"exporters/prometheus","Hash":"9276201a64b623606e3eaa0d61ae8ee6d62756c0","Ref":"refs/tags/exporters/prometheus/v0.65.0"}}

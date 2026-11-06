@@ -22,7 +22,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = 'openresearchtools/Taskarian'
-AUTH = ('authelia', 'caddy', 'tor', 'valkey', 'chisel', 'remote')
+AUTH = ('authelia', 'caddy', 'tor', 'valkey', 'chisel', 'remote', 'cloudflared')
 TARGETS = ('linux-amd64', 'linux-arm64', 'termux-aarch64', 'termux-x86_64')
 
 
@@ -94,7 +94,10 @@ def native_toolchain(component, target, revision):
     owner = ROOT / 'agent/packaging/native-tools.py'
     spec = importlib.util.spec_from_file_location('native_tools', owner)
     tools = importlib.util.module_from_spec(spec); spec.loader.exec_module(tools)
-    value = tools.contract(component, target, lambda path: content(revision, path))
+    # The connector uses the same existing Go/Termux toolchain contract. Keeping
+    # that owner unchanged preserves unrelated C/Rust native component identities.
+    tool_component = 'auth-remote' if component == 'auth-cloudflared' else component
+    value = tools.contract(tool_component, target, lambda path: content(revision, path))
     value['owner'] = entry(revision, 'agent/packaging/native-tools.py')
     return value
 
@@ -173,11 +176,13 @@ def inputs(component, target, revision):
                       'auth/build/retained-sources.py', 'auth/build/TORKITTEN-LICENSE']
             lock = json.loads(content(revision, 'auth/upstreams.lock.json'))
             records['upstream'] = lock.get(name)
-            if name in ('authelia', 'caddy', 'chisel', 'remote'):
+            if name in ('authelia', 'caddy', 'chisel', 'remote', 'cloudflared'):
                 sources = go_sources(revision, 'agent/native/remote' if name == 'remote' else 'auth/' + name)
                 paths += sources
                 records['goPins'] = go_pins(revision, sources)
                 paths += ['auth/build/go-env.sh', 'auth/build/go-notices.py', 'auth/dependencies/go-toolchain']
+            if name == 'cloudflared':
+                paths += ['auth/build/cloudflared-no-telemetry.patch']
             if name == 'authelia':
                 paths += ['auth/build/authelia-go.sh', 'auth/build/authelia-mobile-otp.patch', 'auth/build/frontend-notices.py',
                           'auth/dependencies/frontend']
@@ -286,7 +291,7 @@ def inputs(component, target, revision):
                               'sdk': 37, 'buildTools': '37.0.0', 'java': 17}
     else:
         raise ValueError('Unsupported native component: ' + component)
-    if component in ('auth-authelia', 'auth-caddy', 'auth-chisel', 'auth-remote'):
+    if component in ('auth-authelia', 'auth-caddy', 'auth-chisel', 'auth-remote', 'auth-cloudflared'):
         layout = entry(revision, 'agent/packaging/runtime-layout.py')
         if layout:
             records['runtimeLayout'] = {'version': 1, 'recipe': layout}
@@ -518,7 +523,7 @@ def main():
         paths.update(('agent/packaging', '.github/workflows', 'auth/upstreams.lock.json'))
         if args.component.startswith('auth-'):
             name = args.component[5:]
-            if name in ('authelia', 'caddy', 'chisel', 'remote'):
+            if name in ('authelia', 'caddy', 'chisel', 'remote', 'cloudflared'):
                 retained = json.loads(content(revision, 'auth/dependencies/go/sources.json'))
                 paths.update(retained['locks'])
                 paths.add('auth/dependencies/go')

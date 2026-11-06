@@ -15,6 +15,7 @@ import (
 
 	"github.com/openresearchtools/Taskarian/remote/bundle"
 	"github.com/openresearchtools/Taskarian/remote/oauth"
+	"github.com/openresearchtools/Taskarian/remote/transport"
 	"github.com/openresearchtools/Taskarian/remote/tunnel"
 )
 
@@ -23,6 +24,7 @@ type Config struct {
 	SOCKSNetwork, SOCKSAddress string
 	Token                      oauth.Token
 	Save                       func(oauth.Token) error
+	StateDir                   string
 }
 
 type mapping struct {
@@ -39,12 +41,14 @@ type MappingState struct {
 }
 
 type Client struct {
-	ctx    context.Context
-	cancel context.CancelFunc
-	config tunnel.ClientConfig
-	http   *http.Client
-	oauth  *oauth.Client
-	save   func(oauth.Token) error
+	ctx        context.Context
+	cancel     context.CancelFunc
+	config     tunnel.ClientConfig
+	http       *http.Client
+	oauth      *oauth.Client
+	save       func(oauth.Token) error
+	transport  *transport.Client
+	loginRoute *tunnel.Mapping
 
 	authMu           sync.Mutex // Serializes refreshes and token persistence.
 	token            oauth.Token
@@ -70,24 +74,45 @@ func New(config Config) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	origin := "https://" + config.Enrollment.Onion
+	origin := "https://" + config.Enrollment.TLSHost()
 	c := &Client{save: config.Save, token: config.Token, mappings: make(map[string]mapping),
 		carriers: make(map[*tunnel.Carrier]struct{})}
 	c.config = tunnel.ClientConfig{OnionURL: origin, SOCKSNetwork: config.SOCKSNetwork,
 		SOCKSAddress: config.SOCKSAddress, TLS: tlsConfig, Fingerprint: config.Enrollment.Fingerprint,
 		AccessToken: c.accessToken, CarrierOpened: c.carrierOpened, CarrierClosed: c.carrierClosed}
+	if config.Enrollment.Transport != nil {
+		c.transport, err = transport.NewClient(context.Background(), *config.Enrollment.Transport, config.StateDir)
+		if err != nil {
+			return nil, err
+		}
+		c.config.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+			if network != "tcp" || address != net.JoinHostPort(config.Enrollment.TLSHost(), "443") {
+				return nil, errors.New("unexpected enrolled transport destination")
+			}
+			return c.transport.Dial(ctx)
+		}
+	}
 	c.http, err = c.config.HTTPClient()
 	if err != nil {
+		if c.transport != nil {
+			c.transport.Close()
+		}
 		return nil, err
 	}
 	c.oauth, err = oauth.New(oauth.Config{Issuer: origin + "/login", ClientID: OAuthClientID(config.Enrollment),
 		Audience: origin, HTTP: c.http, Save: config.Save})
 	if err != nil {
 		c.http.CloseIdleConnections()
+		if c.transport != nil {
+			c.transport.Close()
+		}
 		return nil, err
 	}
 	if config.Token != (oauth.Token{}) && !c.oauth.Owns(config.Token) {
 		c.http.CloseIdleConnections()
+		if c.transport != nil {
+			c.transport.Close()
+		}
 		return nil, errors.New("saved OAuth credentials belong to another enrollment")
 	}
 	c.ctx, c.cancel = context.WithCancel(context.Background())
@@ -365,7 +390,7 @@ func (c *Client) closeMappings() {
 
 // Close cancels work and waits for token persistence to finish before returning.
 // Native owners run it off the UI thread and remove the scoped Gecko credential.
-func (c *Client) Close() {
+func (c *Client) CancelOperations() {
 	c.mu.Lock()
 	if !c.closed {
 		c.closed = true
@@ -379,6 +404,10 @@ func (c *Client) Close() {
 			c.login = nil
 		}
 		c.closeMappings()
+		if c.loginRoute != nil {
+			c.loginRoute.Close()
+			c.loginRoute = nil
+		}
 		c.http.CloseIdleConnections()
 	}
 	c.mu.Unlock()
@@ -388,11 +417,60 @@ func (c *Client) Close() {
 	c.authMu.Unlock()
 }
 
+func (c *Client) Close() {
+	c.CancelOperations()
+	if c.transport != nil {
+		c.transport.Close()
+	}
+}
+
+// LoginPort carries raw TLS bytes for the protected browser before OAuth. The
+// listener grants no application access: Caddy still requires the exact mTLS
+// enrollment and Authelia performs the normal browser login.
+func (c *Client) LoginPort() (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return 0, errors.New("remote connection is closed")
+	}
+	if c.loginRoute == nil {
+		mapped, err := c.config.LoginRoute(c.ctx)
+		if err != nil {
+			return 0, err
+		}
+		c.loginRoute = mapped
+	}
+	return c.loginRoute.Addr().(*net.TCPAddr).Port, nil
+}
+func (c *Client) CloseLoginRoute() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.loginRoute != nil {
+		c.loginRoute.Close()
+		c.loginRoute = nil
+	}
+}
+func (c *Client) TransportStatus() (transport.Status, error) {
+	if c.transport != nil {
+		return c.transport.Status()
+	}
+	return transport.Status{Kind: "tor", State: "ready"}, nil
+}
+func (c *Client) BeginTransportLogin() error {
+	if c.transport == nil {
+		return errors.New("Tor has no provider account login")
+	}
+	return c.transport.BeginLogin()
+}
+
 // Logout first closes local access, then revokes with Authelia and erases the
 // saved token. Failed remote revocation remains an error, never a claimed logout
 // of other devices. A caller creates a new Client for a subsequent explicit login.
 func (c *Client) Logout(ctx context.Context) error {
-	c.Close()
+	c.CancelOperations()
+	if c.transport != nil {
+		defer c.transport.Close()
+	}
 	c.authMu.Lock()
 	defer c.authMu.Unlock()
 	token := c.token

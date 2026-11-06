@@ -28,7 +28,7 @@ go build -trimpath -o "$tools/gobind" golang.org/x/mobile/cmd/gobind
 # Do not run gomobile init: upstream init installs gobind@latest. Both tools
 # above are built from the pristine checked-in module and exact dependency lock.
 export PATH="$tools:$PATH"
-TMPDIR="$tools" gomobile bind -work -target="android/$go_arch" -androidapi=31 -tags=taskarian_client -trimpath \
+TMPDIR="$tools" gomobile bind -work -target="android/$go_arch" -androidapi=31 -tags=taskarian_client,ts_omit_logtail,ts_omit_netlog -trimpath \
   -javapkg=com.taskarian.remote -ldflags='-s -w -extldflags=-Wl,-z,max-page-size=16384' \
   -o "$output/taskarian-remote.aar" github.com/openresearchtools/Taskarian/remote/mobile
 modules=("$tools"/gomobile-work-*/src-android-"$go_arch")
@@ -38,7 +38,7 @@ fi
 module=${modules[0]}
 export GOOS=android GOARCH="$go_arch" CGO_ENABLED=1
 export CC="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/$compiler"
-export GOFLAGS='-mod=readonly -tags=taskarian_client'
+export GOFLAGS='-mod=readonly -tags=taskarian_client,ts_omit_logtail,ts_omit_netlog'
 mkdir -p "$output/share/metadata"
 (
   cd "$module"

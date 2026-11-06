@@ -22,6 +22,7 @@ import (
 	"github.com/jpillora/chisel/share/cio"
 	"github.com/jpillora/chisel/share/cnet"
 	"github.com/jpillora/chisel/share/settings"
+	transportidentity "github.com/openresearchtools/Taskarian/remote/transport"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/net/proxy"
 )
@@ -35,6 +36,9 @@ type ClientConfig struct {
 	AccessToken   func(context.Context) (string, error)
 	CarrierOpened func(string, *Carrier) error
 	CarrierClosed func(*Carrier)
+	// DialContext is supplied only by the validated TK3 carrier owner. Its
+	// bytes still pass through the same mandatory inner TLS/mTLS checks.
+	DialContext func(context.Context, string, string) (net.Conn, error)
 }
 
 type Mapping struct {
@@ -118,10 +122,10 @@ func Map(ctx context.Context, cfg ClientConfig, serviceID string, port int) (*Ma
 
 func (c ClientConfig) prepare(id string) (*websocket.Dialer, string, error) {
 	u, err := url.Parse(c.OnionURL)
-	if err != nil || u.Scheme != "https" || !onionPattern.MatchString(u.Hostname()) || u.User != nil || (u.Port() != "" && u.Port() != "443") || (u.Path != "" && u.Path != "/") || u.RawPath != "" || u.RawQuery != "" || u.Fragment != "" || !servicePattern.MatchString(id) {
-		return nil, "", errors.New("an exact HTTPS v3 onion origin and service ID are required")
+	if err != nil || u.Scheme != "https" || !transportidentity.ValidHost(u.Hostname()) || (c.DialContext == nil && !onionPattern.MatchString(u.Hostname())) || u.User != nil || (u.Port() != "" && u.Port() != "443") || (u.Path != "" && u.Path != "/") || u.RawPath != "" || u.RawQuery != "" || u.Fragment != "" || !servicePattern.MatchString(id) {
+		return nil, "", errors.New("an exact enrolled HTTPS origin and service ID are required")
 	}
-	if err := (Endpoint{c.SOCKSNetwork, c.SOCKSAddress}).validate(); err != nil {
+	if err := (Endpoint{c.SOCKSNetwork, c.SOCKSAddress}).validate(); c.DialContext == nil && err != nil {
 		return nil, "", fmt.Errorf("invalid Tor SOCKS endpoint: %w", err)
 	}
 	pin, err := base64.StdEncoding.DecodeString(c.Fingerprint)
@@ -134,20 +138,24 @@ func (c ClientConfig) prepare(id string) (*websocket.Dialer, string, error) {
 	tlsConfig := c.TLS.Clone()
 	tlsConfig.ServerName = u.Hostname()
 	tlsConfig.MinVersion = tls.VersionTLS13
-	socks, err := proxy.SOCKS5(c.SOCKSNetwork, c.SOCKSAddress, nil, &net.Dialer{})
-	if err != nil {
-		return nil, "", err
-	}
-	contextual, ok := socks.(proxy.ContextDialer)
-	if !ok {
-		return nil, "", errors.New("Tor SOCKS dialer must support cancellation")
+	dial := c.DialContext
+	if dial == nil {
+		socks, err := proxy.SOCKS5(c.SOCKSNetwork, c.SOCKSAddress, nil, &net.Dialer{})
+		if err != nil {
+			return nil, "", err
+		}
+		contextual, ok := socks.(proxy.ContextDialer)
+		if !ok {
+			return nil, "", errors.New("Tor SOCKS dialer must support cancellation")
+		}
+		dial = contextual.DialContext
 	}
 	expected := net.JoinHostPort(u.Hostname(), "443")
 	d := &websocket.Dialer{Subprotocols: []string{share.ProtocolVersion}, TLSClientConfig: tlsConfig, NetDialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 		if network != "tcp" || address != expected {
 			return nil, errors.New("unexpected tunnel destination")
 		}
-		return contextual.DialContext(ctx, "tcp", expected)
+		return dial(ctx, "tcp", expected)
 	}}
 	u.Scheme = "wss"
 	u.Path = "/tunnel/" + id
@@ -218,7 +226,7 @@ func (m *Mapping) carry(owner, mapping context.Context, cfg ClientConfig, dialer
 		response.Body.Close()
 	}
 	if err != nil {
-		return fmt.Errorf("Tor/TLS tunnel upgrade failed: %w", err)
+		return fmt.Errorf("enrolled transport/TLS tunnel upgrade failed: %w", err)
 	}
 	conn := cnet.NewWebSocketConn(ws)
 	ws.SetReadLimit(512 * 1024)

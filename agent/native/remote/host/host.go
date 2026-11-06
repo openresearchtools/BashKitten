@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/openresearchtools/Taskarian/remote/oauth"
+	"github.com/openresearchtools/Taskarian/remote/transport"
 	"github.com/openresearchtools/Taskarian/remote/tunnel"
 	"golang.org/x/crypto/ssh"
 )
@@ -47,8 +48,8 @@ type Host struct {
 // Start never deletes an existing listener or chooses another socket. The
 // controller must reconcile its previously owned process before starting us.
 func Start(c Config) (*Host, error) {
-	if !regexp.MustCompile(`^[a-z2-7]{56}\.onion$`).MatchString(c.Onion) || !regexp.MustCompile(`^[a-f0-9]{48}$`).MatchString(c.Generation) {
-		return nil, errors.New("an exact v3 onion is required")
+	if !transport.ValidHost(c.Onion) || !regexp.MustCompile(`^[a-f0-9]{48}$`).MatchString(c.Generation) || (strings.HasSuffix(c.Onion, ".taskarian.invalid") && c.Onion != c.Generation+".taskarian.invalid") {
+		return nil, errors.New("an exact enrolled host and generation are required")
 	}
 	for _, socket := range []string{c.Socket, c.AuthSocket, c.ControlSocket} {
 		if !filepath.IsAbs(socket) || filepath.Clean(socket) != socket || strings.ContainsRune(socket, 0) {

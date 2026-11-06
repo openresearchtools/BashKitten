@@ -41,7 +41,7 @@
     "image": "ghcr.io/termux/package-builder@sha256:a753715a74c288a4006d5f0bd8c3fcbc0f9ee4313460706a3b77c1a6417b7ae6"
   },
   "build": {
-    "go": "1.27.2",
+    "go": "1.27.3",
     "node": "24.22.2",
     "pnpm": "12.16.1"
   },
@@ -116,5 +116,38 @@
     "archive": "https://codeload.github.com/golang/mobile/tar.gz/8b95e45f8d3e224183cc3d760609cef9896e498c",
     "sha256": "35342b2b409b9b9447b9c2acba0ed3ade56d05fd90c434be83d8b578b4b281a0",
     "license": "mobile/LICENSE"
+  },
+  "tailcat": {
+    "repository": "https://github.com/tailscale/tailcat.git",
+    "version": "0.7.0",
+    "tag": "v0.7.0",
+    "commit": "15ab9e68bfc6534a61797d7af28cedd42b54a3a5",
+    "tree": "9b37472a3454a83848385c4148240603817d71b0",
+    "archive": "https://codeload.github.com/tailscale/tailcat/tar.gz/15ab9e68bfc6534a61797d7af28cedd42b54a3a5",
+    "sha256": "a3ee7886ef4d4ec02aba3324c4115fc36a27176dae8ee42627ef884f424ceeff",
+    "license": "tailcat/LICENSE",
+    "branch": "main"
+  },
+  "tailscale": {
+    "repository": "https://github.com/tailscale/tailscale.git",
+    "version": "1.104.5",
+    "tag": "v1.104.5",
+    "commit": "73a48057aaf5f60e4f770b398e9b7af576b01dbe",
+    "tree": "54f0dbb391e6eed350d4c2f2802d82b1c7d72134",
+    "archive": "https://codeload.github.com/tailscale/tailscale/tar.gz/73a48057aaf5f60e4f770b398e9b7af576b01dbe",
+    "sha256": "f3b88e5ce851cabe097725de7deaa19528353061efd0d122b972a0d94cd2f5cd",
+    "license": "tailscale/LICENSE",
+    "branch": "main"
+  },
+  "cloudflared": {
+    "repository": "https://github.com/cloudflare/cloudflared.git",
+    "version": "2026.10.7",
+    "tag": "2026.10.7",
+    "commit": "872b241f94871665c1c157adefcf90c11f0ead96",
+    "tree": "46abe722b507aff96d9b8a440fe6697b9cec834e",
+    "archive": "https://codeload.github.com/cloudflare/cloudflared/tar.gz/872b241f94871665c1c157adefcf90c11f0ead96",
+    "sha256": "cbf3820d9a88918941f14633ad50e72c81e73889cfceab5fb78b79b5b542d38f",
+    "license": "cloudflared/LICENSE",
+    "branch": "master"
   }
 }
