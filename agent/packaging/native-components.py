@@ -422,7 +422,9 @@ def aggregate(component, target, work, output):
         for manifest in manifests:
             combined['components'] += manifest['components']; combined['executables'].update(manifest['executables'])
             combined['libraries'].update(manifest['libraries']); combined['depends'] += manifest['depends']
-        combined['depends'] = sorted(set(combined['depends']))
+        # Static leaves have no shlibs dependency; their native owner emits an
+        # empty token. Keep every actual requirement and validate them at assembly.
+        combined['depends'] = sorted(set(item for item in combined['depends'] if item != ''))
         (root / 'manifest.json').write_text(json.dumps(combined, indent=2) + '\n')
         (root / 'licenses.json').write_text(json.dumps(licenses, indent=2) + '\n')
         name = f'machines-runtime-{target}.tar.gz'; pack(root, Path(output) / name, 'machines')
