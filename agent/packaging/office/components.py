@@ -259,8 +259,7 @@ def restore_cache(args):
     capacity = max(64, available // (6 * 1024 ** 2))
     run(['ccache', '--max-size', str(capacity) + 'MiB'])
     contract = cache_contract(args.target, args.source)
-    empty = hashlib.sha256().hexdigest()
-    if not os.environ.get('TASKARIAN_OFFICE_ACTIONS_CACHE_MATCHED') and cache_objects(cache) == empty:
+    if not backup.has_objects(cache):
         hit = backup.restore('ccache', args.target, contract, cache)
         if not hit:
             backup.restore('ccache', args.target, contract, cache,
@@ -447,8 +446,8 @@ def build_office(component, args, payload):
                 termux.configure_engine(source, args, env)
             else:
                 owner.configure_engine(source, args.cache, args.jobs, env)
-            run(['make', '-j' + str(args.jobs), 'external/poco', 'external/libpng',
-                 'external/zstd', 'external/openssl'], cwd=source / 'engine', env=env)
+            run(['make', '-j' + str(args.jobs), 'poco.allbuild', 'libpng.allbuild',
+                 'zstd.allbuild', 'openssl.allbuild'], cwd=source / 'engine', env=env)
             if platform == 'termux':
                 termux.build_online(source, args, env, web=False)
             else:
