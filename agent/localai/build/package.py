@@ -41,7 +41,9 @@ assert type(revision) is int and revision > 0
 assert os.environ['RELEASE_TAG'] == f'{engine}-{pin["version"]}-r{revision}'
 release = os.environ['PUBLISH_TAG']
 release_repository = os.environ['RELEASE_REPOSITORY']
-assert re.fullmatch(r'openresearchtools/taskarian-build-[a-z0-9-]+', release_repository)
+assert release_repository in {
+    'openresearchtools/taskarian-build-amd64', 'openresearchtools/taskarian-build-arm64',
+    'openresearchtools/taskarian-build-android', 'openresearchtools/taskarian-build-android-x86_64'}
 assert release == f'localai-{engine}-{target_os}-{arch}-{backend}-{pin["version"]}-r{revision}'
 build_commit = os.environ['BUILDER_COMMIT']
 assert re.fullmatch('[0-9a-f]{40}', build_commit)
