@@ -15,6 +15,18 @@ import tempfile
 
 spec = importlib.util.spec_from_file_location('compiler_component_store', Path(__file__).with_name('component-store.py'))
 store = importlib.util.module_from_spec(spec); spec.loader.exec_module(store)
+ROOT = Path(__file__).resolve().parents[2]
+LICENSE_INDEX = 'cache-source-license.json'
+
+
+def module(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    value = importlib.util.module_from_spec(spec); spec.loader.exec_module(value)
+    return value
+
+
+def source_revision():
+    return subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
 
 
 def has_objects(directory):
@@ -207,6 +219,96 @@ def publish_snapshot(engine, target, contract, raw, directory, repository=None, 
     # never replace one another; successful snapshots themselves stay immutable.
     index['snapshot'] = {'tag': tag, 'metadataSha256': checksum}
     store.put_lookup(repository, index_path, index)
+    # The first engine publication follows the cache backup. Its publisher
+    # completes this supplement from the local legal outputs when necessary.
+    if not supplement(engine, target, contract, directory):
+        print('Compiler backup retained; matching engine publication will attach full licenses', flush=True)
+    return True
+
+
+def supplement(engine, target, contract, directory, repository=None, *, revision=None,
+               engine_reference=None, engine_directory=None):
+    """Attach full legal texts and source links without downloading cache objects."""
+    snapshot = resolve(engine, target, contract, repository)
+    if snapshot is None or snapshot[1] == store.TAG:
+        return False
+    repository, tag, raw, metadata = snapshot
+    require_publisher(repository)
+    release = store.ensure_release(repository, tag, f'{engine} compiler objects · {target}')
+    uploaded = {item['name']: item for item in store.release_assets(repository, release['id'])}
+    base = f'https://github.com/{repository}/releases/download/{tag}/'
+    existing = store.read_url(base + LICENSE_INDEX)
+    if existing is not None:
+        record = json.loads(existing)
+        if (record.get('schema') != 1 or record.get('engine') != engine or record.get('target') != target
+                or record.get('cacheMetadataSha256') != hashlib.sha256(raw).hexdigest()
+                or not record.get('engineSource', {}).get('sources') or not record.get('licenses')
+                or 'Taskarian-LICENSE.txt' not in {asset['name'] for asset in record['licenses']}):
+            raise ValueError('Compiler cache source/license index differs')
+        for asset in record['licenses']:
+            actual = uploaded.get(asset['name'])
+            if not actual or actual['size'] != asset['size'] or actual.get('digest') != 'sha256:' + asset['sha256']:
+                raise ValueError('Published compiler cache full license is missing or differs')
+        return True
+    revision = revision or source_revision()
+    if engine_reference is None:
+        if engine == 'sccache':
+            owner = module('cache_browser_source', ROOT / 'agent/packaging/browser-release.py')
+            component, wanted = 'gecko', owner.inputs('gecko', target, revision)
+        else:
+            owner = module('cache_office_source', ROOT / 'agent/packaging/office/components.py')
+            component, wanted = 'office-engine', owner.inputs('office-engine', target, revision)
+        engine_reference = store.lookup(component, target, wanted)
+        if engine_reference is None:
+            return False
+    manifest = engine_reference['manifest']
+    store.validate(manifest)
+    if hashlib.sha256(store.canonical(manifest) + b'\n').hexdigest() != engine_reference['manifestSha256']:
+        raise ValueError('Compiler cache engine source manifest checksum differs')
+    if manifest['component'] != ('gecko' if engine == 'sccache' else 'office-engine') or manifest['target'] != target:
+        raise ValueError('Compiler cache license component differs')
+    legal = [asset for asset in manifest['assets'] if asset['role'] == 'legal']
+    if not legal:
+        raise ValueError('Matching native engine has no full legal output')
+    directory = Path(directory); directory.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='compiler-cache-legal-', dir=directory) as temporary:
+        temporary = Path(temporary)
+        if engine_directory is None:
+            result = store.fetch(engine_reference, temporary / 'engine', roles={'legal'},
+                                 names=[asset['name'] for asset in legal])
+            if result is None:
+                raise ValueError('Matching engine licenses disappeared')
+            engine_directory = temporary / 'engine'
+        licenses = []
+        taskarian = temporary / 'Taskarian-LICENSE.txt'
+        taskarian.write_bytes((ROOT / 'LICENSE').read_bytes())
+        for file in [taskarian, *[Path(engine_directory) / asset['name'] for asset in legal]]:
+            if file != taskarian:
+                asset = next(asset for asset in legal if asset['name'] == file.name)
+                if not file.is_file() or file.stat().st_size != asset['size'] or store.sha(file) != asset['sha256']:
+                    raise ValueError('Matching engine legal output checksum differs')
+            store.upload_file(repository, tag, file, uploaded)
+            licenses.append({'name': file.name, 'size': file.stat().st_size,
+                             'sha256': store.sha(file), 'url': base + file.name})
+        url = store.manifest_url(engine_reference)
+        engine_base = url.rsplit('/', 1)[0] + '/'
+        source_assets = [{**asset, 'parts': [{**part, 'url': engine_base + part['asset']}
+                                            for part in asset['parts']]}
+                         for asset in manifest['assets'] if store.runtime_owner().effective_role(asset) == 'source']
+        if not source_assets:
+            raise ValueError('Matching engine has no permanent corresponding-source links')
+        pointer = identity(engine, target, contract, repository)[1]
+        record = {'schema': 1, 'engine': engine, 'target': target,
+                  'cacheMetadata': base + pointer, 'cacheMetadataSha256': hashlib.sha256(raw).hexdigest(),
+                  'cacheArchiveSha256': metadata['sha256'], 'cacheProducer': metadata.get('producer'),
+                  'cacheSourceCommit': metadata.get('sourceCommit'),
+                  'objectScope': 'Native compiler objects may span source revisions; these engine source links identify the legal supplement, not every cached object.',
+                  'engineSource': {'component': manifest['component'], 'target': target, 'version': manifest['version'],
+                                   'sourceCommit': manifest['sourceCommit'], 'manifestUrl': url,
+                                   'manifestSha256': engine_reference['manifestSha256'], 'sources': source_assets},
+                  'licenses': licenses}
+        file = temporary / LICENSE_INDEX; file.write_bytes(store.canonical(record) + b'\n')
+        store.upload_file(repository, tag, file, uploaded)
     return True
 
 
@@ -224,6 +326,7 @@ def save(engine, target, contract, directory, repository=None):
             raise ValueError('Compiler cache changed during backup')
         metadata = {'schema': 1, 'engine': engine, 'target': target, 'contract': contract,
                     'sha256': store.sha(archive), 'parts': [],
+                    'sourceCommit': source_revision(),
                     'producer': {'repository': os.environ.get('GITHUB_REPOSITORY'),
                                  'runId': os.environ.get('GITHUB_RUN_ID')}}
         with archive.open('rb') as source:
@@ -257,7 +360,7 @@ def migrate(engine, target, contract, directory, repository=None):
         return False
     repository, tag, raw, metadata = snapshot
     if repository == destination and tag != store.TAG:
-        return True
+        return supplement(engine, target, contract, directory)
     directory = Path(directory); directory.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='compiler-cache-migrate-', dir=directory) as temporary:
         temporary = Path(temporary)
@@ -266,12 +369,13 @@ def migrate(engine, target, contract, directory, repository=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['restore', 'save', 'migrate', 'available'])
+    parser.add_argument('command', choices=['restore', 'save', 'migrate', 'supplement', 'available'])
     parser.add_argument('engine', nargs='?', choices=['ccache', 'sccache'])
     parser.add_argument('target', nargs='?')
     parser.add_argument('--contract', type=Path)
     parser.add_argument('--directory', type=Path, required=True)
     parser.add_argument('--repository', help='One-time old Office compiler cache migration owner')
+    parser.add_argument('--source', help='Engine source revision for a metadata-only legal supplement')
     args = parser.parse_args()
     if args.command == 'available':
         available = has_objects(args.directory)
@@ -281,9 +385,10 @@ def main():
         print(json.dumps({'available': available}))
         return
     if not args.engine or not args.target or not args.contract:
-        parser.error('restore/save/migrate require engine, target and --contract')
+        parser.error('restore/save/migrate/supplement require engine, target and --contract')
     contract = json.loads(args.contract.read_text())
-    result = globals()[args.command](args.engine, args.target, contract, args.directory, args.repository)
+    options = {'revision': args.source} if args.command == 'supplement' else {}
+    result = globals()[args.command](args.engine, args.target, contract, args.directory, args.repository, **options)
     print(json.dumps({'hit' if args.command == 'restore' else 'saved': result}))
 
 
