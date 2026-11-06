@@ -145,8 +145,12 @@ def materialize(component, target):
     paths = [path for path, value in values['files'].items() if value]
     paths += ['agent/packaging', 'auth/build', 'auth/dependencies/go-toolchain']
     if component == 'android-remote':
-        pins = [pin for entry in values['records']['goPins']['modules'] for pin in entry['files'].values()]
-        pins += values['records']['goPins']['moduleMetadata']
+        # The existing offline proxy validates its shared inventory before Go
+        # resolves this component's locked closure. Retain those small records.
+        retained = json.loads(native.content(head(), 'auth/dependencies/go/sources.json'))
+        paths += ['auth/dependencies/go/sources.json', *retained['locks']]
+        pins = [pin for entry in retained['modules'] for pin in entry['files'].values()]
+        pins += retained['moduleMetadata']
         paths += ['auth/dependencies/go/' + pin['file'] for pin in pins
                   if pin.get('file', '').startswith('proxy/') and pin['file'].endswith(('.mod', '.info'))]
     if component == 'android-x11':
@@ -202,6 +206,8 @@ def run(component, target, work, output, force=False):
                'MOZBUILD_STATE_PATH': str(work / 'mozbuild'), 'SCCACHE_PATH': ''}
         subprocess.run(['./mach', '--no-interactive', 'bootstrap', '--application-choice', 'mobile_android'], cwd=ROOT / 'browser', env=env, check=True)
         subprocess.run(['./mach', 'configure'], cwd=ROOT / 'browser', env=env, check=True)
+        subprocess.run(['./mach', 'build', '--allow-subdirectory-build', '-C', '.', 'buildid.h'],
+                       cwd=ROOT / 'browser', env=env, check=True)
         subprocess.run(['./mach', 'gradle', ':taskarian-display:assembleRelease'], cwd=ROOT / 'browser', env=env, check=True)
         matches = list((obj / 'gradle/build').rglob('display-release.aar'))
         if not matches:
