@@ -9,10 +9,12 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import struct
 import tarfile
 import tempfile
 import time
 import tomllib
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 COMPONENTS = ('android-remote', 'android-tor', 'android-x11')
@@ -64,7 +66,9 @@ def inputs(component, target, revision=None):
         paths += ['browser/mobile/android/taskarian-sdk',
                   'browser/taskarian/vendor/termux-x11', 'browser/taskarian/vendor/display-dependencies',
                   'browser/settings.gradle', 'browser/build.gradle', 'browser/gradle.properties',
-                  'browser/gradle', 'browser/mobile/android/gradle', 'browser/mobile/android/android-components/.config.yml']
+                  'browser/gradle', 'browser/mobile/android/gradle.configure',
+                  'browser/build/moz.configure/android-sdk.configure',
+                  'browser/mobile/android/android-components/.config.yml']
         records['cmake'] = '3.22.1'
     return {'schema': 1, 'component': component, 'abi': abi(target), 'records': records,
             'files': {path: native.entry(revision, path) for path in paths}}
@@ -90,11 +94,50 @@ def restore(component, target, directory):
     archive = directory / (component + '.tar.gz')
     with tarfile.open(archive) as bundle:
         bundle.extractall(directory, filter='data')
+    verify_payload(component, target, directory)
     receipt = {'schema': 1, 'component': component, 'inputs': inputs(component, target),
                'producerSource': result['manifest']['sourceCommit'], 'requestedSource': head(),
                'release': {key: result[key] for key in ('repository', 'manifestName', 'manifestSha256')}}
     (directory / 'component-release.json').write_text(json.dumps(receipt, indent=2) + '\n')
     return result
+
+
+def verify_payload(component, target, directory):
+    directory = Path(directory)
+    if component == 'android-tor':
+        target_dir = directory / abi(target)
+        record = json.loads((target_dir / 'tor-android.json').read_text())
+        binary = target_dir / 'libtor.so'
+        if (record.get('abi') != abi(target) or record.get('version') != version(component, target) or
+                record.get('binarySha256') != store.sha(binary)):
+            raise ValueError('Tor native component identity differs from its payload')
+        payloads = [binary.read_bytes()]
+    else:
+        archive = directory / ('taskarian-remote.aar' if component == 'android-remote' else 'taskarian-display.aar')
+        with zipfile.ZipFile(archive) as package:
+            libraries = [name for name in package.namelist() if name.startswith('jni/') and name.endswith('.so')]
+            if not libraries or any(not name.startswith('jni/' + abi(target) + '/') for name in libraries):
+                raise ValueError('Android native library payload has the wrong ABI')
+            payloads = [package.read(name) for name in libraries]
+    machine = 62 if abi(target) == 'x86_64' else 183
+    for data in payloads:
+        if data[:6] != b'\x7fELF\x02\x01' or len(data) < 64 or struct.unpack_from('<H', data, 18)[0] != machine:
+            raise ValueError('Android native component has an invalid ELF target')
+        offset = struct.unpack_from('<Q', data, 32)[0]
+        size, count = struct.unpack_from('<HH', data, 54)
+        if size < 56 or offset + size * count > len(data):
+            raise ValueError('Invalid Android native ELF program headers')
+        loads = 0
+        for index in range(count):
+            entry = offset + index * size
+            if struct.unpack_from('<I', data, entry)[0] == 1:
+                loads += 1
+                position, address = struct.unpack_from('<QQ', data, entry + 8)
+                alignment = struct.unpack_from('<Q', data, entry + 48)[0]
+                if alignment < 16384 or position % 16384 != address % 16384:
+                    raise ValueError('Android native component lacks 16 KB page alignment')
+        if not loads:
+            raise ValueError('Android native component has no loadable segments')
 
 
 def materialize(component, target):
@@ -116,6 +159,8 @@ def setup(component, target, work):
     jdk = Path(os.environ.get('JAVA_HOME_17_X64', os.environ.get('JAVA_HOME', '')))
     if not (jdk / 'bin/java').is_file():
         raise ValueError('Pinned Java17 worker toolchain is missing')
+    if not subprocess.check_output([str(jdk / 'bin/javac'), '-version'], text=True, stderr=subprocess.STDOUT).startswith('javac 17.'):
+        raise ValueError('Android native owner requires the actual Java17 toolchain')
     os.environ['JAVA_HOME'] = str(jdk)
     os.environ['PATH'] = str(jdk / 'bin') + os.pathsep + os.environ['PATH']
     os.environ['TASKARIAN_ANDROID_ABI'] = abi(target)
@@ -158,6 +203,7 @@ def run(component, target, work, output, force=False):
         if len(matches) != 1:
             raise ValueError('Expected the one native display AAR')
         shutil.copy2(matches[0], runtime / 'taskarian-display.aar')
+    verify_payload(component, target, runtime)
     archive = output / (component + '.tar.gz')
     with tarfile.open(archive, 'w:gz') as bundle:
         bundle.add(runtime, arcname='.')
