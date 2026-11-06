@@ -23,6 +23,7 @@ def module(name):
 
 store = module('component-store')
 application = module('application')
+browser_release = module('browser-release')
 
 
 def api(endpoint, body=None):
@@ -86,11 +87,11 @@ def build(target, *, force=False, native_only=False, linux_only=False, component
     def browser():
         if target.startswith('linux-'):
             if not native_only and (force or not store.lookup('application', target, application.inputs(target))):
-                dispatch(target, 'build.yml', request + '-application', force_rebuild=force, warm_gkrust=warm_gkrust)
+                build_browser(target, request, force=force, warm_gkrust=warm_gkrust)
         elif not native_only and not linux_only:
             android = 'android' if target == 'termux-aarch64' else 'android-x86_64'
             if force or not store.lookup('application', android, application.inputs(android)):
-                dispatch(android, 'build.yml', request + '-android', force_rebuild=force)
+                build_browser(android, request, force=force)
     # Engine compilation/checkpoints can finish while services build. Only final
     # assembly waits for the required exact component manifests to be published.
     failures = []
@@ -102,6 +103,19 @@ def build(target, *, force=False, native_only=False, linux_only=False, component
                 failures.append(error)
     if failures:
         raise RuntimeError('; '.join(map(str, failures)))
+
+
+def build_browser(target, request, *, force=False, warm_gkrust=False):
+    inputs = browser_release.inputs('gecko', target)
+    native_key = store.identity('gecko', target, inputs)['inputSha256']
+    options = {'warm_gkrust': warm_gkrust} if target.startswith('linux-') else {}
+    if force or not store.lookup('gecko', target, inputs):
+        dispatch(target, 'build.yml', request + '-engine', engine_only=True,
+                 native_key=native_key, force_rebuild=force, **options)
+    # Another request may have finished this exact app while its engine waited.
+    if force or not store.lookup('application', target, application.inputs(target)):
+        dispatch(target, 'build.yml', request + '-application', require_native=True,
+                 native_key=native_key, force_rebuild=force, **options)
 
 
 def collect(directory, targets=None):
