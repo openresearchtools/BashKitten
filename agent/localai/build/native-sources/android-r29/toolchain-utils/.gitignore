@@ -1,0 +1,8 @@
+*.pyc
+.mypy_cache/
+/contrib/gbiv/bgtask/bgtask
+/rust-analyzer-chromiumos-wrapper/target
+compiler_wrapper/compiler_wrapper
+llvm-project-copy/
+.llvm-project-copy/
+logs

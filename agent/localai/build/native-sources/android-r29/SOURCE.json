@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "release": "Android NDK r29",
+  "revision": "29.0.14206865",
+  "clangVersion": "21.0.0 / r563880c",
+  "prepatchedLlvmCommit": "5e96669f06077099aa41290cdb4c5e6fa0f59349",
+  "modified": false,
+  "llvmSelectedDirectories": [
+    "libcxx",
+    "libcxxabi",
+    "libunwind",
+    "compiler-rt",
+    "runtimes",
+    "cmake",
+    "llvm/cmake",
+    "llvm/include",
+    "clang/lib/Headers"
+  ],
+  "archives": {
+    "llvm": {
+      "url": "https://codeload.github.com/llvm/llvm-project/tar.gz/386af4a5c64ab75eaee2448dc38f2e34a40bfed0",
+      "commit": "386af4a5c64ab75eaee2448dc38f2e34a40bfed0",
+      "sha256": "4b752a2dfb5e4e55cf9812a353bce7e437e0852f4eef64929f48d74732080c50"
+    },
+    "llvm_android": {
+      "url": "https://android.googlesource.com/toolchain/llvm_android/+archive/1dab3288f660d43a6cb2479107e2b54b3ab0a2a1.tar.gz",
+      "commit": "1dab3288f660d43a6cb2479107e2b54b3ab0a2a1",
+      "sha256": "ef7b222b6bd58e500c88c40f14635a4f5e9edf8e0c673fbf5f2503882986ec35"
+    },
+    "ndk": {
+      "url": "https://android.googlesource.com/platform/ndk/+archive/196e0661200bad5361340700fea67be12e1f1684.tar.gz",
+      "commit": "196e0661200bad5361340700fea67be12e1f1684",
+      "sha256": "19ee1dd9c5c84ee21cc61fb92e800bb1639435dcde05449ef5e5124cfe2708ee"
+    },
+    "bionic": {
+      "url": "https://android.googlesource.com/platform/bionic/+archive/a63b21091ada240d92f8ceadb1cabbdedaaab81b.tar.gz",
+      "commit": "a63b21091ada240d92f8ceadb1cabbdedaaab81b",
+      "sha256": "fa2a81bda5923724218ff5e0f8a05e46ac14d2e3490abdd357573bc2a1c54b54"
+    },
+    "toolchain-utils": {
+      "url": "https://android.googlesource.com/platform/external/toolchain-utils/+archive/e4ed541c00706c0108c57921ac4b95ca98e87ec5.tar.gz",
+      "commit": "e4ed541c00706c0108c57921ac4b95ca98e87ec5",
+      "sha256": "73b7a2f5ec2bef0c9f52b48885c7eac3b872d0be556de84ea3e5bdb1db4c9eac"
+    },
+    "common": {
+      "url": "https://android.googlesource.com/toolchain/common/+archive/0bce8b062126242872e9f3fc66760d3f76773c49.tar.gz",
+      "commit": "0bce8b062126242872e9f3fc66760d3f76773c49",
+      "sha256": "8564620f1ca97e2d67cda7086a6271585fd2eef5a44e617537e7c36ee7da3ead"
+    }
+  },
+  "libcxxShared": {
+    "amd64": "e28cb9e0f456caf8498d0e8562b3ac3f73bf78c07555a52b5602396f240abec3",
+    "arm64": "0c52cfab2df0d957d8b346a2bdc5ae8d71feca2591924d77e1cd724d5bf74352"
+  }
+}

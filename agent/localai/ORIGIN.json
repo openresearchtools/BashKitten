@@ -1,0 +1,87 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/openresearchtools/taskarian-localai",
+  "commit": "ff79131db7cc25f7b6c8e8066fd5d0e3866dbbc9",
+  "license": "MIT",
+  "note": "Pristine retained source and original MIT integration migrated into Taskarian. Historical origin only; builds and downloads do not use this repository.",
+  "offloadedOriginals": {
+    "build/native-sources/ubuntu-24.04/gcc-14_14.2.0-4ubuntu2~24.04.1.dsc": {
+      "file": "gcc-14_14.2.0-4ubuntu2~24.04.1.dsc",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/g/gcc-14/gcc-14_14.2.0-4ubuntu2~24.04.1.dsc",
+      "sha256": "50950080874a6ec6780dd60c243e21d9cda9d736bb32bca98d16095d27cc01b5",
+      "size": 46930
+    },
+    "build/native-sources/ubuntu-24.04/gcc-14_14.2.0.orig.tar.gz": {
+      "file": "gcc-14_14.2.0.orig.tar.gz",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/g/gcc-14/gcc-14_14.2.0.orig.tar.gz",
+      "sha256": "768c314c11eeab56ccebb91eb42ec4a41122fa94f0d83400126401942622197b",
+      "size": 97158172
+    },
+    "build/native-sources/ubuntu-24.04/gcc-14_14.2.0-4ubuntu2~24.04.1.debian.tar.xz": {
+      "file": "gcc-14_14.2.0-4ubuntu2~24.04.1.debian.tar.xz",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/g/gcc-14/gcc-14_14.2.0-4ubuntu2~24.04.1.debian.tar.xz",
+      "sha256": "cfece214c2fb790ef5f3baffb9a53e40618e7ae12d053610b251e94d77d08ade",
+      "size": 1950432
+    },
+    "build/native-sources/ubuntu-24.04/glibc_2.39-0ubuntu8.9.dsc": {
+      "file": "glibc_2.39-0ubuntu8.9.dsc",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/g/glibc/glibc_2.39-0ubuntu8.9.dsc",
+      "sha256": "1b73a89e0910eb3e5920cde639ac7eb606256d8ee809688ff9b5912b67002711",
+      "size": 9387
+    },
+    "build/native-sources/ubuntu-24.04/glibc_2.39.orig.tar.xz": {
+      "file": "glibc_2.39.orig.tar.xz",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/g/glibc/glibc_2.39.orig.tar.xz",
+      "sha256": "f77bd47cf8170c57365ae7bf86696c118adb3b120d3259c64c502d3dc1e2d926",
+      "size": 18520988
+    },
+    "build/native-sources/ubuntu-24.04/glibc_2.39.orig.tar.xz.asc": {
+      "file": "glibc_2.39.orig.tar.xz.asc",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/g/glibc/glibc_2.39.orig.tar.xz.asc",
+      "sha256": "2cce427ef7933c17379f5514e4f0ccf8dffae5bf8c72f0f7e0bf8b8401f34be5",
+      "size": 833
+    },
+    "build/native-sources/ubuntu-24.04/glibc_2.39-0ubuntu8.9.debian.tar.xz": {
+      "file": "glibc_2.39-0ubuntu8.9.debian.tar.xz",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/g/glibc/glibc_2.39-0ubuntu8.9.debian.tar.xz",
+      "sha256": "d6114f2302896a3c8612453e1bf1d0e61603e3029ba4a7c246fbb1ab4c48d2b0",
+      "size": 491440
+    },
+    "build/native-sources/ubuntu-24.04/vulkan-loader_1.3.275.0-1build1.dsc": {
+      "file": "vulkan-loader_1.3.275.0-1build1.dsc",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/v/vulkan-loader/vulkan-loader_1.3.275.0-1build1.dsc",
+      "sha256": "e158bda184efcdbb5a063dc2e008ec5ab943ea4f1825eb9cb86615a190df05e5",
+      "size": 2384
+    },
+    "build/native-sources/ubuntu-24.04/vulkan-loader_1.3.275.0.orig.tar.xz": {
+      "file": "vulkan-loader_1.3.275.0.orig.tar.xz",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/v/vulkan-loader/vulkan-loader_1.3.275.0.orig.tar.xz",
+      "sha256": "5f95219fc189b4c09ce537d8ec1ea4b5861b087cd00b6d821f99aecf6e9dddce",
+      "size": 2642760
+    },
+    "build/native-sources/ubuntu-24.04/vulkan-loader_1.3.275.0-1build1.debian.tar.xz": {
+      "file": "vulkan-loader_1.3.275.0-1build1.debian.tar.xz",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/v/vulkan-loader/vulkan-loader_1.3.275.0-1build1.debian.tar.xz",
+      "sha256": "16b22d9a95fb35ae1e9d9d89f26b4f27305f86700b20615c23618014ab184ac9",
+      "size": 9132
+    },
+    "build/native-sources/ubuntu-24.04/spirv-headers_1.6.1+1.4.309.0-1~ubuntu0.24.04.2.dsc": {
+      "file": "spirv-headers_1.6.1+1.4.309.0-1~ubuntu0.24.04.2.dsc",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/universe/s/spirv-headers/spirv-headers_1.6.1+1.4.309.0-1~ubuntu0.24.04.2.dsc",
+      "sha256": "86cd48b2af219e37f79b7ad4354eb3b63dc267af25c7747cf955f6165f085ce8",
+      "size": 2147
+    },
+    "build/native-sources/ubuntu-24.04/spirv-headers_1.6.1+1.4.309.0.orig.tar.gz": {
+      "file": "spirv-headers_1.6.1+1.4.309.0.orig.tar.gz",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/universe/s/spirv-headers/spirv-headers_1.6.1+1.4.309.0.orig.tar.gz",
+      "sha256": "64ea06bf123c5c063a6be01dd45adec6a30cc0862000781ca18f9104693b722c",
+      "size": 528173
+    },
+    "build/native-sources/ubuntu-24.04/spirv-headers_1.6.1+1.4.309.0-1~ubuntu0.24.04.2.debian.tar.xz": {
+      "file": "spirv-headers_1.6.1+1.4.309.0-1~ubuntu0.24.04.2.debian.tar.xz",
+      "url": "https://archive.ubuntu.com/ubuntu/pool/universe/s/spirv-headers/spirv-headers_1.6.1+1.4.309.0-1~ubuntu0.24.04.2.debian.tar.xz",
+      "sha256": "95ffc4ee1dc47285a983c40fbfc031972a871622942222e22dd0fa50d9624b19",
+      "size": 3580
+    }
+  }
+}
