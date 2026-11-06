@@ -929,7 +929,7 @@ def aggregate_inputs(family, target, revision):
         if result is None:
             return None
         found[component] = result
-    result = {'schema': 1, 'component': family + '-runtime', 'target': target,
+    result = {'schema': 2, 'component': family + '-runtime', 'target': target,
               'leaves': {name: reference(found[name]) for name in FAMILIES[family]}}
     if family == 'office':
         result['resources'] = resource_inputs(revision)
@@ -997,10 +997,25 @@ def aggregate(args, family):
                 installed.append(str(destination.relative_to(combined)))
             resources = {'sourceCommit': args.source, 'inputs': wanted['resources'], 'files': installed}
         manifest = {'schema': 2, 'target': target, 'architecture': architecture,
-                    'assemblySource': args.source, 'components': {name: components[name] for name in leaves},
+                    'sourceCommit': args.source, 'assemblySource': args.source,
+                    'components': {name: components[name] for name in leaves},
                     'depends': sorted(depends), 'files': inventory(combined)}
         if resources is not None:
             manifest['resources'] = resources
+        if family == 'files':
+            native_manifest = json.loads((roots['files-server'] / 'manifest.json').read_text())
+            upstream = native_manifest['upstream']
+            if not isinstance(upstream, dict) or any(not isinstance(upstream.get(name), str)
+                    or not re.fullmatch('[a-f0-9]{40}', upstream[name]) for name in ('quantum', 'wopi')):
+                raise ValueError('Verified native Files manifest lacks exact upstream revisions')
+            for component, root in roots.items():
+                previous = root / 'manifest.json'
+                if not previous.is_file():
+                    continue
+                declared = json.loads(previous.read_text()).get('upstream', {})
+                if any(declared[name] != upstream[name] for name in ('quantum', 'wopi') if name in declared):
+                    raise ValueError('Files native upstream revisions disagree: ' + component)
+            manifest['upstream'] = upstream
         if family == 'office':
             import build as office_owner
             import branding
