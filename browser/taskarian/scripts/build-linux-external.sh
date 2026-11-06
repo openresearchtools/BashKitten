@@ -297,7 +297,15 @@ case "${action}" in
       export MOZ_ARTIFACT_FILE="${MOZ_ARTIFACT_FILE}:${xpt_archive}"
     fi
     # TASKARIAN_ARTIFACT_ONLY_END
+    # TASKARIAN_ARTIFACT_ONLY_BEGIN
+    if [[ -n "${TASKARIAN_LINUX_NATIVE_RECEIPT:-}" ]]; then
+      run_step build ./mach build --verbose --show-all-warnings
+    else
+    # TASKARIAN_ARTIFACT_ONLY_END
     run_step build ./mach build
+    # TASKARIAN_ARTIFACT_ONLY_BEGIN
+    fi
+    # TASKARIAN_ARTIFACT_ONLY_END
     run_step package ./mach package
     ;;
 esac

@@ -152,7 +152,7 @@ def materialize(component, target):
     if component == 'android-x11':
         paths += ['browser']  # Native mach/Gradle configuration reads its actual source graph.
     env = {**os.environ, 'GIT_LFS_SKIP_SMUDGE': '1'}
-    subprocess.run(['git', 'sparse-checkout', 'add', '--no-cone', *('/' + path for path in paths)], cwd=ROOT, env=env, check=True)
+    subprocess.run(['git', 'sparse-checkout', 'add', *('/' + path for path in paths)], cwd=ROOT, env=env, check=True)
 
 
 def setup(component, target, work):

@@ -33,6 +33,12 @@ if CONFIG["MOZ_BUILD_APP"] == "browser":
     manifest.flags = [
         "--builtin-addons=browser/chrome/browser/builtin-addons",
     ]
+    # TASKARIAN_ARTIFACT_ONLY_BEGIN
+    if CONFIG["MOZ_TASKARIAN"]:
+        # The packaged addon registry reads this generated manifest. Artifact
+        # builds need the same explicit ordering as full recursive builds.
+        manifest.extra_deps += ["!/taskarian/references/manifest.json"]
+    # TASKARIAN_ARTIFACT_ONLY_END
 
     FINAL_TARGET_FILES.browser.chrome.browser.content.browser += [
         "!%s" % built_in_addons,

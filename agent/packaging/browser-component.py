@@ -31,6 +31,7 @@ NATIVE_POLICY_FILES = (
     'browser/taskarian/scripts/build-linux-external.sh',
     'browser/taskarian/ci/build-browser-artifact.sh',
     'browser/python/mozbuild/mozbuild/artifacts.py',
+    'browser/toolkit/mozapps/extensions/moz.build',
 )
 PRODUCT_VERSION = 'browser/taskarian/config/version.txt'
 RESOURCE_GENERATORS = (
