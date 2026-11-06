@@ -99,7 +99,8 @@ def main():
     android_ids = tuple(getattr(android, 'IDS', ('android-remote', 'android-tor', 'android-x11'))) if args.target.startswith('termux-') else ()
     if args.action == 'plan':
         selected = json.loads(args.components)
-        if selected == 'all' or 'all' in selected:
+        all_selected = selected == 'all' or 'all' in selected
+        if all_selected:
             selected = [*owner.components(args.target), *android_ids, *app.COMPONENTS, *office.IDS]
         aliases = {'auth': ['runtime-guard', *owner.AUTH, 'auth'],
                    'machines': [*('machines-' + name for name in owner.MACHINES), 'machines'] if args.target.startswith('linux-') else [],
@@ -107,6 +108,10 @@ def main():
         selected = list(dict.fromkeys(value for item in selected for value in aliases.get(item, [item])))
         if args.target.startswith('termux-'):
             selected = [item for item in selected if not item.startswith('machines') and item not in ('display', 'guest')]
+        # Forcing a resource owner validates that owner, while its unchanged
+        # native prerequisites remain reusable. Explicit family aliases expand
+        # above; `all` deliberately validates every selected owner.
+        forced = set(selected) if args.force_rebuild else set()
         closure = {'auth': ['runtime-guard', *owner.AUTH], 'machines': ['machines-' + name for name in owner.MACHINES],
                    'machines-fuse-overlayfs': ['machines-libfuse'], 'photon': ['npm-runtime'],
                    'search': ['search-primp'] if args.target.startswith('termux-') else [],
@@ -141,13 +146,14 @@ def main():
                 value = office.inputs(component, args.target, owner.head())
             else:
                 value = owner.inputs(component, args.target)
-            available = None if args.force_rebuild else store.lookup(component, args.target, value)
+            available = None if component in forced else store.lookup(component, args.target, value)
             if available is None:
-                plan.append({'component': component, 'inputs': value})
+                plan.append({'component': component, 'inputs': value, 'force': component in forced})
         for family in families:
             value = office.aggregate_inputs(family, args.target, owner.head())
-            if value is None or args.force_rebuild or store.lookup(family + '-runtime', args.target, value) is None:
-                plan.append({'component': family + '-runtime', 'inputs': value})
+            force = args.force_rebuild and (all_selected or family + '-runtime' in forced)
+            if value is None or force or store.lookup(family + '-runtime', args.target, value) is None:
+                plan.append({'component': family + '-runtime', 'inputs': value, 'force': force})
         args.plan.write_text(json.dumps(plan, indent=2) + '\n')
         if os.environ.get('GITHUB_OUTPUT'):
             with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
@@ -176,12 +182,13 @@ def main():
     office_web_tools_ready = False
     for item in json.loads(args.plan.read_text()):
         component = item['component']
+        force = item.get('force', False)
         work = args.work / component; output = args.output / component
         command = [sys.executable]
         if component in app.COMPONENTS:
             command += [str(HERE / 'app-runtime.py'), 'run', component, args.target,
                         '--work', str(work), '--output', str(output)]
-            if args.force_rebuild:
+            if force:
                 command.append('--force-rebuild')
         elif component in ('office-runtime', 'files-runtime'):
             command += [str(HERE / 'office/components.py'), 'aggregate', '--family', component.removesuffix('-runtime'),
@@ -189,7 +196,7 @@ def main():
         elif component in android_ids:
             command += [str(HERE / 'android-components.py'), 'run', component, args.target,
                         '--work', str(work), '--output', str(output)]
-            if args.force_rebuild:
+            if force:
                 command.append('--force-rebuild')
         elif component in office.IDS:
             if component == 'office-ui' and not office_tools_ready and not office_web_tools_ready:
@@ -209,12 +216,12 @@ def main():
             command += [str(HERE / 'office/components.py'), 'build', '--component', component,
                         '--target', args.target, '--source', owner.head(), '--directory', str(output),
                         '--work', str(work), '--cache', str(args.work / 'sources')]
-            if args.force_rebuild:
+            if force:
                 command.append('--force')
         else:
             command += [str(HERE / 'native-components.py'), 'run', component, args.target,
                         '--work', str(work), '--output', str(output)]
-            if args.force_rebuild:
+            if force:
                 command.append('--force-rebuild')
         print('::group::' + component, flush=True)
         result = subprocess.run(command, cwd=ROOT)

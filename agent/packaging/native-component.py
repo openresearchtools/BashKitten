@@ -262,6 +262,8 @@ def inputs(component, target, revision):
                 records['dbusmenu'] = inputs('os-dbusmenu', target, revision)
     elif component == 'os':
         paths += ['os', 'agent/packaging/termux/os.py', 'agent/packaging/native-components.py', 'auth/build/termux-toolchain.json']
+        paths += ['browser/taskarian/browser/branding/assets/taskarian-logo-glasses-original.png']
+        paths += [f'browser/taskarian/browser/branding/default{size}.png' for size in (48, 64, 128, 256)]
         records['native'] = {unit: inputs('os-' + unit, target, revision) for unit in
                              (('windowing', 'panel') if target.startswith('linux-') else ('dbusmenu', 'windowing', 'panel'))}
         if target.startswith('linux-'):
