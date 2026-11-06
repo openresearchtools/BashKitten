@@ -10,6 +10,7 @@ permissions:
 concurrency:
   group: component-storage
   cancel-in-progress: false
+  queue: max
 jobs:
   storage:
     runs-on: ubuntu-24.04

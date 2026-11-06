@@ -266,7 +266,15 @@ def repack_components(repo, work):
                         archive.extractall(temporary, filter='data')
                     android.verify_payload(component, target, temporary)
                 else:
-                    native.validate_outputs(component, target, temporary)
+                    # The native owner checks its original runtime artifact
+                    # inventory before separate legal/source assets are added.
+                    with tempfile.TemporaryDirectory(prefix='runtime-abi-', dir=work) as check:
+                        check = Path(check)
+                        for item in existing['manifest']['assets']:
+                            if item['role'] == 'runtime' or item['name'] == 'SHA256SUMS':
+                                import shutil
+                                shutil.copy2(temporary / item['name'], check / item['name'])
+                        native.validate_outputs(component, target, check)
                 results.append({'component': component, 'target': target, 'state': 'packaged-without-compilation',
                     **{key: existing[key] for key in ('repository', 'manifestName', 'manifestSha256', 'tag')}})
                 print('Source-free runtime adopted: ' + component + '/' + target, flush=True)
