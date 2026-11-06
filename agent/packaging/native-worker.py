@@ -36,6 +36,7 @@ def providers():
 
 def materialize(plan):
     paths = {'agent/packaging', 'LICENSE', 'agent/package.json', 'agent/package-lock.json',
+             'files/go_runtime.py',
              'auth/upstreams.lock.json', 'auth/dependencies/go-toolchain/sources.json',
              'agent/machines/rust-toolchain/sources.json', 'browser/taskarian/config/version.txt'}
     for item in plan:
