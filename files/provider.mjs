@@ -38,7 +38,7 @@ export async function prepareFiles({ dataRoot, scope, endpoint, privatePaths = [
     const assetParent = path.join(directory, 'internal', 'web');
     const assetPath = path.join(assetParent, 'dist');
     const assetTarget = path.join(moduleRoot, 'ui', 'internal', 'web', 'dist');
-    await fs.access(path.join(assetTarget, 'index.html'));
+    await fs.access(path.join(assetTarget, 'public', 'index.html'));
     await fs.mkdir(assetParent, { recursive: true, mode: 0o700 });
     try {
       if (await fs.readlink(assetPath) !== assetTarget) throw failure(503, 'Files UI location differs from its installed component');
