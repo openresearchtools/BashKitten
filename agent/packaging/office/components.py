@@ -452,7 +452,7 @@ def build_office(component, args, payload):
             # One gbuild scheduler must own the shared external/host-tool targets.
             # Parallel top-level .allbuild goals spawn competing recursive makes.
             run(['make', '-j' + str(args.jobs), '-f', 'Makefile.gbuild',
-                 'Module_poco', 'Module_libpng', 'Module_zstd', 'Module_openssl'],
+                 'Module_poco', 'Module_expat', 'Module_libpng', 'Module_zstd', 'Module_openssl'],
                 cwd=source / 'engine', env=env)
             if platform == 'termux':
                 termux.build_online(source, args, env, web=False)
