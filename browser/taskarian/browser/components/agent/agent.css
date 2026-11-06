@@ -124,3 +124,5 @@
 }
 #taskarian-display-controls :focus-visible { outline: 2px solid var(--focus-outline-color); outline-offset: 2px; }
 @media (forced-colors: active) { #taskarian-display-controls input { appearance: auto; } }
+
+#taskarian-native-sidecar .native-sharing-codes { font-size: 9px; white-space: nowrap; opacity: .8; }

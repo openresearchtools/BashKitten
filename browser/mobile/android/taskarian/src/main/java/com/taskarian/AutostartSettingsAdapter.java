@@ -127,8 +127,21 @@ public final class AutostartSettingsAdapter implements AutoCloseable {
                         error(value), error(value == null ? null : value.optJSONObject("service")), failures.optString(engine))));
             }
             JSONObject publishing = share.join();
-            entries.put(entry("publishing", "Remote publishing", "Termux services", publishing.has("unavailable") ? null : publishing.optBoolean("startup"), publishing.optString("phase").equals("ready"),
-                details(publishing.optString("unavailable", "Starts with Local when Share Local is enabled and configured."), error(publishing))));
+            JSONArray instances = publishing.optJSONArray("instances");
+            if (instances == null) instances = new JSONArray().put(publishing);
+            for (int i = 0; i < instances.length(); i++) {
+                JSONObject instance = instances.optJSONObject(i); if (instance == null) continue;
+                String kind = instance.optString("instance", "tor"), label;
+                switch (kind) {
+                    case "tor": label = "Tor"; break;
+                    case "cloudflare": label = "Cloudflare Quick Tunnel"; break;
+                    case "tailcat": label = "Tailcat instant"; break;
+                    case "tailscale": label = "Tailscale"; break;
+                    default: continue;
+                }
+                entries.put(entry(kind.equals("tor") ? "publishing" : "publishing:" + kind, label, "Remote publishing", publishing.has("unavailable") ? null : instance.optBoolean("startup"), instance.optString("phase").equals("ready"),
+                    details(publishing.optString("unavailable", "Publish the saved connection when Local starts."), error(instance))));
+            }
             JSONObject catalogue = services.join(); JSONArray list = catalogue.optJSONArray("services");
             if (list != null) for (int i = 0; i < list.length(); i++) {
                 JSONObject service = list.optJSONObject(i); if (service == null || service.optString("id").startsWith("localai-")) continue;
@@ -162,7 +175,11 @@ public final class AutostartSettingsAdapter implements AutoCloseable {
         }
         if (id.equals("telephone")) return TelephonyRuntime.get(app).setStartup(enabled);
         if (id.equals("display")) return command("display-save", object("startup", enabled));
-        if (id.equals("publishing")) return command("share-startup", object("enabled", enabled));
+        if (id.equals("publishing") || id.startsWith("publishing:")) {
+            String instance = id.equals("publishing") ? "tor" : id.substring(11);
+            if (!Set.of("tor", "cloudflare", "tailcat", "tailscale").contains(instance)) return CompletableFuture.failedFuture(new IllegalArgumentException("Unknown sharing connection"));
+            return command("share-startup", object("instance", instance, "enabled", enabled));
+        }
         if (id.equals("engine:llama") || id.equals("engine:whisper")) {
             String engine = id.substring(7);
             return command("localai-status", new JSONObject()).thenCompose(value -> {

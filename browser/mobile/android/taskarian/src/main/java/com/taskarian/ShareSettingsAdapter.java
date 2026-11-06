@@ -19,14 +19,15 @@ import org.json.JSONObject;
 /** Local-only host operations; never forwards administration over a remote route. */
 public final class ShareSettingsAdapter {
     private static final int SAVE_QR = 4821;
-    private static final Set<String> COMMANDS = Set.of("share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-startup", "share-files", "service-status", "service-save", "service-remove", "service-action", "localai-share");
+    private static final Set<String> COMMANDS = Set.of("share-status", "share-export", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-startup", "share-files", "service-status", "service-save", "service-remove", "service-action", "localai-share");
     private final Activity activity;
     private final AgentRuntime runtime;
     private final String installation;
     private final ExecutorService files = Executors.newSingleThreadExecutor();
     private final Set<CompletableFuture<JSONObject>> requests = new HashSet<>();
     private JSONObject pendingSetup;
-    private String connectionQr = "", exportQr;
+    private final java.util.Map<String, String> connectionQrs = new java.util.HashMap<>();
+    private String exportQr;
     private CompletableFuture<JSONObject> exportResult;
     private boolean closed, busy;
 
@@ -58,7 +59,16 @@ public final class ShareSettingsAdapter {
                 }
                 if (method.equals("share-status") && runtime.shareNeedsSetup()) { result.complete(object("needsSetup", true)); return; }
                 authorize();
-                if (method.equals("share-save-qr")) { saveQr(result); return; }
+                String instance = args.optString("instance", "tor");
+                if (!Set.of("tor", "cloudflare", "tailcat", "tailscale").contains(instance)) throw new IllegalArgumentException("Unknown sharing connection");
+                if (method.equals("share-save-qr")) { saveQr(instance, result); return; }
+                if (method.equals("share-open-transport-login")) {
+                    if (!instance.equals("tailscale")) throw new IllegalArgumentException("This connection has no account sign-in");
+                    runtime.command("share-status", object("instance", instance), state -> {
+                        try { authorize(); runtime.openTransportLogin(state.optString("loginUrl")); result.complete(new JSONObject()); }
+                        catch (Exception error) { result.completeExceptionally(error); }
+                    }, error -> result.completeExceptionally(new IllegalStateException(error))); return;
+                }
                 if (method.equals("share-open-authenticator")) {
                     requireSetup(args);
                     Uri uri = Uri.parse(pendingSetup.optString("otpauthUrl"));
@@ -69,7 +79,7 @@ public final class ShareSettingsAdapter {
                 }
                 if (method.equals("share-open-localai")) { AgentSettingsActivity.open(activity, "localai"); result.complete(new JSONObject()); return; }
                 if (!COMMANDS.contains(method)) throw new SecurityException("Unsupported Share Local operation");
-                if (method.equals("share-startup") && (args.length() != 1 || !(args.get("enabled") instanceof Boolean))) throw new IllegalArgumentException("Choose whether publishing starts automatically");
+                if (method.equals("share-startup") && (args.length() != (args.has("instance") ? 2 : 1) || !(args.get("enabled") instanceof Boolean))) throw new IllegalArgumentException("Choose whether publishing starts automatically");
                 if (method.equals("share-confirm") || method.equals("share-cancel")) requireSetup(args);
                 if ((method.equals("share-setup") || method.equals("share-reissue")) && pendingSetup != null) throw new IllegalStateException("Finish or cancel the current authenticator setup first.");
                 if (method.equals("service-action") && !Set.of("start", "stop", "reload").contains(args.optString("action"))) throw new IllegalArgumentException("Unsupported service action");
@@ -81,12 +91,13 @@ public final class ShareSettingsAdapter {
                     try {
                         authorize();
                         runtime.command(method, input, value -> {
+                            if (value.has("setupId")) try { value.put("instance", instance); } catch (Exception ignored) {}
                             if (closed) { cancel(value); return; }
                             try {
                                 authorize();
                                 if (method.equals("share-setup") || method.equals("share-reissue")) pendingSetup = value;
-                                if (method.equals("share-confirm") || method.equals("share-cancel")) pendingSetup = null;
-                                if (value.optString("phase").equals("ready")) connectionQr = value.optString("qrDataUrl");
+                                if ((method.equals("share-confirm") || method.equals("share-cancel")) && !value.optBoolean("awaitingNetwork")) pendingSetup = null;
+                                if (value.optString("phase").equals("ready")) connectionQrs.put(instance, value.optBoolean("qrRefreshRequired") ? "" : value.optString("qrDataUrl"));
                                 result.complete(value);
                             } catch (Exception error) { cancel(value); result.completeExceptionally(error); }
                         }, error -> result.completeExceptionally(new IllegalStateException(error)));
@@ -103,13 +114,14 @@ public final class ShareSettingsAdapter {
         return result;
     }
     private void requireSetup(JSONObject args) {
-        if (pendingSetup == null || !pendingSetup.optString("setupId").equals(args.optString("setupId"))) throw new SecurityException("Authenticator setup expired. Start again from Share Local.");
+        if (pendingSetup == null || (!pendingSetup.optString("setupId").equals(args.optString("setupId")) || !pendingSetup.optString("instance", "tor").equals(args.optString("instance", "tor")))) throw new SecurityException("Authenticator setup expired. Start again from Share Local.");
     }
     private static byte[] png(String value) {
         if (value == null || !value.matches("data:image/png;base64,[a-zA-Z0-9+/=]+")) throw new IllegalArgumentException("No valid connection QR is available.");
         return Base64.decode(value.substring("data:image/png;base64,".length()), Base64.NO_WRAP);
     }
-    private void saveQr(CompletableFuture<JSONObject> result) {
+    private void saveQr(String instance, CompletableFuture<JSONObject> result) {
+        String connectionQr = connectionQrs.getOrDefault(instance, "");
         if (connectionQr.isEmpty()) throw new IllegalStateException("Refresh Share Local before exporting the connection QR.");
         exportQr = connectionQr; exportResult = result;
         try { activity.startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
@@ -140,14 +152,16 @@ public final class ShareSettingsAdapter {
     }
     private void cancel(JSONObject value) {
         if (value == null || !value.has("setupId") || !sameInstallation()) return;
-        runtime.command("share-cancel", object("setupId", value.optString("setupId")), ignored -> {}, ignored -> {});
+        JSONObject request = object("setupId", value.optString("setupId"));
+        try { request.put("instance", value.optString("instance", "tor")); } catch (Exception ignored) {}
+        runtime.command("share-cancel", request, ignored -> {}, ignored -> {});
     }
     private static JSONObject object(String key, Object value) {
         try { return new JSONObject().put(key, value); } catch (Exception error) { throw new IllegalArgumentException(error); }
     }
     public void close() {
         if (closed) return;
-        closed = true; cancel(pendingSetup); pendingSetup = null; connectionQr = ""; exportQr = null; exportResult = null;
+        closed = true; cancel(pendingSetup); pendingSetup = null; connectionQrs.clear(); exportQr = null; exportResult = null;
         for (CompletableFuture<JSONObject> request : new HashSet<>(requests)) request.completeExceptionally(new IllegalStateException("Share Local settings closed"));
         requests.clear(); files.shutdownNow();
     }

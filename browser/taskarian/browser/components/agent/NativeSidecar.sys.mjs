@@ -182,7 +182,9 @@ export class NativeSidecar {
         if (!this.closed && epoch === this.sharingEpoch.get(backend.id)) {
           if (local) this.host.localOn = local.web?.status === "running";
           this.sharing.set(backend.id, {
-            configured: state.phase === "ready", running: state.running === true, available: true, error: state.error,
+            configured: state.phase === "ready" || state.instances?.some(item => item.phase === "ready"),
+            running: state.running === true, available: true, error: state.error,
+            transports: (state.instances || [{ instance: "tor", enabled: state.enabled }]).filter(item => item.enabled).map(item => ({ tor: "Tor", cloudflare: "CF", tailcat: "Tcat", tailscale: "TS" })[item.instance]).filter(Boolean).join(" | "),
           });
         }
       } catch (error) {
@@ -202,7 +204,7 @@ export class NativeSidecar {
     await this.render();
     try {
       if (!state.running) await this.sharingRequest(backend, "start");
-      await this.sharingRequest(backend, "share-publish", { enabled: !state.running });
+      await this.sharingRequest(backend, "share-publish", { all: true, enabled: !state.running });
     } finally {
       this.sharingPending.delete(backend.id);
       await this.refreshSharing();
@@ -250,7 +252,7 @@ export class NativeSidecar {
         const label = `${backend.name} sharing: ${sharing.available || !on ? running ? "On" : "Off" : "unavailable"}`;
         const share = this.button("", label, () => this.toggleSharing(backend));
         share.className = "native-power-toggle native-sharing-toggle";
-        share.append(this.node("span", {}, "Share"), this.node("span", { class: "native-power-track", "aria-hidden": "true" }));
+        share.append(this.node("span", { class: "native-sharing-codes" }, sharing.transports || "Share"), this.node("span", { class: "native-power-track", "aria-hidden": "true" }));
         share.setAttribute("role", "switch"); share.setAttribute("aria-checked", String(Boolean(running)));
         share.disabled = !on || !sharing.available || this.sharingPending.has(backend.id);
         share.setAttribute("aria-busy", String(this.sharingPending.has(backend.id)));

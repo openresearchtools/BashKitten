@@ -108,7 +108,7 @@ public final class AgentRemotesActivity extends ProductActivity {
         void fatal(String message) { if (!closed) { busy = false; fatal = message; changed(); } }
         void accept(String value) {
             if (closed || busy) return;
-            if (!value.startsWith("TK2:")) { fatal("Choose the host’s encrypted connection QR image."); return; }
+            if (!value.startsWith("TK2:") && !value.startsWith("TK3:")) { fatal("Choose the host’s encrypted connection QR image."); return; }
             encrypted = value; error = ""; changed();
         }
         void readImage(Uri uri) {

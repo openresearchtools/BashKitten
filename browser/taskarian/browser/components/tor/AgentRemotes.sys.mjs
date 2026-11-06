@@ -15,8 +15,8 @@ const nativeEntry = entry => entry.id === "local" || entry.kind === "machine";
 function validateURL(value, local = false) {
   const url = new URL(value);
   if (url.protocol != "https:" || url.username || url.password || url.search || url.hash ||
-      url.pathname != "/" || (local ? url.hostname != "127.0.0.1" : !/^[a-z2-7]{56}\.onion$/.test(url.hostname))) {
-    throw new Error(local ? "The local controller must supply a loopback HTTPS URL." : "Enter an HTTPS v3 onion address without a path.");
+      url.pathname != "/" || (local ? url.hostname != "127.0.0.1" : Boolean(url.port) || !/^(?:[a-z2-7]{56}\.onion|[a-f0-9]{48}\.taskarian\.invalid)$/.test(url.hostname))) {
+    throw new Error(local ? "The local controller must supply a loopback HTTPS URL." : "The encrypted connection must supply its exact HTTPS server identity.");
   }
   return url.href;
 }
@@ -293,7 +293,7 @@ class AgentRemoteStore {
       if (previous) { check(); await this.disconnect(previous.id); check(); }
       const entry = { id: previous?.id || Services.uuid.generateUUID().toString().slice(1, -1), kind: "agent",
         name: bundle.name, url, bundle, caPem: browser.identity.caPem, caSha256: identity, instanceId: bundle.id,
-        clientAuthorization: onionPrivateKey(bundle.tor_private),
+        clientAuthorization: bundle.version === 3 ? "" : onionPrivateKey(bundle.tor_private),
         userContextId: previous?.userContextId ?? this.allocateContext(), mappings: previous?.mappings || {}, token: previous?.token || null,
         autostart: previous?.autostart === true };
       check();
@@ -360,6 +360,7 @@ class AgentRemoteStore {
     if (!entry?.bundle || (background ? !entry.autostart || !background() : this.activeId !== id)) throw new Error("Select an enrolled remote Agent.");
     let owner = this.clients.get(id);
     if (owner?.state === "ready" && !forceLogin) return { connection: this.info(entry) };
+    if (owner?.state === "transport-login") return this.authorizeClient(entry, owner, forceLogin, background);
     if (owner) await this.disconnect(id);
     if (background ? !background() : this.activeId !== id) throw new Error("The Agent selection changed.");
     owner = { state: "connecting", error: "", helper: null, callback: null, abort: new AbortController(), allowed: background };
@@ -387,8 +388,36 @@ class AgentRemoteStore {
       try { this.trust.setAgentClientCertificate(new URL(entry.url).hostname, { userContextId: entry.userContextId }, cert, key); }
       finally { key.fill(0); delete browser.clientCertificate; }
       await helper.call("open", { enrollment: entry.bundle, token: entry.token,
-        socksAddress: `127.0.0.1:${await TorRouting.ensureProxy()}` });
+        socksAddress: entry.bundle.version === 3 ? "" : `127.0.0.1:${await TorRouting.ensureProxy()}`,
+        profileDirectory: PathUtils.join(PathUtils.profileDir, "taskarian-remote-network", entry.bundle.id) });
       this.current(entry, owner);
+      if (entry.bundle.version === 3) {
+        TorRouting.setAgentTunnel(entry.userContextId, await helper.call("login-route"));
+        this.current(entry, owner);
+      }
+      return await this.authorizeClient(entry, owner, forceLogin, background);
+    } catch (error) {
+      await this.failed(entry, owner, error); throw error;
+    }
+  }
+
+  async authorizeClient(entry, owner, forceLogin, background) {
+    try {
+      this.current(entry, owner);
+      const helper = owner.helper;
+      if (entry.bundle.transport?.kind === "tailscale") {
+        let status = await helper.call("transport-status"); this.current(entry, owner);
+        if (status.state !== "ready") {
+          if (status.state === "login" && !status.login_url) {
+            await helper.call("begin-transport-login");
+            status = await helper.call("transport-status"); this.current(entry, owner);
+          }
+          owner.state = "transport-login";
+          owner.error = status.state === "approval" ? "Approve this device in Tailscale, then connect again." : "Complete Tailscale sign-in, then connect again.";
+          this.notify();
+          return { connection: this.info(entry), transportLoginRequired: true, transportState: status.state, transportLoginURL: status.login_url || "" };
+        }
+      }
       if (!forceLogin && await helper.call("authorize")) { await this.ready(entry, owner); return { connection: this.info(entry) }; }
       if (background) {
         owner.state = "login"; owner.error = "Sign in to reconnect."; this.notify();
@@ -396,10 +425,8 @@ class AgentRemoteStore {
       }
       const loginURL = await helper.call("begin-login");
       this.current(entry, owner);
-      owner.state = "login"; this.notify(); return { connection: this.info(entry), loginURL };
-    } catch (error) {
-      await this.failed(entry, owner, error); throw error;
-    }
+      owner.state = "login"; owner.error = ""; this.notify(); return { connection: this.info(entry), loginURL };
+    } catch (error) { await this.failed(entry, owner, error); throw error; }
   }
 
   async ready(entry, owner) {
@@ -694,6 +721,9 @@ class AgentRemoteStore {
       if (id !== "local") await TorRouting.unregisterAgentContext(entry.userContextId);
       for (const userContextId of [entry.userContextId, ...Object.values(entry.mappings || {}).map(choice => choice.context).filter(context => TorRouting.isServiceContext(context))]) {
         await new Promise(resolve => Services.clearData.deleteDataFromOriginAttributesPattern({ userContextId }, { onDataDeleted: resolve }));
+      }
+      if (entry.bundle?.transport?.kind === "tailscale" && /^[a-f0-9]{48}$/.test(entry.bundle.id)) {
+        await IOUtils.remove(PathUtils.join(PathUtils.profileDir, "taskarian-remote-network", entry.bundle.id), { recursive: true, ignoreAbsent: true });
       }
       this.entries.delete(id); await this.save(); this.notify();
     }, id === "local");

@@ -18,7 +18,9 @@ import { pendingNotifications, acknowledgeNotifications, notificationSettings } 
 import { claimInstance, processStart } from './instance.mjs';
 import { ensureIntegration } from './rpc/integration.mjs';
 import { AccessStack } from './access/stack.mjs';
+import { fileSharingService } from './access/hosting.mjs';
 import { RemoteAccess } from './access/remote.mjs';
+import { SharingInstances } from './access/sharing.mjs';
 import { paths, binary } from './access/paths.mjs';
 import { acquireWake, releaseWake, wakeHeld } from './access/wake.mjs';
 import { LocalAI } from './localai/localai.mjs';
@@ -182,6 +184,9 @@ async function serve() {
   };
   setDownloadCompleteHandler(() => localAI?.importProvider());
   stack.remote = remote; remote.stack = stack;
+  const sharing = new SharingInstances(stack, remote, operation => {
+    const pending = serial.then(operation); serial = pending.catch(() => {}); return pending;
+  });
   const jobs = new Jobs({ 'reload-services': reloadServices,
     ...(localAI ? { 'localai-first-run': job => firstRunAI.run(job), 'localai-guided-select': (job, input) => firstRunAI.select(job, input), 'localai-runtime': (job, input) => localAI.install(job, input), 'localai-quantize': (job, input) => localAI.quantize(job, input) } : {}),
   });
@@ -357,7 +362,7 @@ async function serve() {
     if (command === 'phone-status') return phoneDispatch('phone.status', {}, null);
     if (command === 'phone-gateway-connect') { if (platform !== 'termux') throw Error('Phone speech gateway belongs to Termux'); return phoneGateway.connect(value); }
     if (command === 'phone-gateway-disconnect') { await phoneGateway.disable(); return { ok: true }; }
-    if (command === 'remote-phone') { const published = await remote.state(); if (!stack.ready || stopping || !stack.tunnelStarted || !published.enabled || published.id !== value.generation) throw Error('Remote phone enrollment changed'); return phoneDispatch(value.action, value.value, value.identity); }
+    if (command === 'remote-phone') { if (stopping || !await sharing.activeGeneration(value.generation)) throw Error('Remote phone enrollment changed'); return phoneDispatch(value.action, value.value, value.identity); }
     if (command === 'local-session') {
       if (!stack.ready) throw Error('Turn on Agent before connecting');
       return { url: stack.origin, identity: stack.identity, generation: stack.localGeneration,
@@ -425,14 +430,15 @@ async function serve() {
     }
     if (command === 'whisper-capability') return localAI ? localAI.speechCapability() : { available: false };
     if (command === 'whisper-release') { await localAI?.releaseSpeech(value.id, value.completed === true); return { ok: true }; }
-    if (command === 'share-status') return remote.status();
-    if (command === 'share-setup') return remote.begin(value);
-    if (command === 'share-reissue') return remote.begin(value, { reissue: true });
-    if (command === 'share-confirm') return remote.confirm(value);
-    if (command === 'share-cancel') return remote.cancelSetup(value);
-    if (command === 'share-publish') return remote.setEnabled(value.enabled);
-    if (command === 'share-startup') return remote.setStartup(value.enabled);
-    if (command === 'share-files') return remote.setFileManager(value.allowed);
+    if (command === 'share-status') return sharing.status(value);
+    if (command === 'share-setup') return sharing.begin(value);
+    if (command === 'share-reissue') return sharing.begin(value, { reissue: true });
+    if (command === 'share-confirm') return sharing.get(value).confirm(value);
+    if (command === 'share-cancel') return sharing.get(value).cancelSetup(value);
+    if (command === 'share-publish') return sharing.setEnabled(value);
+    if (command === 'share-export') return sharing.get(value).export(value);
+    if (command === 'share-startup') return sharing.get(value).setStartup(value.enabled);
+    if (command === 'share-files') return sharing.get(value).setFileManager(value.allowed);
     if (command === 'service-status') return stack.services.status();
     if (command === 'service-save') return stack.services.save(value);
     if (command === 'service-remove') return stack.services.remove(value);
@@ -451,14 +457,17 @@ async function serve() {
       } finally { if (!stack.ready && !backgroundActive() && wakeHeld()) await releaseWake(); }
     }
     if (command === 'remote-services' || command === 'remote-service-action') {
-      const published = await remote.state();
-      if (!stack.ready || stopping || !stack.tunnelStarted || !published.enabled || published.id !== value.generation) throw Error('Remote services are not available');
-      if (command === 'remote-services') return stack.services.status({ remote: true });
+      const instance = await sharing.activeGeneration(value.generation);
+      if (stopping || !instance) throw Error('Remote services are not available');
+      const context = { remote: true, instance: instance.stack };
+      if (command === 'remote-services') return stack.services.status(context);
+      if (fileSharingService(value.id) && !(await instance.state()).allowFileManager) throw Error('The host has not allowed file sharing');
       if (localAI && value.id === 'localai-llama') {
         if (!(await stack.services.entries()).some(entry => entry.id === value.id && entry.enabled)) throw Error('Service is not available');
-        await localAI.action('llama', value.action); return stack.services.status({ remote: true });
+        await localAI.action('llama', value.action); return stack.services.status(context);
       }
-      return stack.services.action(value, { remote: true });
+      await stack.services.action(value, { remote: true });
+      return stack.services.status(context);
     }
     if (['package-status', 'package-job', 'package-cancel', 'package-inventory'].includes(command))
       throw Error(platform === 'termux' ? 'Manage package updates in Android Configuration → Updates' : 'Manage desktop packages through the system APT package manager');

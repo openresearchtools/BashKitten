@@ -802,6 +802,24 @@ static bool IsV3OnionIdentity(const nsACString& host) {
   return true;
 }
 
+// The enrolled native stream carries this exact private TLS identity; DNS is
+// never used for it and ordinary browsing receives no associated trust.
+static bool IsRemoteAgentIdentity(const nsACString& host) {
+  if (IsV3OnionIdentity(host)) {
+    return true;
+  }
+  if (host.Length() != 66 || !StringEndsWith(host, ".taskarian.invalid"_ns)) {
+    return false;
+  }
+  for (size_t i = 0; i < 48; ++i) {
+    const char c = host[i];
+    if (!((c >= 'a' && c <= 'f') || (c >= '0' && c <= '9'))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 static bool IsAgentScope(const nsACString& host, const OriginAttributes& attrs) {
   // Ordinary application tabs have separate storage and no Agent credentials.
   // Reuse the same full certificate verification for their native-owned
@@ -811,7 +829,7 @@ static bool IsAgentScope(const nsACString& host, const OriginAttributes& attrs) 
       StringBeginsWith(attrs.mGeckoViewSessionContextId,
                        u"gvctx626173686b697474656e2d736572766963652d"_ns);
   return (IsProtectedAgentContext(attrs) &&
-          (host.EqualsLiteral("127.0.0.1") || IsV3OnionIdentity(host))) ||
+          (host.EqualsLiteral("127.0.0.1") || IsRemoteAgentIdentity(host))) ||
          (service && host.EqualsLiteral("127.0.0.1"));
 }
 
@@ -904,7 +922,7 @@ NS_IMETHODIMP nsCertOverrideService::SetAgentClientCertificate(
   OriginAttributes attrs;
   if (!certificate || !originAttributes.isObject() ||
       !attrs.Init(cx, originAttributes) || !IsProtectedAgentContext(attrs) ||
-      !IsV3OnionIdentity(host)) {
+      !IsRemoteAgentIdentity(host)) {
     return NS_ERROR_INVALID_ARG;
   }
   OriginAttributes network;
@@ -927,7 +945,7 @@ NS_IMETHODIMP nsCertOverrideService::ClearAgentClientCertificate(
   }
   OriginAttributes attrs;
   if (!originAttributes.isObject() || !attrs.Init(cx, originAttributes) ||
-      !IsProtectedAgentContext(attrs) || !IsV3OnionIdentity(host)) {
+      !IsProtectedAgentContext(attrs) || !IsRemoteAgentIdentity(host)) {
     return NS_ERROR_INVALID_ARG;
   }
   ClearAgentClientAuth(host, attrs);

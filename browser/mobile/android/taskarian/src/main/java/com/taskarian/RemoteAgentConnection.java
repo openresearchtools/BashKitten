@@ -17,6 +17,7 @@ final class RemoteAgentConnection implements AutoCloseable {
     interface Listener {
         void login(RemoteAgentConnection connection, String address);
         void ready(RemoteAgentConnection connection);
+        void transportLogin(RemoteAgentConnection connection, String address, String state);
         void failed(RemoteAgentConnection connection, String error);
     }
 
@@ -24,7 +25,7 @@ final class RemoteAgentConnection implements AutoCloseable {
     final int proxyPort;
     final TorGateway.AgentRoute route;
     JSONObject identity;
-    boolean ready, awaitingCallback;
+    boolean ready, awaitingCallback, awaitingTransport;
     private final Handler main;
     private final Runnable releaseKey;
     private final Listener listener;
@@ -85,7 +86,7 @@ final class RemoteAgentConnection implements AutoCloseable {
     RemoteAgentConnection(Handler main, JSONObject bundle,
             int proxyPort, TorGateway.AgentRoute route, Runnable releaseKey, Listener listener,
             RemoteAgentConnection previous) throws Exception {
-        this.host = bundle.getString("onion");
+        this.host = NativeRemote.host(bundle);
         this.main = main; this.proxyPort = proxyPort; this.route = route;
         this.releaseKey = releaseKey; this.listener = listener;
         this.previousClosed = previous == null ? null : previous.nativeClosed;
@@ -108,17 +109,46 @@ final class RemoteAgentConnection implements AutoCloseable {
                 // Do not hold it while the native client shuts down TLS.
                 if (cancelled) { opened.close(); return; }
                 JSONObject enrollment = opened.browserIdentity();
-                if (opened.authorize()) activate(opened, enrollment);
-                else {
-                    String address = opened.beginLogin();
-                    main.post(() -> {
-                        if (isClosed()) return;
-                        identity = enrollment; awaitingCallback = true;
-                        listener.login(this, address);
-                    });
-                }
+                if (bundle.optInt("version") == 3) route.useTunnel(opened.loginPort());
+                authenticate(opened, enrollment);
             } catch (Exception error) { failed(error); }
         });
+    }
+
+    void resumeTransport() {
+        if (isClosed() || !awaitingTransport) return;
+        awaitingTransport = false;
+        io.execute(() -> {
+            try {
+                NativeRemote current;
+                synchronized (this) { if (closed) return; current = client; }
+                authenticate(current, current.browserIdentity());
+            } catch (Exception error) { failed(error); }
+        });
+    }
+
+    private void authenticate(NativeRemote current, JSONObject enrollment) throws Exception {
+        JSONObject status = current.transportStatus();
+        if (status.optString("kind").equals("tailscale") && !status.optString("state").equals("ready")) {
+            if (status.optString("state").equals("login") && status.optString("login_url").isEmpty()) {
+                current.beginTransportLogin(); status = current.transportStatus();
+            }
+            final String address = status.optString("login_url"), state = status.optString("state");
+            main.post(() -> {
+                if (isClosed()) return;
+                identity = enrollment; awaitingTransport = true;
+                listener.transportLogin(this, address, state);
+            }); return;
+        }
+        if (current.authorize()) activate(current, enrollment);
+        else {
+            String address = current.beginLogin();
+            main.post(() -> {
+                if (isClosed()) return;
+                identity = enrollment; awaitingCallback = true;
+                listener.login(this, address);
+            });
+        }
     }
 
     void complete(String callback, String form) {
@@ -138,6 +168,7 @@ final class RemoteAgentConnection implements AutoCloseable {
         JSONObject mapping = current.map("agent", 0);
         int port = mapping.getInt("port");
         route.useTunnel(port);
+        current.closeLoginRoute();
         main.post(() -> {
             if (isClosed()) return;
             try {
@@ -182,7 +213,7 @@ final class RemoteAgentConnection implements AutoCloseable {
         // The cookie logout uses this captured Agent route. Keep it only until
         // that request settles; the closed owner already rejects other work.
         if (cookieLogout == null) route.revoke();
-        identity = null; ready = false; awaitingCallback = false;
+        identity = null; ready = false; awaitingCallback = false; awaitingTransport = false;
         // Go's TLS close can write close_notify. It must not block Android's
         // main thread or queue behind the request that shutdown must cancel.
         new Thread(() -> {

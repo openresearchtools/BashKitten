@@ -770,9 +770,9 @@ export class ApplicationModules {
     if (typeof module.upgradeFiles !== 'function') throw unavailable('Files', 'this component does not expose a native socket adapter');
     return module.upgradeFiles(req, socket, head, { ...context, scope: context.grant.scope, endpoint: context.grant.scope.endpoint });
   }
-  async revokeRemote() {
-    for (const grant of this.gateway.grants.values()) if (!grant.record.local) this.officeService?.revoke({ grantId: grant.id });
-    await this.gateway.revokeRemote();
+  async revokeRemote(instance = null) {
+    for (const grant of this.gateway.grants.values()) if (!grant.record.local && (!instance || (grant.record.instance || 'tor') === instance)) this.officeService?.revoke({ grantId: grant.id });
+    await this.gateway.revokeRemote(instance);
   }
   async revokeProject(projectId, options) {
     await this.gateway.revokeWhere(grant => {

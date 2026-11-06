@@ -16,7 +16,7 @@ const sections = {
   remotes: names("remotes.list remotes.connect remotes.disconnect remotes.remove remotes.rename remotes.enroll remotes.services remotes.save-mapping remotes.service-key remotes.service-action remotes.open-service remotes.copy-service remotes.share-local"),
   performance: names("performance-sample performance-close"),
   display: names("display-status display-start display-stop display-save display-open display-copy display-setup"),
-  "share-local": names("share-status share-setup share-reissue share-confirm share-cancel share-publish share-startup share-files service-status service-save service-remove service-action localai-share share-save-qr share-open-authenticator share-open-localai share-local-setup"),
+  "share-local": names("share-status share-export share-open-transport-login share-setup share-reissue share-confirm share-cancel share-publish share-startup share-files service-status service-save service-remove service-action localai-share share-save-qr share-open-authenticator share-open-localai share-local-setup"),
 };
 
 export const TaskarianSettings = {

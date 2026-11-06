@@ -98,7 +98,7 @@ linked = {item['Path']: item.get('Version') or 'checked-in' for item in buildinf
 notices = {item['name']: item['version'] or 'checked-in' for item in inventory if item is not runtime}
 if linked != notices or buildinfo['GoVersion'] != 'go' + runtime['version']:
     raise SystemExit('Remote library linked modules/compiler differ from its full notices and sources')
-raw = subprocess.check_output(['go', 'list', '-m', '-mod=readonly', '-json', 'all'], cwd=module, text=True)
+raw = subprocess.check_output(['go', 'list', '-m', '-mod=readonly', '-json', *sorted(linked)], cwd=module, text=True)
 decoder, offset, resolved = json.JSONDecoder(), 0, {}
 while offset < len(raw):
     while offset < len(raw) and raw[offset].isspace(): offset += 1

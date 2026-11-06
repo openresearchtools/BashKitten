@@ -47,7 +47,7 @@ export const TaskarianAndroid = {
     if (!context) throw new Error("Missing isolated session context");
     const service = serviceContext(context);
     if (agentHost && (!String(context).startsWith(contextPrefix("taskarian-agent-ui-")) ||
-        !/^[a-z2-7]{56}\.onion$/.test(agentHost))) throw new Error("Invalid protected Agent route");
+        !/^(?:[a-z2-7]{56}\.onion|[a-f0-9]{48}\.taskarian\.invalid)$/.test(agentHost))) throw new Error("Invalid protected Agent route");
     if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error("Invalid Tor port");
     if (tor && port && !/^[A-Za-z0-9_-]{43}$/.test(proxySecret)) throw new Error("Missing Tor proxy authentication");
     if (!Array.isArray(identities) || identities.some(h => !/^[a-z2-7]{56}\.onion$/.test(h))) {
@@ -118,10 +118,10 @@ export const TaskarianAndroid = {
       block();
       return;
     }
-    if ((context && !route) || route?.tor || torContext(context) || host.endsWith(".onion")) {
+    if ((context && !route) || route?.tor || torContext(context) || host.endsWith(".onion") || /^[a-f0-9]{48}\.taskarian\.invalid$/.test(host)) {
       const protectedHost = !route?.agentHost && [...routes.values()].some(item => item.agentHost &&
         (host === item.agentHost || host.endsWith(`.${item.agentHost}`)));
-      if (protectedHost || localHost(host) || !route?.tor || !route.port) {
+      if (route?.agentHost && (host !== route.agentHost || !["https", "wss"].includes(channel.URI.scheme) || ![-1, 443].includes(channel.URI.port)) || protectedHost || localHost(host) || !route?.tor || !route.port) {
         block();
         return;
       }

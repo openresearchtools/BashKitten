@@ -96,7 +96,7 @@ final class TorGateway {
         }
     }
     AgentRoute agentRoute(String host) {
-        if (host == null || !host.matches("[a-z2-7]{56}\\.onion")) throw new IllegalArgumentException("Invalid Agent onion");
+        if (host == null || !host.matches("(?:[a-z2-7]{56}\\.onion|[a-f0-9]{48}\\.taskarian\\.invalid)")) throw new IllegalArgumentException("Invalid enrolled Agent identity");
         AgentRoute route = new AgentRoute(host); agents.put(route.secret, route); return route;
     }
     private static byte[] read(InputStream input, int count) throws IOException {
@@ -130,7 +130,7 @@ final class TorGateway {
                 output.write(new byte[]{1, 0});
                 byte[] request = read(input, 4);
                 if (request[0] != 5 || request[1] != 1 || request[2] != 0 || request[3] != 3)
-                    throw new IOException("Agent route requires an exact onion destination");
+                    throw new IOException("Agent route requires the exact enrolled destination");
                 int hostSize = input.read();
                 if (hostSize < 1) throw new IOException("Missing Agent destination");
                 byte[] host = read(input, hostSize), port = read(input, 2);
@@ -145,6 +145,7 @@ final class TorGateway {
                         pipe(browser, input, output, tunnel.getInputStream(), tunnel.getOutputStream(), tunnel, tunnel::shutdownOutput);
                     }
                 } else {
+                    if (!route.host.endsWith(".onion")) throw new IOException("Enrolled transport is unavailable");
                     ByteArrayOutputStream destination = new ByteArrayOutputStream();
                     destination.write(request); destination.write(hostSize); destination.write(host); destination.write(port);
                     torForward(browser, input, output, header, user, password, destination.toByteArray());

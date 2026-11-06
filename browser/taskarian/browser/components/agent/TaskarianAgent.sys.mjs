@@ -140,7 +140,7 @@ function control(command, data = {}) {
 }
 async function localControl(command, data = {}, timeoutMs) {
   const machineCommands = ["machines.list", "machines.create", "machines.get", "machines.save", "machines.start", "machines.stop", "machines.restart", "machines.retry", "machines.delete", "machines.operation", "machines.cancel", "machines.endpoint", "machines.guest-control", "machines.startup", "machines.display", "machines.display-start", "machines.display-stop", "machines.clipboard", "machines.activations", "machines.media-devices", "machines.browser-shutdown", "machines.autostart-status", "machines.autostart-save"];
-  if (![...machineCommands, "autostart-status", "autostart-save", "autostart-startup", "performance-sample", "performance-close", "phone-status", "start", "status", "stop", "browser-shutdown", "remote-pi-import", "share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-startup", "share-files", "service-status", "service-save", "service-remove", "service-action", "local-session", "project-root", "native-file", "localai-status", "localai-first-run", "localai-guided-select", "localai-custom-router", "localai-record", "localai-save", "localai-model-use", "localai-model-device", "localai-synthesize", "localai-synthesis-cancel", "localai-quantize", "localai-ini", "localai-browse", "localai-router-models", "localai-router-model-save", "localai-router-model-test", "localai-router-model-test-status", "localai-router-model-test-cancel", "localai-check", "localai-install", "localai-cancel", "localai-share", "localai-action", "localai-refresh", "native-models-status", "native-models-catalogue", "native-models-preset", "native-models-settings", "native-models-search", "native-models-repository", "native-models-download", "native-models-action"].includes(command)) {
+  if (![...machineCommands, "autostart-status", "autostart-save", "autostart-startup", "performance-sample", "performance-close", "phone-status", "start", "status", "stop", "browser-shutdown", "remote-pi-import", "share-status", "share-export", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-startup", "share-files", "service-status", "service-save", "service-remove", "service-action", "local-session", "project-root", "native-file", "localai-status", "localai-first-run", "localai-guided-select", "localai-custom-router", "localai-record", "localai-save", "localai-model-use", "localai-model-device", "localai-synthesize", "localai-synthesis-cancel", "localai-quantize", "localai-ini", "localai-browse", "localai-router-models", "localai-router-model-save", "localai-router-model-test", "localai-router-model-test-status", "localai-router-model-test-cancel", "localai-check", "localai-install", "localai-cancel", "localai-share", "localai-action", "localai-refresh", "native-models-status", "native-models-catalogue", "native-models-preset", "native-models-settings", "native-models-search", "native-models-repository", "native-models-download", "native-models-action"].includes(command)) {
     throw new Error("Unknown local Agent operation.");
   }
   // Native requests can start owners without turning Local on (for example,
@@ -887,10 +887,15 @@ class AgentView {
     this.remote = connection;
     this.off = false;
     this.choice.value = connection.id;
-    this.message("Connecting to remote", "Opening the enrolled Tor connection…");
+    this.message("Connecting to remote", "Opening the enrolled connection…");
     const result = await AgentRemotes.connect(connection.id, forceLogin);
     if (epoch !== this.selectionEpoch || this.selection !== connection.id || this.off) return;
     this.remote = result.connection;
+    if (result.transportLoginRequired) {
+      this.message(result.transportState === "approval" ? "Tailscale approval required" : "Tailscale sign-in required", result.transportState === "approval" ? "Approve this device in Tailscale, then continue." : "Complete Tailscale sign-in, then continue this connection.", () => this.run(() => this.selectRemote(result.connection, forceLogin, epoch)), "Continue");
+      if (result.transportLoginURL) this.openTransportLogin(result.transportLoginURL);
+      return;
+    }
     if (result.loginURL) AgentRemotes.onLogin(connection.id, (error, ready) => {
       if (epoch !== this.selectionEpoch || this.selection !== connection.id || this.off) return;
       if (error) { this.failure(error); return; }
@@ -1322,7 +1327,7 @@ class AgentView {
     const cleanup = () => {
       if (closed) return; closed = true; pause(); themeObserver.disconnect(); themeMedia.removeEventListener("change", themeChanged);
       for (const owner of tests) void request("localai-router-model-test-cancel", { owner }).catch(console.error);
-      for (const setupId of setups.keys()) void request("share-cancel", { setupId }).catch(console.error);
+      for (const [setupId, setup] of setups) void request("share-cancel", { setupId, instance: setup.instance }).catch(console.error);
       tests.clear(); setups.clear();
     };
     const call = async (name, value) => {
@@ -1373,8 +1378,14 @@ class AgentView {
         if (!["local", "machine"].includes(backend.kind)) throw new Error("Open Local AI on the owning device.");
         this.win.setTimeout(() => { if (current()) this.openSettings("localai", { backendId: backend.id }).catch(console.error); }, 0); return { ok: true };
       }
+      if (name === "share-open-transport-login") {
+        if (value.instance !== "tailscale") throw new Error("This connection has no account sign-in.");
+        const state = await request("share-status", { instance: "tailscale" });
+        if (!current()) throw new Error("The settings owner changed.");
+        this.openTransportLogin(state.loginUrl); return { ok: true };
+      }
       if (name === "share-save-qr") {
-        const state = await request("share-status");
+        const state = await request("share-status", { instance: value.instance || "tor" });
         if (!current() || typeof state.qrDataUrl !== "string" || !state.qrDataUrl.startsWith("data:image/png;base64,")) throw new Error("Connection QR is unavailable.");
         const picker = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
         picker.init(this.win.browsingContext, "Download QR image", Ci.nsIFilePicker.modeSave); picker.defaultString = "taskarian-connection.png"; picker.appendFilter("PNG image", "*.png");
@@ -1383,8 +1394,8 @@ class AgentView {
         return { ok: true };
       }
       if (name === "share-open-authenticator") {
-        const uri = setups.get(value.setupId);
-        if (!uri?.startsWith("otpauth://totp/")) throw new Error("Authenticator setup is no longer active.");
+        const setup = setups.get(value.setupId), uri = setup?.uri;
+        if (setup?.instance !== (value.instance || "tor") || !uri?.startsWith("otpauth://totp/")) throw new Error("Authenticator setup is no longer active.");
         Cc["@mozilla.org/uriloader/external-protocol-service;1"].getService(Ci.nsIExternalProtocolService).loadURI(Services.io.newURI(uri), Services.scriptSecurityManager.getSystemPrincipal(), null, this.win.browsingContext, false, true); return { ok: true };
       }
       if (name === "localai-router-model-test") {
@@ -1392,7 +1403,7 @@ class AgentView {
         tests.add(value.owner);
       }
       if (["localai-router-model-test-cancel", "localai-router-model-test-status"].includes(name) && !tests.has(value.owner)) throw new Error("This model check belongs to another settings view.");
-      if (["share-confirm", "share-cancel"].includes(name) && !setups.has(value.setupId)) throw new Error("This account setup belongs to another settings view.");
+      if (["share-confirm", "share-cancel"].includes(name) && setups.get(value.setupId)?.instance !== (value.instance || "tor")) throw new Error("This account setup belongs to another settings view.");
       if (["share-setup", "share-reissue"].includes(name) || name === "share-publish" && value.enabled || name === "service-action" && ["start", "reload"].includes(value.action)) {
         const status = await request("start"); if (!current()) throw new Error("The settings owner changed.");
         if (backend.kind === "local" && !this.selection && !this.remote) { this.off = false; await this.update(status); this.schedule(); }
@@ -1407,10 +1418,10 @@ class AgentView {
       const result = await request(name, value);
       if (name === "localai-router-model-test" && (!current() || closed)) await request("localai-router-model-test-cancel", { owner: value.owner });
       if (["share-setup", "share-reissue"].includes(name) && result.setupId) {
-        if (!current() || closed) await request("share-cancel", { setupId: result.setupId });
-        else setups.set(result.setupId, result.otpauthUrl);
+        if (!current() || closed) await request("share-cancel", { setupId: result.setupId, instance: value.instance || "tor" });
+        else setups.set(result.setupId, { uri: result.otpauthUrl, instance: value.instance || "tor" });
       }
-      if (["share-confirm", "share-cancel"].includes(name)) setups.delete(value.setupId);
+      if (["share-confirm", "share-cancel"].includes(name) && !result.awaitingNetwork) setups.delete(value.setupId);
       return result;
     };
     const revoke = TaskarianSettings.enroll(browser, {
@@ -1446,6 +1457,14 @@ class AgentView {
       clipboard: payload => control("machines.clipboard", { ...payload, id }),
       service: action => control(action === "status" ? "machines.display" : `machines.display-${action}`, { id }),
     } };
+  }
+
+  openTransportLogin(address) {
+    const url = new URL(address);
+    if (url.protocol !== "https:" || url.hostname !== "login.tailscale.com" || url.port || url.username || url.password || url.hash) throw new Error("Tailscale did not provide a supported sign-in address.");
+    const tab = this.win.gBrowser.addTrustedTab(url.href, { userContextId: 0 });
+    tab.linkedBrowser.setAttribute("taskarian-protected", "true");
+    this.win.gBrowser.selectedTab = tab; this.browse();
   }
 
   async shareLocal() { return this.openSettings("share-local", { backendId: "local" }); }
@@ -1484,7 +1503,7 @@ class AgentView {
     let source = "", stream = null, timer = null, enrolling = false, outcome = { ok: false };
     this.connectionsPanel?.addEventListener("close", () => dialog.close(), { once: true });
     const abort = new AbortController();
-    const accept = text => { if (!text.startsWith("TK2:")) throw new Error("Use an encrypted Connection QR."); source = text; submit.disabled = false; feedback.textContent = "Connection image ready."; password.focus(); };
+    const accept = text => { if (!text.startsWith("TK2:") && !text.startsWith("TK3:")) throw new Error("Use an encrypted Connection QR."); source = text; submit.disabled = false; feedback.textContent = "Connection image ready."; password.focus(); };
     const stop = () => { abort.abort(); clearTimeout(timer); stream?.getTracks().forEach(track => track.stop()); source = password.value = ""; };
     dialog.addEventListener("close", stop, { once: true });
     const result = new Promise(resolve => dialog.addEventListener("close", () => resolve(outcome), { once: true }));

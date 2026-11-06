@@ -78,8 +78,10 @@ export function autostartController({ control, request, backend, current, startu
       });
       await add("publishing", "Publish this environment", backend.name, async () => {
         const state = await request("share-status");
-        return [entry("publishing", "Publish this environment", backend.name, state.startup === true,
-          [state.phase === "ready" ? "Uses the saved Tor, Chisel, Caddy and Authelia setup when its Agent is running." : "Complete Share Local setup first.", state.error].filter(Boolean).join(" "), state.phase === "ready")];
+        return (state.instances || [{ ...state, instance: "tor" }]).map(instance => entry(
+          instance.instance === "tor" ? "publishing" : `publishing:${instance.instance}`,
+          { tor: "Tor", cloudflare: "Cloudflare Quick Tunnel", tailcat: "Tailcat instant", tailscale: "Tailscale" }[instance.instance], backend.name, instance.startup === true,
+          [instance.phase === "ready" ? "Publish the saved connection when its Agent starts." : "Complete this connection’s Share Local setup first.", instance.error].filter(Boolean).join(" "), instance.phase === "ready"));
       });
       await add("services", "Hosted services", backend.name, async () => {
         const state = await request("service-status");
@@ -126,7 +128,11 @@ export function autostartController({ control, request, backend, current, startu
       if (state[engine].startupCapability?.available === false) throw new Error(state[engine].startupCapability.detail);
       return request("localai-save", { engine, revision: state.revision, config: { ...state[engine].config, startup: enabled } });
     }
-    if (id === "publishing") return request("share-startup", { enabled });
+    if (id === "publishing" || id.startsWith("publishing:")) {
+      const instance = id === "publishing" ? "tor" : id.slice(11);
+      if (!["tor", "cloudflare", "tailcat", "tailscale"].includes(instance)) throw new Error("Choose an existing sharing connection.");
+      return request("share-startup", { instance, enabled });
+    }
     if (id.startsWith("service:")) {
       const state = await request("service-status"), service = state.services.find(item => item.id === id.slice(8)); check();
       if (!service?.command || service.id.startsWith("localai-")) throw new Error("Choose an existing hosted command.");

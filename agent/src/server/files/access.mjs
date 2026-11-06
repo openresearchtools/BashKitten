@@ -4,26 +4,33 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { dataDir, readJson } from '../common.mjs';
-import { paths, authBin } from '../access/paths.mjs';
+import { authBin, sharingScope, sharingKinds, accessDir } from '../access/paths.mjs';
 import { bundledRoot } from '../rpc/runtime.mjs';
 import { machineRoot, storageRoot, runtimeRoot } from '../machines/config.mjs';
 import { platform } from '../platform/index.mjs';
 
 const context = new AsyncLocalStorage();
 const requests = new Set(), listeners = new Set();
-let revoking = false, generation = 0;
+const revoking = new Set(), generations = new Map();
+const instanceOf = record => record?.instance || 'tor';
+const policyEpoch = record => (generations.get('*') || 0) + ':' + (generations.get(instanceOf(record)) || 0);
+const blocked = record => revoking.has('*') || revoking.has(instanceOf(record));
 export const managerContext = () => context.getStore();
 export const withManagerContext = (value, action) => context.run(value, action);
 const denied = () => Object.assign(Error('The host has not allowed the remote file manager'), { status: 403, code: 'FILE_MANAGER_DENIED' });
 
 export async function managerAllowed(record) {
   if (record?.local) return true;
-  if (!record || revoking) return false;
+  if (!record || blocked(record)) return false;
   try {
-    const state = await readJson(paths.share);
-    return !revoking && state.version === 2 && state.phase === 'ready' && state.enabled === true &&
+    const instance = record.instance || 'tor';
+    if (!sharingKinds.includes(instance)) return false;
+    const power = await readJson(path.join(accessDir, 'sharing.json'), { enabled: true });
+    if (power.enabled !== true) return false;
+    const state = await readJson(sharingScope(instance).paths.share);
+    return !blocked(record) && state.version === 2 && state.phase === 'ready' && state.enabled === true &&
       state.allowFileManager === true && /^[a-f0-9]{48}$/.test(state.id || '') &&
-      /^[a-z2-7]{56}\.onion$/.test(state.onion || '') && /^[a-f0-9]{64}$/.test(state.caSha256 || '') &&
+      (instance === 'tor' ? /^[a-z2-7]{56}\.onion$/ : /^[a-f0-9]{48}\.taskarian\.invalid$/).test(state.onion || '') && /^[a-f0-9]{64}$/.test(state.caSha256 || '') &&
       /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(state.owner || '') &&
       record.origin === 'https://' + state.onion && record.username === state.owner;
   } catch { return false; }
@@ -40,15 +47,15 @@ export async function runManagerRequest(req, res, record, action) {
 // Keeping them here makes policy revocation wait for in-flight atomic writes.
 export async function runManagerOperation(record, action, { cancel = () => {}, watch } = {}) {
   const controller = new AbortController();
-  const operation = { remote: !record.local, owner: record.key, signal: controller.signal };
-  const epoch = generation;
+  const operation = { remote: !record.local, instance: instanceOf(record), owner: record.key, signal: controller.signal };
+  const epoch = policyEpoch(record);
   operation.cancel = () => { controller.abort(denied()); cancel(); };
   operation.finished = new Promise(resolve => { operation.finish = resolve; });
   requests.add(operation);
   const disconnected = () => controller.abort(Error('File request closed'));
   const unwatch = watch?.(disconnected);
   try {
-    if (!await managerAllowed(record) || (operation.remote && epoch !== generation)) throw denied();
+    if (!await managerAllowed(record) || (operation.remote && epoch !== policyEpoch(record))) throw denied();
     controller.signal.throwIfAborted();
     return await context.run(operation, () => action(operation));
   } finally {
@@ -59,17 +66,19 @@ export async function runManagerOperation(record, action, { cancel = () => {}, w
 // Block admission and drain before the controller durably changes the policy.
 // Requests may have been starting workers, so stop workers after requests finish.
 // The subsequent private refresh releases the barrier against the saved policy.
-export async function refreshManagerPolicy(stopRemoteJobs, block) {
+export async function refreshManagerPolicy(stopRemoteJobs, block, instance = null) {
+  if (instance !== null && !sharingKinds.includes(instance)) throw Error('Unknown sharing instance');
+  const key = instance || '*';
   if (!block) {
-    revoking = false;
+    revoking.delete(key);
     for (const notify of listeners) notify();
     return;
   }
-  revoking = true; generation++;
-  const active = [...requests].filter(operation => operation.remote);
+  revoking.add(key); generations.set(key, (generations.get(key) || 0) + 1);
+  const active = [...requests].filter(operation => operation.remote && (!instance || operation.instance === instance));
   for (const operation of active) operation.cancel();
   await Promise.all(active.map(operation => operation.finished));
-  await stopRemoteJobs();
+  await stopRemoteJobs(instance);
 }
 
 export function watchManagerPolicy(notify) {

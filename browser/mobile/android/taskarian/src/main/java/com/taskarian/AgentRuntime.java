@@ -880,6 +880,13 @@ public final class AgentRuntime {
         app.policies.edit().putString("agent.selected", id).apply();
         turnOn();
     }
+    /** Provider account authorization uses ordinary browser storage, never Agent trust or its native bridge. */
+    void openTransportLogin(String address) throws Exception {
+        URI target = URI.create(address);
+        if (!"https".equals(target.getScheme()) || !"login.tailscale.com".equals(target.getHost()) || target.getPort() != -1 || target.getRawUserInfo() != null || target.getRawFragment() != null)
+            throw new SecurityException("Tailscale did not provide a supported sign-in address.");
+        app.create(BrowserApp.USER, false, target.toASCIIString(), app::show, app::message);
+    }
     public void remotes(Consumer<JSONObject> done, Consumer<String> failure) { stored(remoteStore::read, done, failure); }
     public void renameRemote(String id, String name, Runnable done, Consumer<String> failure) {
         stored(() -> {
@@ -887,9 +894,10 @@ public final class AgentRuntime {
             JSONObject saved = remoteStore.read(); saved.getJSONObject(id).put("name", value); remoteStore.write(saved); return true;
         }, ignored -> { phoneVoice.renameRemote(id, name); changed(); done.run(); }, failure);
     }
-    /** Called only after native TK2 decryption; no plaintext/legacy enrollment fallback. */
+    /** Called only after native encrypted-image decryption; no plaintext/legacy enrollment fallback. */
     public void importRemote(JSONObject bundle, BooleanSupplier current, Runnable done, Consumer<String> failure) {
-        String id = bundle.optString("onion");
+        String id;
+        try { id = NativeRemote.host(bundle); } catch (Exception error) { failure.accept("Invalid encrypted connection identity."); return; }
         if (removingRemotes.contains(id)) { failure.accept("This connection is being removed."); return; }
         final int generation = operation;
         BooleanSupplier active = () -> current.getAsBoolean() && generation == operation;
@@ -1203,6 +1211,7 @@ public final class AgentRuntime {
     private void connectRemote() {
         final int generation = ++operation;
         RemoteAgentConnection active = remoteConnections.get(selected);
+        if (active != null && active.awaitingTransport && !active.isClosed()) { active.resumeTransport(); return; }
         if (active != null && active.ready && !active.isClosed()) { remoteReady(active); return; }
         if (active != null && active.awaitingCallback && !active.isClosed() && remoteLoginAddresses.containsKey(selected)) { remoteLogin(active, remoteLoginAddresses.get(selected)); return; }
         startupRemotes.remove(selected);
@@ -1220,30 +1229,48 @@ public final class AgentRuntime {
         try {
             if (record.optInt("version") != 2 || !record.optString("kind").equals("agent")) throw new IllegalStateException("This saved connection needs a new encrypted QR from the host’s Share Local page.");
             JSONObject bundle = record.getJSONObject("bundle");
-            if (!host.equals(bundle.getString("onion"))) throw new SecurityException("Remote identity does not match its saved connection.");
-            app.tor.authorizeTemporarily(new OnionKey(host, bundle.getString("tor_private")), (port, cleanup) -> {
+            if (!host.equals(NativeRemote.host(bundle))) throw new SecurityException("Remote identity does not match its saved connection.");
+            if (bundle.optInt("version") == 3) {
+                app.tor.transportRoute(host, (port, route) -> {
+                    if (!current.getAsBoolean()) { route.revoke(); new Thread(route::close, "agent-route-close").start(); return; }
+                    startRemoteClient(host, bundle, previous, port, route, () -> {}, "", failure);
+                }, message -> { if (current.getAsBoolean()) failure.accept(message); });
+            } else app.tor.authorizeTemporarily(new OnionKey(host, bundle.getString("tor_private")), (port, cleanup) -> {
                 if (!current.getAsBoolean()) { cleanup.run(); return; }
-                TorGateway.AgentRoute route = null;
-                RemoteAgentConnection created = null;
-                try {
-                    String socket = app.tor.socksPath(); route = app.tor.agentRoute(host);
-                    RemoteAgentConnection connection = new RemoteAgentConnection(app.main, bundle, port, route, cleanup,
-                        new RemoteAgentConnection.Listener() {
-                            @Override public void login(RemoteAgentConnection value, String address) { remoteLogin(value, address); }
-                            @Override public void ready(RemoteAgentConnection value) { remoteReady(value); }
-                            @Override public void failed(RemoteAgentConnection value, String message) { remoteFailed(value, message); }
-                        }, previous);
-                    remoteConnections.put(host, connection);
-                    created = connection;
-                    app.startForegroundService(new Intent(app, BrowserKeepAliveService.class).setAction(BrowserKeepAliveService.AGENT_ON));
-                    connection.start(app, bundle, socket); changed();
-                } catch (Exception error) {
-                    if (created != null) created.close();
-                    else { if (route != null) route.revoke(); cleanup.run(); }
-                    releaseWake(); failure.accept("Could not start the native remote connection: " + error.getMessage());
-                }
+                try { startRemoteClient(host, bundle, previous, port, app.tor.agentRoute(host), cleanup, app.tor.socksPath(), failure); }
+                catch (Exception error) { cleanup.run(); failure.accept(error.getMessage()); }
             }, message -> { if (current.getAsBoolean()) failure.accept(message); });
         } catch (Exception error) { failure.accept(error.getMessage()); }
+    }
+    private void startRemoteClient(String host, JSONObject bundle, RemoteAgentConnection previous, int port,
+            TorGateway.AgentRoute route, Runnable cleanup, String socket, Consumer<String> failure) {
+        RemoteAgentConnection created = null;
+        try {
+            RemoteAgentConnection connection = new RemoteAgentConnection(app.main, bundle, port, route, cleanup,
+                new RemoteAgentConnection.Listener() {
+                    @Override public void login(RemoteAgentConnection value, String address) { remoteLogin(value, address); }
+                    @Override public void ready(RemoteAgentConnection value) { remoteReady(value); }
+                    @Override public void transportLogin(RemoteAgentConnection value, String address, String state) { remoteTransportLogin(value, address, state); }
+                    @Override public void failed(RemoteAgentConnection value, String message) { remoteFailed(value, message); }
+                }, previous);
+            remoteConnections.put(host, connection); created = connection;
+            app.startForegroundService(new Intent(app, BrowserKeepAliveService.class).setAction(BrowserKeepAliveService.AGENT_ON));
+            connection.start(app, bundle, socket); changed();
+        } catch (Exception error) {
+            if (created != null) created.close();
+            else { route.revoke(); new Thread(route::close, "agent-route-close").start(); cleanup.run(); }
+            releaseWake(); failure.accept("Could not start the native remote connection: " + error.getMessage());
+        }
+    }
+    private void remoteTransportLogin(RemoteAgentConnection connection, String address, String transportState) {
+        if (remoteConnections.get(connection.host) != connection || connection.isClosed()) return;
+        startupRemotes.remove(connection.host);
+        String message = transportState.equals("approval") ? "Approve this device in Tailscale, then turn on this connection to continue." : "Complete Tailscale sign-in, then turn on this connection to continue.";
+        startupErrors.put("remote:" + connection.host, message);
+        if (!selectedRemote(connection)) { changed(); return; }
+        setup("remote", message);
+        if (!address.isEmpty()) try { openTransportLogin(address); }
+        catch (Exception error) { setup("remote", error.getMessage()); }
     }
     private void poll() {
         if (polling) return; polling = true;

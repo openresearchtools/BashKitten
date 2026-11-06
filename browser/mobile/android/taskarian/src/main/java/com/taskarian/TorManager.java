@@ -117,6 +117,16 @@ final class TorManager {
         if (gateway == null || service == null || !restored) throw new IllegalStateException("Tor is unavailable");
         return gateway.agentRoute(host);
     }
+    /** Create the same authenticated native entrance without starting Tor. */
+    void transportRoute(String host, java.util.function.BiConsumer<Integer, TorGateway.AgentRoute> success, Consumer<String> failure) {
+        io.execute(() -> {
+            try {
+                if (gateway == null) gateway = new TorGateway(new java.io.File(new java.io.File(app.getNoBackupFilesDir(), "tor"), "socks").getAbsolutePath());
+                TorGateway.AgentRoute route = gateway.agentRoute(host); int port = gateway.port();
+                app.main.post(() -> success.accept(port, route));
+            } catch (Exception error) { app.main.post(() -> failure.accept("Could not open the enrolled native transport.")); }
+        });
+    }
     List<String> identities() { return new ArrayList<>(installed); }
     /** Install a credential only for native Agent enrollment; do not enroll ordinary tab trust. */
     void authorizeTemporarily(OnionKey key, BiConsumer<Integer, Runnable> success, Consumer<String> failure) {

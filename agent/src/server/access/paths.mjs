@@ -23,3 +23,23 @@ export const paths = {
   storage: path.join(accessDir, 'caddy'), identity: path.join(accessDir, 'identity.json'),
   backendInfo: path.join(runDir, 'backend.json'), group: path.join(runDir, 'access.json'),
 };
+
+// Fixed names are selected only through private native administration. Tor keeps
+// its existing paths so an upgrade does not replace any enrolled authority.
+export const sharingKinds = Object.freeze(['tor', 'cloudflare', 'tailcat', 'tailscale']);
+export function sharingScope(kind = 'tor') {
+  if (!sharingKinds.includes(kind)) throw Error('Unknown sharing instance');
+  if (kind === 'tor') return { kind, accessDir, remoteDir, runDir, paths };
+  const directory = path.join(accessDir, 'shares', kind);
+  const runtime = path.join(runDir, 'shares', kind);
+  const scoped = { ...paths };
+  for (const [key, file] of Object.entries(paths)) {
+    if (file.startsWith(remoteDir + path.sep)) scoped[key] = path.join(directory, path.relative(remoteDir, file));
+    else if (file.startsWith(runDir + path.sep) && !['control', 'backend', 'backendInfo'].includes(key)) scoped[key] = path.join(runtime, path.relative(runDir, file));
+    else if (file.startsWith(accessDir + path.sep)) scoped[key] = path.join(directory, path.relative(accessDir, file));
+  }
+  scoped.share = path.join(directory, 'share.json');
+  scoped.storage = path.join(directory, 'caddy');
+  scoped.remoteStorage = scoped.storage;
+  return { kind, accessDir: directory, remoteDir: directory, runDir: runtime, paths: scoped };
+}

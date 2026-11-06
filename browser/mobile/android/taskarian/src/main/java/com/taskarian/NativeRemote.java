@@ -30,7 +30,8 @@ final class NativeRemote implements AutoCloseable {
             JSONObject stored = tokens.read();
             JSONObject saved = stored.has("token") ? stored.getJSONObject("token") : null;
             if (saved != null) savedToken = saved.toString().getBytes(StandardCharsets.UTF_8);
-            client = Mobile.open(enrollment, "unix", torSocket, savedToken, data -> {
+            String profile = new java.io.File(context.getNoBackupFilesDir(), "remote-network/" + id).getAbsolutePath();
+            client = Mobile.openProfile(enrollment, "unix", torSocket, profile, savedToken, data -> {
                 try {
                     String json = new String(data, StandardCharsets.UTF_8);
                     JSONObject value = new JSONObject();
@@ -45,6 +46,12 @@ final class NativeRemote implements AutoCloseable {
             Arrays.fill(enrollment, (byte) 0); enrollment = null;
             throw error;
         } finally { if (savedToken != null) Arrays.fill(savedToken, (byte) 0); }
+    }
+
+    static String host(JSONObject bundle) throws Exception {
+        String host = bundle.getString(bundle.optInt("version") == 3 ? "host" : "onion");
+        if (!host.matches("(?:[a-z2-7]{56}\\.onion|[a-f0-9]{48}\\.taskarian\\.invalid)")) throw new SecurityException("Invalid enrolled server identity");
+        return host;
     }
 
     static JSONObject decrypt(Context context, String text, String password) throws Exception {
@@ -80,6 +87,10 @@ final class NativeRemote implements AutoCloseable {
         }
     }
 
+    int loginPort() throws Exception { return Math.toIntExact(client.loginPort()); }
+    void closeLoginRoute() { client.closeLoginRoute(); }
+    JSONObject transportStatus() throws Exception { return new JSONObject(client.transportStatus()); }
+    void beginTransportLogin() throws Exception { client.beginTransportLogin(); }
     String beginLogin() throws Exception { return client.beginLogin(); }
     boolean authorize() throws Exception { return client.authorize(); }
     void completeLogin(String callback, String form) throws Exception { client.completeLogin(callback, form); }
@@ -111,6 +122,16 @@ final class NativeRemote implements AutoCloseable {
     static void forgetSaved(Context context, String id) throws Exception {
         if (!id.matches("[a-f0-9]{48}")) throw new IllegalArgumentException("Invalid remote identity");
         new SecretStore(context, "remote-token-" + id).write(new JSONObject());
+        java.nio.file.Path directory = new java.io.File(context.getNoBackupFilesDir(), "remote-network/" + id).toPath();
+        if (java.nio.file.Files.exists(directory, java.nio.file.LinkOption.NOFOLLOW_LINKS)) java.nio.file.Files.walkFileTree(directory, new java.nio.file.SimpleFileVisitor<java.nio.file.Path>() {
+            @Override public java.nio.file.FileVisitResult visitFile(java.nio.file.Path file, java.nio.file.attribute.BasicFileAttributes attributes) throws java.io.IOException {
+                java.nio.file.Files.delete(file); return java.nio.file.FileVisitResult.CONTINUE;
+            }
+            @Override public java.nio.file.FileVisitResult postVisitDirectory(java.nio.file.Path dir, java.io.IOException error) throws java.io.IOException {
+                if (error != null) throw error;
+                java.nio.file.Files.delete(dir); return java.nio.file.FileVisitResult.CONTINUE;
+            }
+        });
     }
 
     @Override public synchronized void close() {

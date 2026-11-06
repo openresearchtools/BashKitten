@@ -15,6 +15,7 @@ const stateFile = path.join(accessDir, 'hosting.json');
 const runningDir = path.join(accessDir, 'services');
 const script = fileURLToPath(import.meta.url);
 const idPattern = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+export const fileSharingService = id => ['files', 'quantum', 'office', 'office-addon', 'office-wopi'].includes(id);
 const localAI = id => ['localai-llama', 'localai-whisper'].includes(id);
 const applications = new Set(['files', 'quantum', 'office', 'office-addon', 'office-wopi', 'references']);
 const unit = id => `taskarian-service-${id}.scope`;
@@ -76,8 +77,8 @@ export class HostedServices {
     if (new Set(entries.map(entry => entry.id)).size !== entries.length) throw Error('Duplicate service ID');
     return entries;
   }
-  async status({ remote = false } = {}) {
-    const entries = (await this.entries()).filter(entry => !remote || entry.enabled);
+  async status({ remote = false, instance = this.stack } = {}) {
+    const entries = remote ? await this.publicationEntries(instance) : await this.entries();
     const services = await Promise.all(entries.map(async entry => {
       const owner = this.running.get(entry.id), online = await reachable(entry.target);
       const value = { id: entry.id, name: entry.name, kind: entry.kind, scheme: entry.scheme, openPath: entry.openPath,
@@ -89,16 +90,28 @@ export class HostedServices {
       state: this.stack.ready ? 'running' : 'stopped', reachable: this.stack.ready, actions: [], error: '' });
     return { services, ...(!remote ? { revision: digest(JSON.stringify(await this.entries())) } : {}) };
   }
+  async publicationEntries(stack) {
+    const allowed = (await stack.remote.state()).allowFileManager === true;
+    return (await this.entries()).filter(entry => entry.enabled && (allowed || !fileSharingService(entry.id)));
+  }
+  publicationStacks() { return [this.stack, ...(this.stack.sharing?.stacks.values() || [])].filter(stack => stack.tunnelStarted && stack.tunnel && !stack.tunnel.closed); }
   async publish() {
-    if (!this.stack.tunnelStarted) { this.published.clear(); return; }
-    const entries = (await this.entries()).filter(entry => entry.enabled);
-    const ids = new Set(entries.map(entry => entry.id));
-    for (const id of this.published) if (!ids.has(id)) await this.stack.tunnel.call('service-remove', { id });
-    for (const entry of entries) await this.stack.tunnel.call('service-set', { id: entry.id, ...entry.target });
-    this.published = ids;
+    const all = await this.entries();
+    for (const stack of this.publicationStacks()) {
+      const entries = await this.publicationEntries(stack);
+      const previous = stack.publishedServices || new Set();
+      const ids = new Set(entries.map(entry => entry.id));
+      for (const id of previous) if (!ids.has(id)) await stack.tunnel.call('service-remove', { id });
+      for (const entry of entries) await stack.tunnel.call('service-set', { id: entry.id, ...entry.target });
+      stack.publishedServices = ids;
+    }
+    this.published = new Set(all.filter(entry => entry.enabled).map(entry => entry.id));
   }
   async unpublish(id) {
-    if (this.stack.tunnelStarted) await this.stack.tunnel.call('service-remove', { id });
+    for (const stack of this.publicationStacks()) {
+      await stack.tunnel.call('service-remove', { id });
+      stack.publishedServices?.delete(id);
+    }
     this.published.delete(id);
   }
   async save(value) {

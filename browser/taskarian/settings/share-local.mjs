@@ -3,9 +3,16 @@ import { node, field, check, select, button, runStatus, confirm } from './ui.mjs
 
 /** Presentation only. All host operations use this view's bound private owner. */
 export async function renderSection({ root, call, info, signal }) {
-  root.append(node(root, 'p', 'Publish this Local Agent through Tor. Other devices use your password and authenticator code.'));
+  root.append(node(root, 'p', 'Share this Local Agent. Each connection uses its own account, authenticator and encrypted connection image.'));
+  let instance = 'tor';
+  const transport = select(root, 'Connection', [['tor', 'Tor'], ['cloudflare', 'Cloudflare Quick Tunnel'], ['tailcat', 'Tailcat instant'], ['tailscale', 'Tailscale']], instance);
+  const shareCall = (name, value = {}) => call(name, { ...value, instance });
   const body = node(root, 'div'); root.append(body);
-  const run = runStatus(root, signal), secrets = new Set();
+  const status = runStatus(root, signal), secrets = new Set();
+  const run = operation => status(async () => {
+    transport.disabled = true;
+    try { return await operation(); } finally { if (current()) transport.disabled = Boolean(setupId); }
+  });
   const current = () => !signal.aborted && root.isConnected;
   const action = (parent, title, operation) => button(parent, title, () => run(operation));
   let setupId = '', serviceState;
@@ -18,36 +25,65 @@ export async function renderSection({ root, call, info, signal }) {
     image.style.maxWidth = '100%'; image.style.width = '280px'; image.style.height = 'auto'; parent.append(image);
     return image;
   }
-  const load = async () => draw(await call('share-status'));
+  const load = async () => draw(await shareCall('share-status'));
+  transport.onchange = () => {
+    const selected = transport.value; transport.value = instance;
+    void run(async () => { instance = selected; transport.value = selected; await load(); });
+  };
   async function cancelSetup() {
-    if (setupId) { const id = setupId; await call('share-cancel', { setupId: id }); setupId = ''; }
+    if (setupId) { const id = setupId; await shareCall('share-cancel', { setupId: id }); setupId = ''; }
     await load();
   }
   function draw(state) {
     if (!current()) return;
-    setupId = ''; clear();
+    const previousSetup = setupId; setupId = ''; clear();
     if (state.needsSetup) {
       body.append(node(body, 'p', 'Set up Local on this device before sharing it. Your saved remote connections are kept.'));
       action(body, 'Set up Local', () => call('share-local-setup')); return;
     }
     if (state.error) { const error = node(body, 'p', state.error); error.setAttribute('role', 'alert'); body.append(error); }
+    if (state.loginUrl) {
+      body.append(node(body, 'p', 'Authorize this connection with Tailscale, then continue.'));
+      action(body, 'Open Tailscale sign-in', () => shareCall('share-open-transport-login'));
+      action(body, 'Refresh', load);
+    }
+    if (state.awaitingNetwork) {
+      if (!state.loginUrl) body.append(node(body, 'p', state.transportState === 'approval' ? 'Approve this device in Tailscale, then continue.' : 'Waiting for the connection. Continue to check its status.'));
+      setupId = state.setupId || previousSetup; transport.disabled = Boolean(setupId);
+      action(body, 'Continue', async () => draw(await shareCall('share-confirm', { setupId })));
+      action(body, 'Cancel', cancelSetup); return;
+    }
     if (state.reissueRequired) { action(body, 'Reissue identity', () => account(true)); return; }
     if (state.phase !== 'ready') {
       if (state.migrationRequired) body.append(node(body, 'p', 'Replace the previous remote identity to use encrypted connections. Old connection exports will stop working.'));
       action(body, state.migrationRequired ? 'Reissue identity' : 'Turn on', () => account(Boolean(state.migrationRequired))); return;
     }
     body.append(node(body, 'p', state.running ? 'Publishing is on' : state.error ? 'Publishing failed' : 'Publishing is off'));
-    action(body, state.running ? 'Turn off' : 'Turn on', async () => draw(await call('share-publish', { enabled: !state.running })));
+    action(body, state.running ? 'Turn off' : 'Turn on', async () => draw(await shareCall('share-publish', { enabled: !state.running })));
     const startup = check(body, 'Start publishing automatically', state.startup === true);
     startup.onchange = () => {
       const enabled = startup.checked; startup.checked = state.startup === true;
-      void run(async () => draw(await call('share-startup', { enabled })));
+      void run(async () => draw(await shareCall('share-startup', { enabled })));
     };
     const files = check(body, 'Allow remote file manager', Boolean(state.allowFileManager));
-    files.onchange = () => { const allowed = files.checked; files.checked = Boolean(state.allowFileManager); void run(async () => draw(await call('share-files', { allowed }))); };
+    files.onchange = () => { const allowed = files.checked; files.checked = Boolean(state.allowFileManager); void run(async () => draw(await shareCall('share-files', { allowed }))); };
     body.append(node(body, 'p', state.address || ''), node(body, 'p', 'Connection QR — encrypted with your account password.'));
-    qr(body, state.qrDataUrl, 'Encrypted connection QR');
-    action(body, 'Download QR image', () => call('share-save-qr'));
+    if (state.qrRefreshRequired) {
+      if (!['ready', 'running'].includes(state.transportState)) {
+        body.append(node(body, 'p', 'Turn on this connection before updating its encrypted image.'));
+      } else {
+        body.append(node(body, 'p', 'The connection address changed. Enter this account’s password to update its encrypted image.'));
+        const password = field(body, 'Password', '', { type: 'password', autocomplete: 'current-password', required: '' }); secrets.add(password);
+        action(body, 'Update connection image', async () => {
+          if (!password.reportValidity()) return;
+          const request = shareCall('share-export', { password: password.value }); password.value = ''; draw(await request);
+        });
+      }
+    } else if (state.qrDataUrl) {
+      const image = qr(body, state.qrDataUrl, 'Encrypted connection QR');
+      image.onclick = () => void run(() => shareCall('share-save-qr'));
+      action(body, 'Download QR image', () => shareCall('share-save-qr'));
+    }
     action(body, 'Services', loadServices);
     action(body, 'Reissue identity', () => account(true));
     action(body, 'Refresh', load);
@@ -66,7 +102,7 @@ export async function renderSection({ root, call, info, signal }) {
       if (!form.reportValidity()) return;
       if (password.value !== repeated.value) throw Error('The passwords do not match.');
       const input = { username: username.value.trim(), password: password.value, allowFileManager: allow.checked };
-      const request = call(reissue ? 'share-reissue' : 'share-setup', input);
+      const request = shareCall(reissue ? 'share-reissue' : 'share-setup', input);
       password.value = repeated.value = '';
       const value = await request;
       if (!current()) return; // Native owner cancels late/abandoned setup results.
@@ -78,17 +114,18 @@ export async function renderSection({ root, call, info, signal }) {
     username.focus();
   }
   function factor(value) {
-    clear(); setupId = value.setupId;
+    if (value.awaitingNetwork) { draw(value); return; }
+    clear(); setupId = value.setupId; transport.disabled = true;
     if (!setupId) throw Error('The controller did not return an authenticator setup.');
     body.append(node(body, 'p', 'Add this account to your authenticator, then enter its six-digit code.'));
     qr(body, value.qrDataUrl, 'Authenticator setup QR');
-    if (value.otpauthUrl?.startsWith('otpauth://totp/')) action(body, 'Open authenticator', () => call('share-open-authenticator', { setupId }));
+    if (value.otpauthUrl?.startsWith('otpauth://totp/')) action(body, 'Open authenticator', () => shareCall('share-open-authenticator', { setupId }));
     const form = node(body, 'form'); body.append(form);
     const code = field(form, 'Authenticator code', '', { required: '', inputmode: 'numeric', pattern: '[0-9]{6}', maxlength: 6, autocomplete: 'one-time-code' });
     secrets.add(code);
     const verify = async () => {
       if (!form.reportValidity()) return;
-      const request = call('share-confirm', { setupId, code: code.value }); code.value = '';
+      const request = shareCall('share-confirm', { setupId, code: code.value }); code.value = '';
       draw(await request);
     };
     action(form, 'Verify and publish', verify); action(form, 'Cancel', cancelSetup);

@@ -199,8 +199,8 @@ export class GeckoViewTaskarian extends GeckoViewModule {
   agentEndpoint(value) {
     const url = new URL(value);
     if (url.protocol !== "https:" || url.username || url.password ||
-        !(url.hostname === "127.0.0.1" || /^[a-z2-7]{56}\.onion$/.test(url.hostname))) {
-      throw new Error("Use an enrolled loopback or onion Agent endpoint");
+        !(url.hostname === "127.0.0.1" || /^(?:[a-z2-7]{56}\.onion|[a-f0-9]{48}\.taskarian\.invalid)$/.test(url.hostname))) {
+      throw new Error("Use the enrolled HTTPS Agent endpoint");
     }
     return url;
   }
@@ -218,13 +218,13 @@ export class GeckoViewTaskarian extends GeckoViewModule {
     const endpoint = this.agentEndpoint(params.url);
     const identity = params.identity;
     const cert = this.agentCertificate(identity);
-    const onion = endpoint.hostname.endsWith(".onion");
-    if (onion !== Boolean(params.tor)) throw new Error("Agent route does not match its enrolled endpoint");
+    const onion = endpoint.hostname.endsWith(".onion"), remote = onion || /^[a-f0-9]{48}\.taskarian\.invalid$/.test(endpoint.hostname);
+    if (remote !== Boolean(params.tor)) throw new Error("Agent route does not match its enrolled endpoint");
     // The native credential stays in the protected cookie jar; it is never
     // passed to page script or to the ordinary-tab routing configuration.
     const { localSession, clientCertificate, ...routing } = params;
-    if (clientCertificate && (!onion || endpoint.port || localSession)) {
-      throw new Error("Client credentials require the enrolled onion origin");
+    if (clientCertificate && (!remote || endpoint.port || localSession)) {
+      throw new Error("Client credentials require the exact enrolled remote origin");
     }
     if (this.agentUsesClientCertificate && !clientCertificate) {
       throw new Error("The remote client credential is required");
@@ -241,7 +241,7 @@ export class GeckoViewTaskarian extends GeckoViewModule {
         byte => byte.charCodeAt(0).toString(16).padStart(2, "0")).join("");
       // Native retains the legacy jar only when its saved identity is unchanged.
       const localContext = this.context === contextPrefix(expectedContext) || this.context === contextPrefix("taskarian-agent-ui-local");
-      if (!localContext || onion ||
+      if (!localContext || remote ||
           !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(identity.instanceId || "") ||
           localSession.url !== endpoint.origin || localSession.identity?.instanceId !== identity.instanceId ||
           localSession.identity?.caSha256 !== identity.caSha256 ||
@@ -252,7 +252,7 @@ export class GeckoViewTaskarian extends GeckoViewModule {
         Date.now() + 400 * 86400000, { geckoViewSessionContextId: this.context },
         Ci.nsICookie.SAMESITE_STRICT, Ci.nsICookie.SCHEME_HTTPS);
     }
-    TaskarianAndroid.configure(this.context, this.browserId, { ...routing, identities: [], agentHost: onion ? endpoint.hostname : "" });
+    TaskarianAndroid.configure(this.context, this.browserId, { ...routing, identities: [], agentHost: remote ? endpoint.hostname : "" });
     if (this.agentHost && this.agentHost !== endpoint.hostname) certificates.clearAgentCA(this.agentHost, { geckoViewSessionContextId: this.context });
     certificates.setAgentCA(endpoint.hostname, { geckoViewSessionContextId: this.context }, cert);
     if (clientCertificate) {
@@ -273,7 +273,7 @@ export class GeckoViewTaskarian extends GeckoViewModule {
     }
     this.agentHost = endpoint.hostname;
     this.agentOrigin = endpoint.origin;
-    this.agentLogin = onion && this.agentUsesClientCertificate && params.login === true;
+    this.agentLogin = remote && this.agentUsesClientCertificate && params.login === true;
     this.agentIdentity = { caPem: identity.caPem, caSha256: identity.caSha256, instanceId: identity.instanceId };
     TaskarianHost.configure(this.browser, this.context, this.agentOrigin, this.agentIdentity.caSha256);
     return { ready: true };

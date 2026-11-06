@@ -258,8 +258,8 @@ export class ApplicationGateway {
     }
     return Promise.allSettled(pending);
   }
-  async revokeRemote() {
-    await this.revokeWhere(grant => !grant.record.local);
+  async revokeRemote(instance = null) {
+    await this.revokeWhere(grant => !grant.record.local && (!instance || (grant.record.instance || 'tor') === instance));
   }
   async close() {
     this.closing = true;

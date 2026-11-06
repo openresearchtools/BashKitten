@@ -296,9 +296,9 @@ async function handler(req, res) {
     }
     if (route === '/api/instance/file-manager') {
       if (req.method !== 'POST' || req.headers.authorization !== 'Bearer ' + instanceToken) throw Object.assign(Error('Invalid instance token'), { status: 403 });
-      const { block } = await jsonBody(req);
+      const { block, instance = null } = await jsonBody(req);
       if (typeof block !== 'boolean') throw Error('Choose file-manager policy transition');
-      await refreshManagerPolicy(() => apps.revokeRemote(), block);
+      await refreshManagerPolicy(scope => apps.revokeRemote(scope), block, instance);
       return json(res, { ok: true });
     }
     if (route === '/api/instance/provider-login') {

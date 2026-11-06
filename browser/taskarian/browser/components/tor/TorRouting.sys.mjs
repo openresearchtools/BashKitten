@@ -805,16 +805,20 @@ export const TorRouting = {
       );
     }
     for (const { address, key } of this._agentContexts.values()) {
+      if (!address) continue;
       await this._control.send(`ONION_CLIENT_AUTH_ADD ${address} x25519:${key}`);
     }
   },
 
-  async registerAgentContext(id, host, key) {
+  async registerAgentContext(id, host, key = "") {
     await this.init();
     if (!Number.isInteger(id) || id < 0xB4500000 || id > 0xB450FFFF) {
       throw new Error("Invalid protected Agent context");
     }
-    const entry = { address: onionAddress(host), key: onionPrivateKey(key) };
+    if (/^[a-f0-9]{48}\.taskarian\.invalid$/.test(host)) {
+      this._agentContexts.set(id, { host, tunnel: null }); return;
+    }
+    const entry = { host, address: onionAddress(host), key: onionPrivateKey(key) };
     await this._queueAuthorization(async () => {
       this._agentContexts.set(id, entry);
       await this.ensureProxy();
@@ -826,7 +830,7 @@ export const TorRouting = {
     await this._queueAuthorization(async () => {
       const entry = this._agentContexts.get(id);
       this._agentContexts.delete(id);
-      if (!entry || [...this._agentContexts.values()].some(item => item.address == entry.address)) return;
+      if (!entry?.address || [...this._agentContexts.values()].some(item => item.address == entry.address)) return;
       const ordinary = (await OnionAuthStore.load()).get(entry.address);
       if (this._control) await this._control.send(ordinary?.key
         ? `ONION_CLIENT_AUTH_ADD ${entry.address} x25519:${ordinary.key}`
@@ -972,14 +976,14 @@ export const TorRouting = {
       return;
     }
     const tor = this.isTorContext(context);
-    if (!tor && !host.endsWith(".onion")) {
+    const agent = this._agentContexts.get(context);
+    if (!tor && !agent && !host.endsWith(".onion") && !/^[a-f0-9]{48}\.taskarian\.invalid$/.test(host)) {
       callback.onProxyFilterResult(proxyInfo);
       return;
     }
-    const agent = this._agentContexts.get(context);
     if (agent && Object.hasOwn(agent, "tunnel")) {
       const route = agent.tunnel;
-      const permitted = ["https", "wss"].includes(channel.URI.scheme) && channel.URI.host === agent.address + ".onion" &&
+      const permitted = ["https", "wss"].includes(channel.URI.scheme) && channel.URI.host === agent.host &&
         (channel.URI.port === -1 || channel.URI.port === 443);
       if (!permitted || !route) {
         block();
@@ -992,7 +996,7 @@ export const TorRouting = {
       return;
     }
     const protectedHost = !agent && [...this._agentContexts.values()].some(entry =>
-      host === `${entry.address}.onion` || host.endsWith(`.${entry.address}.onion`));
+      host === entry.host || entry.address && host.endsWith(`.${entry.address}.onion`));
     if (!tor || localHost(host) || protectedHost || this._stopping) {
       block();
       return;
