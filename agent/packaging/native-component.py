@@ -121,7 +121,7 @@ def go_sources(revision, directory):
                 raise ValueError('Unproven quoted native Go replacement')
             if destination.startswith('/'):
                 raise ValueError('Native Go replacement lies outside the committed repository')
-            if destination.startswith(('./', '../')):
+            if destination in ('.', '..') or destination.startswith(('./', '../')):
                 path = posixpath.normpath(posixpath.join(current, destination))
                 if path == '..' or path.startswith('../'):
                     raise ValueError('Native Go replacement escapes its source tree')
