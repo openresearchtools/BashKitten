@@ -85,4 +85,5 @@ jobs:
       run: |
         flags=()
         if [ "$FORCE" = true ]; then flags+=(--validation-only); fi
-        python3 agent/packaging/application.py publish "$TARGET" --directory "$RUNNER_TEMP/application" "${flags[@]}"
+        python3 agent/packaging/browser-release.py dependencies "$TARGET" --directory "$RUNNER_TEMP/inputs" --output "$RUNNER_TEMP/application-dependencies.json"
+        python3 agent/packaging/application.py publish "$TARGET" --directory "$RUNNER_TEMP/application" --dependencies "$RUNNER_TEMP/application-dependencies.json" "${flags[@]}"

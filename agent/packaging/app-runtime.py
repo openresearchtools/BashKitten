@@ -93,7 +93,7 @@ def archive_tree(root, destination, selected=None):
 def original_source(destination, paths, originals=()):
     # The shared serializer includes donor files marked export-ignore too.
     # Original downloads stay outside Git and retain their exact bytes.
-    helper_paths = ['agent/packaging/build.py', 'agent/packaging/component-store.py',
+    helper_paths = ['LICENSE', 'agent/packaging/build.py', 'agent/packaging/component-store.py',
                     'agent/packaging/source_archive.py', 'agent/packaging/source_cache.py',
                     'agent/packaging/npm-sources.py', 'agent/packaging/node/lock.json',
                     'agent/licenses/source-archives.json']
@@ -181,6 +181,10 @@ def run(component, target, work, output, force=False):
         package.install_agent_sources(runtime, platform)
         selected = None
         legal.write_text((ROOT / 'agent/LICENSE').read_text() + '\n\n' + (ROOT / 'agent/THIRD_PARTY_NOTICES.md').read_text())
+    taskarian_license = (ROOT / 'LICENSE').read_text()
+    notices = legal.read_text()
+    if taskarian_license not in notices:
+        legal.write_text('Taskarian\n\n' + taskarian_license + '\n\n' + notices)
     payload = output / f'{component}-{target}.tar.gz'
     archive_tree(runtime, payload, selected)
     source = output / f'{component}-source-{target}.tar.gz'
