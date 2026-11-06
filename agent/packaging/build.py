@@ -513,6 +513,8 @@ def assemble(args):
             extract(args.agent_resources_archive, app)
         else:
             install_agent_sources(app, args.target)
+        # Refresh our license for every repackage, including reused resources.
+        shutil.copy2(REPOSITORY / 'LICENSE', app / 'LICENSE')
         npm_cache = Path(temporary) / 'npm-cache'
         if args.npm_runtime_archive and args.photon_archive:
             for archive in (args.npm_runtime_archive, args.photon_archive):
