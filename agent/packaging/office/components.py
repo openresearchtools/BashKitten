@@ -55,6 +55,14 @@ def engine_options(revision):
     return json.loads(match[1].replace("'", '"'))
 
 
+def engine_version(revision):
+    source = native.content(revision, 'office/upstream/online/source/engine/configure.ac')
+    match = re.search(r'^AC_INIT\(\[[^]]+\],\[([^]]+)\]', source, re.M)
+    if not match:
+        raise ValueError('Native Office engine version is absent')
+    return match[1]
+
+
 def entries(revision, path):
     if native.local(revision):
         return {line.split('\t', 1)[1]: line.split()[2]
@@ -102,7 +110,7 @@ def inputs(component, target, revision):
         group = component.removeprefix('office-')
         base = 'office/upstream/online/source'
         pin = document(revision, 'office/upstream/online/source.json')
-        selected['version'] = pin['version']
+        selected['version'] = engine_version(revision) if group == 'engine' else pin['version']
         selected['patches'] = patch_inputs(revision, group, termux)
         if group == 'engine':
             paths += [base + '/engine']
@@ -202,6 +210,8 @@ def inputs(component, target, revision):
 
 
 def version(component, revision):
+    if component == 'office-engine':
+        return engine_version(revision)
     if component.startswith('office-') and component != 'office-integration':
         return document(revision, 'office/upstream/online/source.json')['version']
     if component in ('office-integration', 'references'):
