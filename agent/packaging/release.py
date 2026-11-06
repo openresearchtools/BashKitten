@@ -359,9 +359,14 @@ def main():
              'Local Agent opens without an account login. Publishing from Linux and connecting to remotes still require Tor authorization and account two-factor authentication.\n\n'
              'Checksums are attached. `component-sources.json` links to the permanent matching component sources and license texts.\n')
     (args.output / 'release-notes.md').write_text(notes)
+    # Full build inputs remain in each installer and its pinned component manifest.
+    # Keep the main release index small instead of copying every dependency lock.
+    published_packages = [{**item, 'build': {key: value for key, value in item['build'].items()
+                          if key in ('schema', 'schemaVersion', 'platform', 'architecture', 'revision',
+                                     'sourceCommit', 'version', 'productVersion')}} for item in packages + auxiliary]
     result = {'schema': 2, 'tag': tag, 'version': version, 'firefoxVersion': engine, 'testingRelease': True, 'packageVersion': package_version,
               'sourceCommit': revision, 'buildRun': args.run or os.environ.get('GITHUB_RUN_ID'),
-              'apps': apps, 'packages': packages + auxiliary, 'sources': sources,
+              'apps': apps, 'packages': published_packages, 'sources': sources,
               'sourceManifest': source_manifest, 'sourceArchives': archives}
     (args.output / 'release.json').write_text(json.dumps(result, indent=2) + '\n')
     (args.output / 'SHA256SUMS').write_text(''.join(
