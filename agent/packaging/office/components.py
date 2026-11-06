@@ -929,7 +929,7 @@ def aggregate_inputs(family, target, revision):
         if result is None:
             return None
         found[component] = result
-    result = {'schema': 2, 'component': family + '-runtime', 'target': target,
+    result = {'schema': 3 if family == 'office' else 2, 'component': family + '-runtime', 'target': target,
               'leaves': {name: reference(found[name]) for name in FAMILIES[family]}}
     if family == 'office':
         result['resources'] = resource_inputs(revision)
@@ -996,6 +996,12 @@ def aggregate(args, family):
                 shutil.copy2(branding.BRANDING / 'engine' / name, destination)
                 installed.append(str(destination.relative_to(combined)))
             resources = {'sourceCommit': args.source, 'inputs': wanted['resources'], 'files': installed}
+            # These are public installed fonts, including upstream OpenSymbol
+            # copies whose source archive can retain an owner-only file mode.
+            for directory in ('engine/program/resource/common/fonts', 'engine/share/fonts'):
+                for font in (combined / directory).rglob('*'):
+                    if font.is_file() and not font.is_symlink():
+                        font.chmod(0o644)
         manifest = {'schema': 2, 'target': target, 'architecture': architecture,
                     'sourceCommit': args.source, 'assemblySource': args.source,
                     'components': {name: components[name] for name in leaves},
