@@ -199,8 +199,9 @@ def inputs(component, target, revision):
         paths += ['agent/packaging/office/prepare-runner.sh']
         selected['abi'] = 'Ubuntu24.04' if not termux else 'Bionic-NDK30'
         if termux:
-            paths += ['agent/packaging/termux/native_toolchain.py', 'agent/packaging/node/lock.json',
-                      'agent/vendor/node/libcxx']
+            paths += ['agent/packaging/termux/native_toolchain.py', 'agent/vendor/node/libcxx']
+            pin = document(revision, 'agent/packaging/node/lock.json')['termux']['dependency_sources']['libc++']
+            selected['ndk'] = {key: pin[key] for key in ('url', 'sha256')}
         if component.startswith('files-'):
             paths += ['auth/dependencies/go-toolchain', 'auth/build/go-notices.py']
     selected['trees'] = {name: native.entry(revision, name) for name in sorted(set(paths))}
@@ -690,6 +691,80 @@ def verify_payload(payload, component, target):
     return metadata
 
 
+def seed_ndk(args):
+    """Explicit one-time input narrowing; preserve already compiled archives."""
+    if not args.target.startswith('termux-') or not re.fullmatch('[a-f0-9]{40}', args.previous_source or ''):
+        raise ValueError('NDK adoption needs a Termux target and exact previous source revision')
+    supported = ('office-engine', 'office-server', 'files-server', 'files-media', 'files-office-addon')
+    if args.component and args.component not in supported:
+        raise ValueError('Only native Office/Files NDK consumers can be adopted')
+    args.directory = args.directory.resolve(); args.directory.mkdir(parents=True, exist_ok=True)
+    args.work = args.work.resolve(); args.work.mkdir(parents=True, exist_ok=True)
+    lock = 'agent/packaging/node/lock.json'
+    old_blob = native.entry(args.previous_source, lock)
+    if old_blob is None:
+        raise ValueError('Previous native Node lock is absent')
+    results = []
+    for component in ([args.component] if args.component else supported):
+        wanted = inputs(component, args.target, args.source)
+        previous = inputs(component, args.target, args.previous_source)
+        if previous != wanted:
+            raise ValueError('Native inputs changed beyond NDK lock narrowing: ' + component)
+        # Reconstruct only the exact prior full-lock map, including the server's
+        # existing engine ABI/build contract. There is no normal lookup fallback.
+        old = json.loads(json.dumps(previous))
+        for value in [old] + ([old['engineContract']] if 'engineContract' in old else []):
+            value.pop('ndk')
+            value['trees'][lock] = old_blob
+        current = store().lookup(component, args.target, wanted)
+        if current:
+            results.append({'component': component, 'state': 'already-published', **reference(current)})
+            continue
+        original = store().lookup(component, args.target, old)
+        if original is None:
+            results.append({'component': component, 'state': 'no-completed-previous-output'})
+            continue
+        manifest = original['manifest']
+        if not {'runtime', 'source', 'legal'} <= {row['role'] for row in manifest['assets']}:
+            raise ValueError('Previous native component lacks its complete runtime/source/legal closure')
+        output = args.directory / component
+        original = store().fetch(original, output)
+        if original is None:
+            raise store().StoreUnavailable('Previous completed component disappeared during adoption')
+        with tempfile.TemporaryDirectory(prefix='ndk-verify-', dir=args.work) as temporary:
+            payload = Path(temporary)
+            unpack(runtime_file(original), payload)
+            metadata = verify_payload(payload, component, args.target)
+            validate_native(payload, component, args.target)
+            if metadata['sourceCommit'] != manifest['sourceCommit'] or metadata['version'] != manifest['version']:
+                raise ValueError('Original native archive provenance differs from its manifest')
+        if hashlib.sha256(store().canonical(manifest) + b'\n').hexdigest() != original['manifestSha256']:
+            raise ValueError('Original manifest is not the native publisher canonical inventory')
+        proof = {'schema': 1, 'previous': reference(original), 'previousManifest': manifest,
+                 'previousInputSource': args.previous_source, 'requestedSource': args.source, 'inputs': wanted,
+                 'sourceCommit': manifest['sourceCommit'],
+                 'scope': 'Only full Node lock input replaced with its identical native NDK URL/SHA pin'}
+        receipt = output / 'ndk-input-equivalence.json'; write_json(receipt, proof)
+        publisher_source = output / 'ndk-adoption-source.tar.gz'
+        source_archive = module('ndk_adoption_source', ROOT / 'agent/packaging/source_archive.py')
+        source_archive.archive_revision(ROOT, args.source, publisher_source, prefix='',
+            paths=['LICENSE', 'agent/packaging', '.github/builders/native.yml'])
+        assets = {row['name']: row['role'] for row in manifest['assets']}
+        assets[receipt.name] = 'metadata'; assets[publisher_source.name] = 'source'
+        dependencies = list(manifest.get('dependencies', []))
+        if component == 'office-server':
+            engine = store().lookup('office-engine', args.target, inputs('office-engine', args.target, args.source))
+            if engine is None:
+                raise ValueError('Adopt the unchanged native engine before its server')
+            dependencies = [reference(engine)]
+        result = store().publish(component, args.target, manifest['version'], wanted, output,
+            assets=assets, source_commit=manifest['sourceCommit'], producer=manifest['producer'],
+            dependencies=dependencies)
+        results.append({'component': component, 'state': 'adopted', **reference(result)})
+    write_json(args.directory / 'ndk-adoption.json', results)
+    print(json.dumps(results))
+
+
 def seed_office(args):
     """Explicit, one-time migration of verified original native outputs."""
     if args.seed_directory is None or args.producer_source is None or args.producer_run is None:
@@ -1005,7 +1080,7 @@ def assemble(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['plan', 'build', 'assemble', 'cache-contract', 'seed-office', 'aggregate'])
+    parser.add_argument('command', choices=['plan', 'build', 'assemble', 'cache-contract', 'seed-office', 'seed-ndk', 'aggregate'])
     parser.add_argument('--target', choices=TARGETS, required=True)
     parser.add_argument('--source', default=native.git('rev-parse', 'HEAD').strip())
     parser.add_argument('--component', choices=IDS)
@@ -1020,6 +1095,7 @@ def main():
     parser.add_argument('--seed-directory', type=Path)
     parser.add_argument('--producer-source')
     parser.add_argument('--producer-run', type=int)
+    parser.add_argument('--previous-source')
     args = parser.parse_args()
     if args.command == 'cache-contract':
         print(json.dumps(cache_contract(args.target, args.source)))
