@@ -580,6 +580,7 @@ def assembly(target, directory):
                 raise ValueError('Expected one Taskarian OS package')
             result['os_package'] = str(packages[0])
         else:
+            extract(destination / 'loader-licenses.tar.gz', destination)
             result['termux_display_dir'] = str(destination)
     (directory / 'assembly-inputs.json').write_text(json.dumps(result, indent=2) + '\n')
     return result

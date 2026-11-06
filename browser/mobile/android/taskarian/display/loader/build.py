@@ -9,6 +9,7 @@ import shutil
 from pathlib import Path
 import re
 import subprocess
+import tarfile
 import tempfile
 import zipfile
 
@@ -64,6 +65,11 @@ exec /system/bin/app_process / com.taskarian.display.loader.Loader "$@"
         f'Source: https://github.com/termux/termux-x11 at {upstream}.\n'
         'Taskarian modifications, 11 October 2026: SHA-256 signing pin, exact module protocol, current user, Android-managed extracted native libraries and removal of environment overrides.\n'
         'Matching loader source and build recipe are in browser/mobile/android/taskarian/display/loader in the Taskarian source archive.\n')
+    shutil.copy2(HERE.parents[5] / 'LICENSE', notices / 'Taskarian-LICENSE')
+    # Component publication transports flat assets; retain the native owner's
+    # complete notice directory alongside the paired launcher and JAR.
+    with tarfile.open(args.output / 'loader-licenses.tar.gz', 'w:gz') as archive:
+        archive.add(notices, arcname='licenses')
     manifest = {'package': args.package, 'signerSha256': signer, 'protocol': version,
         'sourceCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=HERE, text=True).strip(),
         'upstreamCommit': upstream,
