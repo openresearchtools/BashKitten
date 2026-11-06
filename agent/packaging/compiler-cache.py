@@ -29,6 +29,14 @@ def source_revision():
     return subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
 
 
+def engine_inputs(engine, target, revision):
+    if engine == 'sccache':
+        owner = module('cache_browser_source', ROOT / 'agent/packaging/browser-release.py')
+        return 'gecko', owner.inputs('gecko', target, revision)
+    owner = module('cache_office_source', ROOT / 'agent/packaging/office/components.py')
+    return 'office-engine', owner.inputs('office-engine', target, revision)
+
+
 def has_objects(directory):
     """Stop at the first native cache entry; ignore empty/statistics-only caches."""
     for parent, directories, files in os.walk(directory):
@@ -81,7 +89,12 @@ def validate_metadata(raw, engine, target, contract):
 
 def cache_index(engine, target, contract, repository=None):
     repository, name, digest, path = index_identity(engine, target, contract, repository)
-    raw = store.read_url(store.lookup_url(repository, path))
+    revision = store.builder_head(repository)
+    raw = store.read_url(store.lookup_url(repository, path, revision))
+    if raw is None:
+        latest = store.builder_head(repository, refresh=True)
+        if latest != revision:
+            raw = store.read_url(store.lookup_url(repository, path, latest))
     index = json.loads(raw) if raw else {'schema': 1, 'engine': engine, 'target': target,
                                        'contractSha256': digest, 'snapshot': None}
     if (index['schema'] != 1 or index['engine'] != engine or index['target'] != target
@@ -156,7 +169,8 @@ def require_publisher(repository):
         raise ValueError('Compiler cache publisher differs from its target builder')
 
 
-def publish_snapshot(engine, target, contract, raw, directory, repository=None, *, archive=None, source=None):
+def publish_snapshot(engine, target, contract, raw, directory, repository=None, *, archive=None, source=None,
+                     engine_reference=None, engine_directory=None):
     repository, pointer, digest, index_path, index = cache_index(engine, target, contract, repository)
     require_publisher(repository)
     metadata = validate_metadata(raw, engine, target, contract)
@@ -164,6 +178,19 @@ def publish_snapshot(engine, target, contract, raw, directory, repository=None, 
     release = store.ensure_release(repository, tag, f'{engine} compiler objects · {target}')
     uploaded = {item['name']: item for item in store.release_assets(repository, release['id'])}
     directory = Path(directory)
+    previous_pointer = uploaded.get(pointer)
+    if previous_pointer:
+        # Preserve the first producer when an identical archive is retried.
+        previous_raw = store.read_url(f'https://github.com/{repository}/releases/download/{tag}/{pointer}')
+        if previous_raw is None:
+            raise ValueError('Published compiler cache metadata disappeared')
+        original = validate_metadata(previous_raw, engine, target, contract)
+        if original['parts'] != metadata['parts'] or original['sha256'] != metadata['sha256']:
+            raise ValueError('Immutable compiler cache snapshot differs')
+        raw, metadata = previous_raw, original
+    if not supplement(engine, target, contract, directory, engine_reference=engine_reference,
+                      engine_directory=engine_directory, snapshot=(repository, tag, raw, metadata)):
+        raise ValueError('Compiler cache publication requires matching engine sources and full licenses')
     archive_sha = hashlib.sha256()
     offset = 0
     for part in metadata['parts']:
@@ -201,35 +228,20 @@ def publish_snapshot(engine, target, contract, raw, directory, repository=None, 
     if archive_sha.hexdigest() != metadata['sha256']:
         raise ValueError('Compiler cache archive checksum differs before publication')
     checksum = hashlib.sha256(raw).hexdigest()
-    previous = uploaded.get(pointer)
-    if previous:
-        # A repeated archive can have different run metadata. Keep its original
-        # immutable producer rather than replacing a published snapshot.
-        previous_raw = store.read_url(f'https://github.com/{repository}/releases/download/{tag}/{pointer}')
-        if previous_raw is None:
-            raise ValueError('Published compiler cache metadata disappeared')
-        previous_metadata = validate_metadata(previous_raw, engine, target, contract)
-        if previous_metadata['parts'] != metadata['parts'] or previous_metadata['sha256'] != metadata['sha256']:
-            raise ValueError('Immutable compiler cache snapshot differs')
-        checksum = hashlib.sha256(previous_raw).hexdigest()
-    else:
+    if not previous_pointer:
         file = directory / pointer; file.write_bytes(raw)
         store.gh('release', 'upload', tag, str(file), '--repo', repository)
     # Each contract owns one small Git file. Concurrent unrelated contracts
     # never replace one another; successful snapshots themselves stay immutable.
     index['snapshot'] = {'tag': tag, 'metadataSha256': checksum}
     store.put_lookup(repository, index_path, index)
-    # The first engine publication follows the cache backup. Its publisher
-    # completes this supplement from the local legal outputs when necessary.
-    if not supplement(engine, target, contract, directory):
-        print('Compiler backup retained; matching engine publication will attach full licenses', flush=True)
     return True
 
 
 def supplement(engine, target, contract, directory, repository=None, *, revision=None,
-               engine_reference=None, engine_directory=None):
+               engine_reference=None, engine_directory=None, snapshot=None):
     """Attach full legal texts and source links without downloading cache objects."""
-    snapshot = resolve(engine, target, contract, repository)
+    snapshot = snapshot if snapshot is not None else resolve(engine, target, contract, repository)
     if snapshot is None or snapshot[1] == store.TAG:
         return False
     repository, tag, raw, metadata = snapshot
@@ -252,12 +264,7 @@ def supplement(engine, target, contract, directory, repository=None, *, revision
         return True
     revision = revision or source_revision()
     if engine_reference is None:
-        if engine == 'sccache':
-            owner = module('cache_browser_source', ROOT / 'agent/packaging/browser-release.py')
-            component, wanted = 'gecko', owner.inputs('gecko', target, revision)
-        else:
-            owner = module('cache_office_source', ROOT / 'agent/packaging/office/components.py')
-            component, wanted = 'office-engine', owner.inputs('office-engine', target, revision)
+        component, wanted = engine_inputs(engine, target, revision)
         engine_reference = store.lookup(component, target, wanted)
         if engine_reference is None:
             return False
@@ -312,12 +319,30 @@ def supplement(engine, target, contract, directory, repository=None, *, revision
     return True
 
 
-def save(engine, target, contract, directory, repository=None):
+def save(engine, target, contract, directory, repository=None, *, engine_reference=None, engine_directory=None):
     repository, _, _ = identity(engine, target, contract, repository)
     require_publisher(repository)
     directory = Path(directory).resolve()
     if not has_objects(directory):
         return False
+    revision = source_revision()
+    component, wanted = engine_inputs(engine, target, revision)
+    published_here = engine_reference is not None
+    if engine_reference is None:
+        engine_reference = store.lookup(component, target, wanted)
+    if engine_reference is None:
+        print('Compiler objects remain in Actions; publish the matching engine before archiving its cache', flush=True)
+        return False
+    store.validate(engine_reference['manifest'], store.identity(component, target, wanted))
+    roles = {store.runtime_owner().effective_role(asset) for asset in engine_reference['manifest']['assets']}
+    if not {'source', 'legal'} <= roles:
+        raise ValueError('Publish complete engine sources and full licenses before archiving compiler objects')
+    if published_here:
+        previous = resolve(engine, target, contract, repository)
+        if (previous and previous[3].get('sourceCommit') == revision
+                and previous[3].get('producer', {}).get('runId') == os.environ.get('GITHUB_RUN_ID')):
+            return supplement(engine, target, contract, directory, engine_reference=engine_reference,
+                              engine_directory=engine_directory)
     with tempfile.TemporaryDirectory(prefix='compiler-cache-publish-', dir=directory.parent) as temporary:
         temporary = Path(temporary)
         archive = temporary / 'objects.tar.zst'
@@ -326,7 +351,7 @@ def save(engine, target, contract, directory, repository=None):
             raise ValueError('Compiler cache changed during backup')
         metadata = {'schema': 1, 'engine': engine, 'target': target, 'contract': contract,
                     'sha256': store.sha(archive), 'parts': [],
-                    'sourceCommit': source_revision(),
+                    'sourceCommit': revision,
                     'producer': {'repository': os.environ.get('GITHUB_REPOSITORY'),
                                  'runId': os.environ.get('GITHUB_RUN_ID')}}
         with archive.open('rb') as source:
@@ -348,7 +373,8 @@ def save(engine, target, contract, directory, repository=None):
                 metadata['parts'].append({'name': name, 'size': size, 'sha256': checksum})
                 renamed.unlink()
         return publish_snapshot(engine, target, contract, store.canonical(metadata) + b'\n', temporary,
-                                repository, archive=archive)
+                                repository, archive=archive, engine_reference=engine_reference,
+                                engine_directory=engine_directory)
 
 
 def migrate(engine, target, contract, directory, repository=None):
