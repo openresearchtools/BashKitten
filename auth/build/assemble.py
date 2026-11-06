@@ -90,6 +90,13 @@ if not runtime_only:
             archive.add(dependencies_source, arcname='dependencies')
             shutil.rmtree(dependencies_source)
         archive.add(metadata, arcname='build-metadata')
+elif (stage / 'share/source').exists():
+    # Source remains a separately published output; it is not runtime data.
+    # Keep the native owners' original archive bytes and all installed notices.
+    source_file = artifacts / f'auth-{target}-dependency-source.tar.gz'
+    with tarfile.open(source_file, 'w:gz') as archive:
+        archive.add(stage / 'share/source', arcname='dependencies')
+    shutil.rmtree(stage / 'share/source')
 
 payload = artifacts / f'auth-{target}.tar.gz'
 with tarfile.open(payload, 'w:gz') as archive:
