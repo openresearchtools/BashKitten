@@ -37,7 +37,9 @@ jobs:
           filter: blob:none
           sparse-checkout-cone-mode: false
           sparse-checkout: |
-            /agent/localai/
+            /agent/localai/upstreams.json
+            /agent/localai/build/releases.py
+            /agent/localai/build/vad/
             /agent/packaging/*.py
       - name: Check official stable engine and Silero releases
         id: available
@@ -74,10 +76,6 @@ jobs:
   runtimes:
     needs: pins
     if: needs.pins.outputs.build == 'true'
-    strategy:
-      fail-fast: false
-      max-parallel: 6
-      matrix: ${{ fromJSON(needs.pins.outputs.matrix) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     permissions:
@@ -95,8 +93,24 @@ jobs:
       - name: Run the independent architecture builder
         env:
           GH_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}
-          ENGINE: ${{ matrix.engine }}
-          TARGET: ${{ matrix.target }}
-          BACKEND: ${{ matrix.backend }}
+          LOCALAI_VARIANTS: ${{ needs.pins.outputs.matrix }}
         run: |
-          python3 agent/packaging/localai.py dispatch --engine "$ENGINE" --target "$TARGET" --backend "$BACKEND" --directory "$RUNNER_TEMP/localai"
+          python3 - <<'PY'
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+          import importlib.util, json, os
+          spec = importlib.util.spec_from_file_location('localai', 'agent/packaging/localai.py')
+          owner = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(owner)
+          failures = []
+          variants = json.loads(os.environ['LOCALAI_VARIANTS'])['include']
+          with ThreadPoolExecutor(max_workers=6) as workers:
+              tasks = {workers.submit(owner.dispatch, item['engine'], item['target'], item['backend']): item
+                       for item in variants}
+              for task in as_completed(tasks):
+                  try:
+                      task.result()
+                  except Exception as error:
+                      failures.append(str(tasks[task]) + ': ' + str(error))
+          if failures:
+              raise RuntimeError('; '.join(failures))
+          PY

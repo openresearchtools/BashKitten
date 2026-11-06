@@ -35,7 +35,7 @@ jobs:
           sparse-checkout-cone-mode: false
           sparse-checkout: |
             /LICENSE
-            /agent/localai/
+            /agent/localai/upstreams.json
             /agent/packaging/*.py
       - name: Select this builder's native target
         working-directory: source
@@ -55,7 +55,9 @@ jobs:
       - name: Verify the exact official upstream tag before compilation
         if: steps.plan.outputs.build == 'true'
         working-directory: source
-        run: python3 agent/localai/build/releases.py --verify "$ENGINE"
+        run: |
+          git sparse-checkout add --no-cone /agent/localai/
+          python3 agent/localai/build/releases.py --verify "$ENGINE"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         if: steps.plan.outputs.build == 'true'
         with:
