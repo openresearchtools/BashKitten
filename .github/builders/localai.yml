@@ -56,7 +56,7 @@ jobs:
         if: steps.plan.outputs.build == 'true'
         working-directory: source
         run: |
-          git sparse-checkout add --no-cone /agent/localai/
+          git sparse-checkout add /agent/localai/
           python3 agent/localai/build/releases.py --verify "$ENGINE"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         if: steps.plan.outputs.build == 'true'
