@@ -137,7 +137,7 @@ export async function renderSection({ root: parent, call: control, info, signal 
   };
   const drawLlamaAdvanced = section => {
     const custom = check(section, 'Use a custom router INI', liveState.guided?.llama?.mode === 'custom');
-    section.append(node('p', 'Custom mode uses your INI and disables the guided chat model, device, context and reasoning controls. You or your agent can edit the file. Speech settings remain independent.'));
+    section.append(node('p', 'Custom mode uses your INI and disables the guided chat model, device, context, reasoning and cache controls. You or your agent can edit the file. Speech settings remain independent.'));
     const controls = node('div'), path = node('p'), status = node('p');
     status.setAttribute('role', 'status'); section.append(controls, status); controls.append(path);
     const update = latest => {
@@ -193,6 +193,8 @@ export async function renderSection({ root: parent, call: control, info, signal 
   };
   const drawGuided = root => {
     const pickers = new Map(), views = new Map();
+    const cacheSelection = current => ({ cacheTypeK: current.pending?.cacheTypeK ?? current.cache?.selected?.k,
+      cacheTypeV: current.pending?.cacheTypeV ?? current.cache?.selected?.v });
     root.append(node('p', 'Choose a model to download and use it. Required runtimes and matching model assets are handled automatically.'));
     for (const [engine, title] of [['llama', 'Chat and images'], ['whisper', 'Speech recognition'], ['tts', 'Voice']]) {
       const section = node('section'); section.className = 'connection-card'; section.append(node('h3', title)); root.append(section);
@@ -203,7 +205,9 @@ export async function renderSection({ root: parent, call: control, info, signal 
           const current = liveState.guided?.[engine]; if (!current) throw Error('Refresh Local AI settings before choosing a model.');
           if (current.mode === 'custom') throw Error('Turn off custom router INI in Advanced to use guided models.');
           followJob(await call('localai-guided-select', { engine, id, device: current.device || 'cpu',
-            ...(engine === 'llama' ? { contextSize: current.context?.selected, thinking: id === current.selected ? current.pending?.thinking ?? current.reasoning?.selected : undefined } : {}), revision: liveState.guided.revision }));
+            ...(engine === 'llama' ? { contextSize: current.context?.selected, thinking: id === current.selected ? current.pending?.thinking ?? current.reasoning?.selected : undefined,
+              ...(id === current.selected ? cacheSelection(current) : {}) } : {}), revision: liveState.guided.revision }));
+          if (id !== current.selected) cacheDirty = false;
           const latest = await call('localai-status'); if (!active()) return; liveState = latest; refreshGuided?.(latest); await refreshDownloads?.();
         });
       } });
@@ -216,11 +220,11 @@ export async function renderSection({ root: parent, call: control, info, signal 
         if (!current || busy || current.mode === 'custom') return;
         void run(async () => {
           followJob(await call('localai-guided-select', { engine, id: current.pending?.id || current.selected, device: target,
-            ...(engine === 'llama' ? { contextSize: current.pending?.contextSize ?? current.context?.selected, thinking: current.pending?.thinking ?? current.reasoning?.selected } : {}), revision: liveState.guided.revision }));
+            ...(engine === 'llama' ? { contextSize: current.pending?.contextSize ?? current.context?.selected, thinking: current.pending?.thinking ?? current.reasoning?.selected, ...cacheSelection(current) } : {}), revision: liveState.guided.revision }));
           const latest = await call('localai-status'); if (!active()) return; liveState = latest; refreshGuided?.(latest); await refreshDownloads?.();
         });
       };
-      let context, contextLimit, applyContext, thinking, thinkingNote, autoSend, contextDirty = false;
+      let context, contextLimit, applyContext, thinking, thinkingNote, cacheK, cacheV, cacheNote, applyCache, autoSend, contextDirty = false, cacheDirty = false;
       if (engine === 'llama') {
         context = field(section, 'Context size (tokens)'); context.type = 'number'; context.min = '1'; context.step = '1';
         contextLimit = node('p'); section.append(contextLimit);
@@ -230,7 +234,7 @@ export async function renderSection({ root: parent, call: control, info, signal 
           if (!current || current.mode === 'custom') throw Error('Use the custom router below to change its context.');
           if (!context.reportValidity()) return;
           const submitted = context.value, contextSize = Number(submitted); if (!Number.isSafeInteger(contextSize) || contextSize < 1) throw Error('Enter a whole number of context tokens.');
-          followJob(await call('localai-guided-select', { engine, id: current.pending?.id || current.selected, device: current.pending?.device || current.device || 'cpu', contextSize, thinking: current.pending?.thinking ?? current.reasoning?.selected, revision: liveState.guided.revision }));
+          followJob(await call('localai-guided-select', { engine, id: current.pending?.id || current.selected, device: current.pending?.device || current.device || 'cpu', contextSize, thinking: current.pending?.thinking ?? current.reasoning?.selected, ...cacheSelection(current), revision: liveState.guided.revision }));
           if (context.value === submitted) contextDirty = false;
           const latest = await call('localai-status'); if (!active()) return; liveState = latest; refreshGuided?.(latest); await refreshDownloads?.();
         });
@@ -242,11 +246,26 @@ export async function renderSection({ root: parent, call: control, info, signal 
           if (!current || busy || current.mode === 'custom') return;
           void run(async () => {
             followJob(await call('localai-guided-select', { engine, id: current.pending?.id || current.selected, device: current.pending?.device || current.device || 'cpu',
-              contextSize: current.pending?.contextSize ?? current.context?.selected, thinking: target, revision: liveState.guided.revision }));
+              contextSize: current.pending?.contextSize ?? current.context?.selected, thinking: target, ...cacheSelection(current), revision: liveState.guided.revision }));
             const latest = await call('localai-status'); if (!active()) return; liveState = latest; refreshGuided?.(latest); await refreshDownloads?.();
           });
         };
         const advanced = node('details'); advanced.append(node('summary', 'Advanced')); section.append(advanced);
+        cacheK = select(advanced, 'Key cache type (K)', [], '');
+        cacheV = select(advanced, 'Value cache type (V)', [], '');
+        cacheK.onchange = cacheV.onchange = () => { cacheDirty = true; };
+        cacheNote = node('p'); advanced.append(cacheNote);
+        applyCache = button('Apply cache types', async () => {
+          const current = liveState.guided?.llama;
+          if (!current || current.mode === 'custom') throw Error('Use the custom router INI to change its cache types.');
+          const selectedK = cacheK.value, selectedV = cacheV.value;
+          followJob(await call('localai-guided-select', { engine, id: current.pending?.id || current.selected,
+            device: current.pending?.device || current.device || 'cpu', contextSize: current.pending?.contextSize ?? current.context?.selected,
+            thinking: current.pending?.thinking ?? current.reasoning?.selected, cacheTypeK: selectedK, cacheTypeV: selectedV, revision: liveState.guided.revision }));
+          if (cacheK.value === selectedK && cacheV.value === selectedV) cacheDirty = false;
+          const latest = await call('localai-status'); if (!active()) return; liveState = latest; refreshGuided?.(latest);
+        });
+        advanced.append(applyCache);
         drawLlamaAdvanced(advanced);
       }
       if (engine === 'tts') section.append(node('p', 'The default Pocket voice speaks English.'));
@@ -263,7 +282,7 @@ export async function renderSection({ root: parent, call: control, info, signal 
         };
         section.append(node('p', 'Calls always read your words back and ask you to confirm before sending.'));
       }
-      views.set(engine, { status, device, deviceNote, context, contextLimit, applyContext, thinking, thinkingNote, autoSend, contextEdited: () => contextDirty });
+      views.set(engine, { status, device, deviceNote, context, contextLimit, applyContext, thinking, thinkingNote, cacheK, cacheV, cacheNote, applyCache, autoSend, contextEdited: () => contextDirty, cacheEdited: () => cacheDirty });
     }
     const update = latest => {
       if (!active() || !root.isConnected) return;
@@ -301,6 +320,21 @@ export async function renderSection({ root: parent, call: control, info, signal 
           view.thinking.value = current.pending?.thinking ?? reasoning?.selected ?? 'auto';
           view.thinking.disabled = custom || busy || reasoning?.available !== true;
           view.thinkingNote.textContent = custom ? 'Reasoning is controlled by your custom router below.' : reasoning?.detail || 'Reasoning controls are checked from the loaded model’s native template.';
+        }
+        if (view.cacheK) {
+          for (const [side, input] of [['k', view.cacheK], ['v', view.cacheV]]) {
+            const selected = view.cacheEdited() ? input.value : current.pending?.[side === 'k' ? 'cacheTypeK' : 'cacheTypeV'] ?? current.cache?.selected?.[side] ?? '';
+            const formats = current.cache?.types?.[side] || [], choices = [...formats];
+            if (selected && !choices.includes(selected)) choices.push(selected);
+            const revision = JSON.stringify(choices);
+            if (input.dataset.choices !== revision) {
+              input.replaceChildren(...choices.map(type => { const option = node('option', type.toUpperCase() + (formats.includes(type) ? '' : ' (saved; unavailable)')); option.value = type; option.disabled = !formats.includes(type); return option; }));
+              input.dataset.choices = revision;
+            }
+            input.value = selected; input.disabled = custom || busy || !current.cache?.available;
+          }
+          view.applyCache.disabled = custom || busy || !current.cache?.available;
+          view.cacheNote.textContent = custom ? 'Cache types are controlled by your custom router INI.' : current.cache?.detail || 'Download llama.cpp to list its native cache types.';
         }
         const pending = current.pending;
         view.status.textContent = [custom ? 'Custom router INI is active. Turn it off in Advanced to use guided models.' : '',

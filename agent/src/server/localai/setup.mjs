@@ -109,9 +109,9 @@ export class FirstRunLocalAI {
       const pending = job?.kind === 'localai-guided-select' && job.input.engine === engine;
       result[engine] = { selected, device, mode: engine !== 'llama' || owned || empty && !config.guided ? 'guided' : 'custom', devices, deviceError: hardware.error,
         presets: catalogue.presets.filter(item => item.engine === engine && item.guided !== false).map(({ id, title, bytes, modelBytes, projectorBytes, downloaded, status, kind, contextLength }) => ({ id, title, bytes, modelBytes, projectorBytes, downloaded, status, kind, contextLength, recommended: id === defaults[engine].id })),
-        pending: pending && !['complete', 'failed', 'cancelled', 'interrupted'].includes(job.status) ? { id: job.input.id, device: job.input.device, contextSize: job.input.contextSize, thinking: job.input.thinking, status: job.status } : null,
+        pending: pending && !['complete', 'failed', 'cancelled', 'interrupted'].includes(job.status) ? { id: job.input.id, device: job.input.device, contextSize: job.input.contextSize, thinking: job.input.thinking, cacheTypeK: job.input.cacheTypeK, cacheTypeV: job.input.cacheTypeV, status: job.status } : null,
         error: pending && job.error || (engine === 'llama' ? routerError || loadError : ''),
-        ...(engine === 'llama' ? { reasoning: await this.localAI.guidedThinking(selectedModel), context: { selected: selectedModel?.config.contextSize || 65536, max: preset?.contextLength || null,
+        ...(engine === 'llama' ? { reasoning: await this.localAI.guidedThinking(selectedModel), cache: await this.localAI.guidedCache(selectedModel), context: { selected: selectedModel?.config.contextSize || 65536, max: preset?.contextLength || null,
           detail: preset?.contextLength ? 'Model-supported limit from its pinned native configuration. Memory fit uses llama.cpp; a chosen context size remains explicit.' : 'Choose a guided model to see its verified context limit.' },
           images: Boolean(owned && preset?.downloaded && selectedModel?.config.projector &&
             preset.files.some(name => /mmproj/i.test(name) && preset.paths[name] === selectedModel.config.projector)) } : {}) };
@@ -129,6 +129,7 @@ export class FirstRunLocalAI {
     if (!state[engine].devices.some(item => item.id === choice && item.available)) throw Error('The selected device is unavailable; choose an available device.');
     if (engine === 'llama' && input.contextSize !== undefined && (!Number.isSafeInteger(input.contextSize) || input.contextSize < 1 || !preset.contextLength || input.contextSize > preset.contextLength)) throw Error('Choose a context size within this model’s verified limit.');
     if (engine === 'llama' && input.thinking !== undefined && typeof input.thinking !== 'string') throw Error('Choose a listed reasoning setting.');
+    for (const key of ['cacheTypeK', 'cacheTypeV']) if (engine === 'llama' && input[key] !== undefined && (typeof input[key] !== 'string' || !/^[a-z][a-z0-9_]*$/.test(input[key]))) throw Error('Choose native K/V cache formats.');
     const controller = new AbortController(); let currentDownload;
     const check = async () => {
       job.checkCancellation(); if (this.localAI.stopping) throw cancelled('Model setup stopped with Agent.');
@@ -185,7 +186,7 @@ export class FirstRunLocalAI {
       }
       await check(); await job.phase('Selecting ' + preset.title);
       const contextSize = input.contextSize ?? (engine === 'llama' && state.llama.selected === id ? state.llama.context.selected : undefined);
-      await this.localAI.applyGuided({ engine, preset, files, device, revision, contextSize, thinking: input.thinking });
+      await this.localAI.applyGuided({ engine, preset, files, device, revision, contextSize, thinking: input.thinking, cacheTypeK: input.cacheTypeK, cacheTypeV: input.cacheTypeV });
       if (running && !this.localAI.stopping) {
         if (engine === 'llama') await this.localAI.reloadRouterPresets();
         else await this.localAI.action(engine, preset.kind === 'parakeet' ? 'stop' : 'reload');

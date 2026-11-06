@@ -9,6 +9,8 @@ const aliases = {
   gpuLayers: ['gpu-layers', 'n-gpu-layers', 'ngl', 'LLAMA_ARG_N_GPU_LAYERS'], fit: ['fit', 'LLAMA_ARG_FIT'],
   idleMinutes: ['sleep-idle-seconds', 'LLAMA_ARG_SLEEP_IDLE_SECONDS'],
   flashAttention: ['flash-attn', 'fa', 'LLAMA_ARG_FLASH_ATTN'],
+  cacheTypeK: ['cache-type-k', 'ctk', 'LLAMA_ARG_CACHE_TYPE_K'],
+  cacheTypeV: ['cache-type-v', 'ctv', 'LLAMA_ARG_CACHE_TYPE_V'],
   cacheGpu: ['kv-offload', 'kvo', 'no-kv-offload', 'nkvo', 'LLAMA_ARG_KV_OFFLOAD'],
   projectorGpu: ['mmproj-offload', 'no-mmproj-offload', 'LLAMA_ARG_MMPROJ_OFFLOAD'],
   projectorDevice: ['mmproj-device', 'mmdev', 'MTMD_BACKEND_DEVICE'],
@@ -55,6 +57,7 @@ export function parseRouterINI(content) {
       device, gpuLayers: /^(?:all|auto)$/.test(effective.gpuLayers || '') ? effective.gpuLayers : number(effective.gpuLayers, 'auto'),
       fit: boolean(effective.fit, true), idleMinutes: seconds < 0 ? 0 : seconds / 60,
       flashAttention: effective.flashAttention || 'auto', cacheGpu: boolean(effective.cacheGpu, true),
+      cacheTypeK: effective.cacheTypeK || 'f16', cacheTypeV: effective.cacheTypeV || 'f16',
       extra: section.lines.filter(line => { const match = pair(line); return match && !fields.has(match[1]); }).join(eol),
     } };
   });
@@ -72,6 +75,8 @@ export async function modelValues(config) {
   if (!text(config.device) || !/^(?:|none|(?:CUDA|Vulkan)\d+(?:,(?:CUDA|Vulkan)\d+)*)$/.test(config.device)) throw Error('Choose CPU or an actual llama.cpp GPU device');
   if (!['all', 'auto'].includes(config.gpuLayers) && (!Number.isSafeInteger(config.gpuLayers) || config.gpuLayers < 0)) throw Error('GPU layers must be all, auto or a non-negative integer');
   if (typeof config.fit !== 'boolean' || typeof config.cacheGpu !== 'boolean' || !['on', 'off', 'auto'].includes(config.flashAttention)) throw Error('Choose fit, KV offload and flash-attention settings');
+  for (const type of [config.cacheTypeK ?? 'f16', config.cacheTypeV ?? 'f16']) if (!text(type) || !/^[a-z][a-z0-9_]*$/.test(type)) throw Error('Choose native K and V cache data types');
+  if (config.flashAttention === 'off' && !['f32', 'f16', 'bf16'].includes(config.cacheTypeV ?? 'f16')) throw Error('Quantized V cache requires Flash Attention; choose Auto or On');
   if (!Number.isFinite(config.idleMinutes) || config.idleMinutes < 0 || !Number.isSafeInteger(config.idleMinutes * 60) || config.idleMinutes * 60 > 2147483) throw Error('Use whole seconds expressed in minutes, up to 2147483 seconds (the engine’s supported range); 0 is indefinite');
   if (typeof config.extra !== 'string' || config.extra.includes('\0')) throw Error('Extra parameters must be INI key=value lines');
   const extra = [];
@@ -88,6 +93,7 @@ export async function modelValues(config) {
     gpuLayers: cpu ? 0 : config.gpuLayers, fit: config.fit ? 'on' : 'off',
     idleMinutes: config.idleMinutes === 0 ? -1 : config.idleMinutes * 60,
     flashAttention: config.flashAttention, cacheGpu: cpu ? 'false' : String(config.cacheGpu), projectorGpu: cpu ? 'false' : 'true', projectorDevice: cpu ? 'none' : config.device.split(',')[0] || null,
+    cacheTypeK: config.cacheTypeK ?? 'f16', cacheTypeV: config.cacheTypeV ?? 'f16',
   }, extra };
 }
 
@@ -96,8 +102,9 @@ export async function updateRouterModel(content, { name, originalName, config })
   const parsed = parseRouterINI(content), old = originalName ? parsed.sections.find(section => section.name === originalName) : null;
   if (originalName && !old) throw Error('The original model section no longer exists');
   if (parsed.sections.some(section => section !== old && section.name && routerModelId(section.name) === routerModelId(name))) throw Error('That router model name already exists');
-  const { values, extra } = await modelValues(config), written = new Set(), lines = [];
   const previous = parsed.models.find(model => model.name === originalName)?.config;
+  config = { ...config, cacheTypeK: config.cacheTypeK ?? previous?.cacheTypeK ?? 'f16', cacheTypeV: config.cacheTypeV ?? previous?.cacheTypeV ?? 'f16' };
+  const { values, extra } = await modelValues(config), written = new Set(), lines = [];
   const changed = new Set(Object.keys(values).filter(field => !previous ||
     (['projectorGpu', 'projectorDevice'].includes(field) ? previous.device !== config.device : previous[field] !== config[field])));
   if (changed.has('device') && !config.device && (parsed.sections.find(section => section.name === '*')?.lines || [])

@@ -8,7 +8,7 @@ import net from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { dataDir, readJson, writeJson, privateDir, digest } from '../common.mjs';
 import { syncManagedProvider, discoverManagedModels } from '../rpc/managed-provider.mjs';
-import { localAIDir, runtimeDirectory, requireLocalRuntime, runtimeInfo, describeRuntime, runtimeRecordAttribution, formatRuntimeLicenses, checkRuntime, installRuntime, validateBinary, managedRuntimeEnvironment, listRuntimeDevices } from './runtimes.mjs';
+import { localAIDir, runtimeDirectory, requireLocalRuntime, runtimeInfo, describeRuntime, runtimeRecordAttribution, formatRuntimeLicenses, checkRuntime, installRuntime, validateBinary, managedRuntimeEnvironment, listRuntimeDevices, runtimeCacheTypes } from './runtimes.mjs';
 import { platform } from '../platform/index.mjs';
 import { launchInference, ttsCpuArguments, runtimeDevice } from './launch.mjs';
 import { parseRouterINI, updateRouterModel, isolatedPreset, routerModelId, browseBackend, verifyTestConfiguration } from './router-models.mjs';
@@ -19,7 +19,7 @@ const configFile = path.join(localAIDir, 'config.json');
 const ids = { llama: 'localai-llama', whisper: 'localai-whisper' };
 // Stock Pi keeps 20k recent tokens for compaction and reserves 4k for safety.
 const defaultContextSize = 65536;
-const guidedCache = 'cache-type-k = q8_0\ncache-type-v = q8_0';
+const guidedCache = { cacheTypeK: 'q8_0', cacheTypeV: 'q8_0' };
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const defaults = engine => ({ mode: 'managed', binary: '', backend: platform === 'termux' ? 'cpu' : 'auto', port: 0, argv: [], cwd: os.homedir(), env: {},
   ...(engine === 'llama' ? { preset: path.join(localAIDir, 'router.ini'), startup: false, importToPi: true, keyFile: '' } : engine === 'tts' ? { model: '', projector: '', voice: '', language: 'en', modelKind: 'pocket', cpuThreads: 0 } : { model: '', modelKind: 'whisper', startup: false, keepRunning: false, autoSend: true }) });
@@ -210,7 +210,21 @@ export class LocalAI {
     if (selected !== 'auto' && !choices.some(choice => choice.id === selected)) choices.push({ id: selected, label: selected + ' (saved; unavailable)' });
     return { selected, levels: [automatic, ...choices], available: Boolean(capabilities), detail };
   }
-  async applyGuided({ engine, preset, files, device, revision, contextSize = defaultContextSize, thinking }) { return this.exclusive(async () => {
+  async guidedCache(model) {
+    const selected = { k: model?.config.cacheTypeK ?? guidedCache.cacheTypeK, v: model?.config.cacheTypeV ?? guidedCache.cacheTypeV };
+    const runtime = await runtimeInfo('llama');
+    try {
+      if (!runtime?.binary) throw Error('Download llama.cpp to list its native K/V cache formats.');
+      this.cacheTypeChecks ||= new Map();
+      if (!this.cacheTypeChecks.has(runtime.binary)) this.cacheTypeChecks.set(runtime.binary, runtimeCacheTypes(runtime.binary));
+      const types = await this.cacheTypeChecks.get(runtime.binary);
+      return { selected, types, available: true, detail: 'Formats reported by the installed llama.cpp. Quantized V needs Flash Attention; the model and selected device must support the chosen pair.' };
+    } catch (error) {
+      this.cacheTypeChecks?.delete(runtime?.binary);
+      return { selected, types: { k: [], v: [] }, available: false, detail: error.message };
+    }
+  }
+  async applyGuided({ engine, preset, files, device, revision, contextSize = defaultContextSize, thinking, cacheTypeK, cacheTypeV }) { return this.exclusive(async () => {
     const snapshot = await this.guidedSnapshot();
     if (snapshot.revision !== revision) throw Error('Local AI or its router INI changed. Your choices were kept; select the model again.');
     const saved = structuredClone(snapshot.config), next = { ...saved[engine], mode: 'managed', backend: device?.backend || 'cpu', argv: [], env: {} };
@@ -223,13 +237,18 @@ export class LocalAI {
       // provider or silent Pi model retargeting accompanies this selection.
       const previous = snapshot.owned.llama ? snapshot.ini.content : `# Taskarian guided models. Editing this file switches to Advanced.\n[*]\nctx-size = ${defaultContextSize}\n`;
       const existing = parseRouterINI(previous).models.find(model => model.name === name);
-      const previousExtra = existing?.config.extra || guidedCache;
+      const previousExtra = existing?.config.extra || '';
+      const cache = { cacheTypeK: cacheTypeK ?? existing?.config.cacheTypeK ?? guidedCache.cacheTypeK,
+        cacheTypeV: cacheTypeV ?? existing?.config.cacheTypeV ?? guidedCache.cacheTypeV };
+      const supportedCache = await this.guidedCache(existing);
+      if (!supportedCache.available) throw Error(supportedCache.detail);
+      if (!supportedCache.types.k.includes(cache.cacheTypeK) || !supportedCache.types.v.includes(cache.cacheTypeV)) throw Error('Choose K/V cache formats reported by the installed llama.cpp');
       const extra = thinkingParameters(previousExtra, thinking,
         thinking && thinking !== 'auto' && thinking !== thinkingSelection(previousExtra) ? await this.thinkingCapabilities(existing) : null);
       const content = await updateRouterModel(previous, {
         name, ...(existing ? { originalName: name } : {}), config: { model: files.model, projector: files.projector, contextSize,
           device: device?.id || 'none', gpuLayers: device ? 'all' : 0, fit: true, idleMinutes: 5,
-          cacheGpu: Boolean(device), flashAttention: 'auto', extra } });
+          cacheGpu: Boolean(device), flashAttention: 'auto', ...cache, extra } });
       // A custom file remains available at its original path. Returning to
       // guided setup selects a new ordinary INI through the existing owner.
       next.preset = snapshot.owned.llama ? snapshot.ini.file : path.join(localAIDir, 'guided-' + randomUUID() + '.ini');
@@ -557,7 +576,7 @@ export class LocalAI {
     for (const file of [files.llama.model, files.llama.projector, files.tts.model, files.tts.projector, files.tts.voice]) await fs.access(file);
     const name = path.basename(files.llama.model).replace(/\.gguf$/i, '');
     const content = await updateRouterModel(ini.content, { name, config: { model: files.llama.model, projector: files.llama.projector,
-      contextSize: Math.min(files.llama.contextLength || defaultContextSize, defaultContextSize), device: 'none', gpuLayers: 0, fit: true, idleMinutes: 5, cacheGpu: false, flashAttention: 'auto', extra: guidedCache } });
+      contextSize: Math.min(files.llama.contextLength || defaultContextSize, defaultContextSize), device: 'none', gpuLayers: 0, fit: true, idleMinutes: 5, cacheGpu: false, flashAttention: 'auto', ...guidedCache, extra: '' } });
     config.llama = configuration('llama', { ...config.llama, backend: 'cpu', startup: true, importToPi: true });
     config.whisper = configuration('whisper', { ...config.whisper, backend: 'cpu', model: files.whisper.model, modelKind: files.whisper.kind, startup: false, keepRunning: false });
     config.tts = configuration('tts', { ...config.tts, backend: 'cpu', model: files.tts.model, projector: files.tts.projector, voice: files.tts.voice, modelKind: files.tts.kind });

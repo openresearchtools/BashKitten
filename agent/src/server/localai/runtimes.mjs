@@ -11,23 +11,30 @@ import { dataDir, privateDir, readJson, writeJson } from '../common.mjs';
 import { platform } from '../platform/index.mjs';
 import { engineEnvironment } from './environment.mjs';
 
-const exec = promisify(execFile), repository = 'openresearchtools/taskarian-localai';
+const exec = promisify(execFile), buildRepository = 'openresearchtools/Taskarian';
 export const localAIDir = path.join(dataDir, 'localai');
 export const runtimeDirectory = path.join(localAIDir, 'runtimes');
 const arch = { x64: 'amd64', arm64: 'arm64' }[process.arch];
 const runtimeOS = platform === 'termux' ? 'android' : 'linux';
+const repository = 'openresearchtools/taskarian-build-' + (runtimeOS === 'android'
+  ? arch === 'arm64' ? 'android' : 'android-x86_64' : arch);
 const executable = engine => engine === 'llama' ? 'llama-server' : 'whisper-server';
 const engineName = engine => { if (!['llama', 'whisper'].includes(engine)) throw Error('Unknown LocalAI engine'); return engine; };
 export function requireLocalRuntime() { if (!arch) throw Error('LocalAI requires an x86_64 or ARM64 native runtime'); }
 export async function runtimeInfo(engine) { return readJson(path.join(runtimeDirectory, engineName(engine) + '.json'), null); }
 export function runtimeRecordAttribution(runtime, source) {
   const name = engineName(runtime.engine) === 'llama' ? 'llama.cpp' : 'whisper.cpp';
-  const original = `https://github.com/ggml-org/${name}`, buildRepository = `https://github.com/${repository}`;
+  const original = `https://github.com/ggml-org/${name}`;
+  const recipe = `https://github.com/${buildRepository}/tree/${runtime.builderCommit}/agent/localai`;
+  // Installed historical records remain readable; no request uses this retired repository.
+  const historicalRecipe = `https://github.com/openresearchtools/taskarian-localai/tree/${runtime.builderCommit}`;
   if (source.repository !== original || source.commit !== runtime.sourceCommit || !/^[a-f0-9]{40}$/.test(source.commit || '') ||
-      source.build !== `${buildRepository}/tree/${runtime.builderCommit}` || !/^[a-f0-9]{40}$/.test(runtime.builderCommit || '') ||
+      ![recipe, historicalRecipe].includes(source.build) || !/^[a-f0-9]{40}$/.test(runtime.builderCommit || '') ||
       source.upstreamRelease && (source.upstreamRelease.commit !== source.commit || source.upstreamRelease.tag !== runtime.upstreamVersion)) throw Error('Installed runtime source records do not match');
   return { name, version: runtime.upstreamVersion || null, commit: source.commit, repository: original,
-    buildRepository, buildCommit: runtime.builderCommit, release: source.release || null, download: runtime.download || null };
+    buildRepository: source.build === recipe ? `https://github.com/${buildRepository}` : historicalRecipe.split('/tree/')[0],
+    buildCommit: runtime.builderCommit, release: source.release || null, download: runtime.download || null,
+    sourceArchive: runtime.sourceDownload || source.sourceArchive || null };
 }
 export function formatRuntimeLicenses(content, name) {
   const headings = [...content.matchAll(/^===== (.+) =====\r?$/gm)], upstream = [], dependencies = [], packaging = [];
@@ -77,62 +84,80 @@ export async function preferredBackend(choice) {
       exec('nvidia-smi', ['--query-gpu=driver_version,name', '--format=csv,noheader'], { timeout: 10000 }),
       exec('/sbin/ldconfig', ['-p'], { timeout: 10000 }),
     ]);
-    if (driver.split('\n').some(line => parseInt(line, 10) >= 580) && ['libcuda.so.1', 'libcudart.so.13', 'libcublas.so.13'].every(name => libraries.includes(name))) return 'cuda';
+    if (driver.split('\n').some(line => parseInt(line, 10) >= 525) && libraries.includes('libcuda.so.1')) return 'cuda';
   } catch {}
   return 'vulkan';
 }
 function downloadURL(value) {
   const url = new URL(value);
-  if (url.protocol !== 'https:' || url.username || url.password || url.hostname !== 'github.com' || !url.pathname.startsWith('/' + repository + '/releases/download/')) throw Error('Invalid LocalAI artifact URL');
+  if (url.protocol !== 'https:' || url.username || url.password || url.host !== 'github.com' || url.search || url.hash || !url.pathname.startsWith('/' + repository + '/releases/download/')) throw Error('Invalid LocalAI artifact URL');
   return url;
 }
-async function github(route) {
-  const response = await fetch('https://api.github.com/repos/' + repository + route, { headers: { Accept: 'application/vnd.github+json' }, redirect: 'error', signal: AbortSignal.timeout(30000) });
-  if (!response.ok) throw Error(`Runtime catalogue returned HTTP ${response.status}`);
-  return response.json();
+function releaseArtifact(file, value, release) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*\.tar\.gz$/.test(file || '')) throw Error('Invalid LocalAI archive filename');
+  const expected = `https://github.com/${repository}/releases/download/${release}/${file}`;
+  const url = downloadURL(value || expected);
+  if (url.href !== expected) throw Error('Runtime archive release or filename differs');
+  return url.href;
 }
-async function releaseManifest(engine) {
-  const releases = await github('/releases?per_page=100');
-  // Android's native CPU/Vulkan releases are independent of the Linux CUDA
-  // matrix. A mobile publication must not replace desktop's runtime catalogue.
-  const prefix = (runtimeOS === 'android' ? 'android-' : '') + engine + '-';
-  // GitHub's release list order can differ from publication order for tags.
-  const release = releases.filter(item => !item.draft && item.tag_name.startsWith(prefix) && /^.+-r[1-9][0-9]*$/.test(item.tag_name.slice(prefix.length)) && item.assets.some(asset => asset.name === 'manifest.json'))
-    .sort((a, b) => Date.parse(b.published_at || b.created_at) - Date.parse(a.published_at || a.created_at))[0];
-  if (!release) throw Error(`No ${runtimeOS} ${engine} runtime built from an upstream release is published yet`);
-  const asset = release.assets.find(asset => asset.name === 'manifest.json');
-  const response = await fetch(downloadURL(asset.browser_download_url), { signal: AbortSignal.timeout(30000) });
+async function releaseManifest(engine, backend) {
+  const index = `https://raw.githubusercontent.com/${repository}/main/localai/${runtimeOS}/${arch}/${backend}/${engine}.json`;
+  const indexed = await fetch(index + '?taskarian=' + Date.now(), { headers: { 'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(30000) });
+  if (!indexed.ok) throw Error(`Runtime catalogue returned HTTP ${indexed.status}`);
+  const pointer = await indexed.json();
+  if (pointer.version !== 1 || pointer.repository !== repository || !/^[A-Za-z0-9._-]+$/.test(pointer.release || '') ||
+      !/^[a-f0-9]{64}$/.test(pointer.manifestSHA256 || '')) throw Error('Invalid LocalAI runtime catalogue');
+  const manifestURL = downloadURL(pointer.manifest);
+  if (manifestURL.pathname !== `/${repository}/releases/download/${pointer.release}/manifest.json`) throw Error('Runtime manifest release differs from its catalogue');
+  const response = await fetch(manifestURL, { signal: AbortSignal.timeout(30000) });
   if (!response.ok) throw Error(`Runtime manifest returned HTTP ${response.status}`);
-  const manifest = await response.json();
-  if (manifest.version !== 1 || manifest.engine !== engine || !/^[a-f0-9]{40}$/.test(manifest.sourceCommit) || !Array.isArray(manifest.artifacts) || manifest.release !== release.tag_name) throw Error('Invalid LocalAI runtime manifest');
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (createHash('sha256').update(bytes).digest('hex') !== pointer.manifestSHA256) throw Error('Runtime manifest checksum mismatch');
+  const manifest = JSON.parse(bytes.toString('utf8'));
+  if (manifest.version !== 1 || manifest.engine !== engine || !/^[a-f0-9]{40}$/.test(manifest.sourceCommit) || !Array.isArray(manifest.artifacts) || manifest.release !== pointer.release) throw Error('Invalid LocalAI runtime manifest');
   const upstream = manifest.upstreamRelease, upstreamRepo = engine === 'llama' ? 'llama.cpp' : 'whisper.cpp';
   if (!upstream || !/^[A-Za-z0-9._-]+$/.test(upstream.tag || '') || upstream.commit !== manifest.sourceCommit
       || !/^[a-f0-9]{40}$/.test(upstream.tagObject || '') || !Number.isSafeInteger(upstream.releaseId) || upstream.releaseId <= 0
       || upstream.url !== `https://github.com/ggml-org/${upstreamRepo}/releases/tag/${upstream.tag}`
       || manifest.upstreamVersion !== upstream.tag || !Number.isSafeInteger(manifest.packageRevision) || manifest.packageRevision < 1
-      || release.tag_name !== `${prefix}${upstream.tag}-r${manifest.packageRevision}`) throw Error('Runtime metadata does not identify an exact upstream release');
-  return { manifest, release };
+      || pointer.release !== `localai-${engine}-${runtimeOS}-${arch}-${backend}-${upstream.tag}-r${manifest.packageRevision}`) throw Error('Runtime metadata does not identify an exact upstream release');
+  return { manifest, release: pointer.release };
 }
 export async function checkRuntime(engine, config) {
   requireLocalRuntime(); engineName(engine);
   if (config.mode === 'custom') return { custom: true, binary: config.binary, updateAvailable: false };
-  const { manifest, release } = await releaseManifest(engine);
   const backend = await preferredBackend(config.backend);
+  const { manifest, release } = await releaseManifest(engine, backend);
   const artifact = manifest.artifacts.find(item => item.os === runtimeOS && item.arch === arch && item.backend === backend);
   if (!artifact || !/^[a-f0-9]{64}$/.test(artifact.sha256) || artifact.executable !== executable(engine)) throw Error(`No matching ${runtimeOS} ${arch} ${backend} runtime`);
   if (artifact.capabilities?.cpu !== true || !Array.isArray(artifact.capabilities.executionBackends) || !artifact.capabilities.executionBackends.includes('cpu') || !artifact.capabilities.executionBackends.includes(backend)) throw Error('The runtime archive does not support the requested CPU/GPU execution modes');
   if (runtimeOS === 'android' && engine === 'llama' && (artifact.capabilities?.router !== true || artifact.capabilities?.subprocess !== true)) throw Error('The published Android llama.cpp runtime lacks required router subprocess support; check for an updated release');
-  const asset = release.assets.find(item => item.name === artifact.file);
-  if (!asset) throw Error('The runtime archive is missing');
+  const url = releaseArtifact(artifact.file, artifact.url, release);
+  if (!/^[a-f0-9]{64}$/.test(artifact.sourceSHA256 || '') || !artifact.sourceFile) throw Error('Runtime corresponding-source metadata is missing');
+  const sourceUrl = releaseArtifact(artifact.sourceFile, artifact.sourceUrl, release);
+  if (backend === 'cuda' && (!/^12\./.test(artifact.cudaRequirements?.toolkit || '') ||
+      ['libcudart.so.12', 'libcublas.so.12', 'libcublasLt.so.12'].some(name => !/^[a-f0-9]{64}$/.test(artifact.cudaRequirements?.bundled?.[name]?.sha256 || '')))) throw Error('The CUDA runtime must bundle its CUDA 12 runtime and cuBLAS libraries');
   const installed = await runtimeInfo(engine);
-  return { version: `${manifest.upstreamVersion} · r${manifest.packageRevision}`, upstreamRelease: manifest.upstreamRelease, packageRevision: manifest.packageRevision, sourceCommit: manifest.sourceCommit, release: release.tag_name,
-    backend: engine !== 'llama' && config.backend === 'cpu' ? 'cpu' : backend, packageBackend: backend, artifact: { ...artifact, bytes: asset.size, url: downloadURL(asset.browser_download_url).href },
-    updateAvailable: installed?.release !== release.tag_name || installed?.backend !== backend, installed: describeRuntime(installed) };
+  return { version: `${manifest.upstreamVersion} · r${manifest.packageRevision}`, upstreamRelease: manifest.upstreamRelease, packageRevision: manifest.packageRevision, sourceCommit: manifest.sourceCommit, release,
+    backend: engine !== 'llama' && config.backend === 'cpu' ? 'cpu' : backend, packageBackend: backend,
+    artifact: { ...artifact, bytes: artifact.size || artifact.bytes || null, url, sourceUrl },
+    updateAvailable: installed?.release !== release || installed?.backend !== backend, installed: describeRuntime(installed) };
 }
 export async function listRuntimeDevices(binary, environment = {}) {
   const listed = await exec(binary, ['--list-devices'], { env: engineEnvironment(environment), timeout: 30000, maxBuffer: Infinity });
   return [...(listed.stdout + listed.stderr).matchAll(/(CUDA\d+|Vulkan\d+):\s*([^\n]+)/g)]
     .map(([, id, name]) => ({ id, name, label: id + ': ' + name, backend: id.startsWith('CUDA') ? 'cuda' : 'vulkan' }));
+}
+export async function runtimeCacheTypes(binary) {
+  const { stdout, stderr } = await exec(binary, ['--help'], { env: engineEnvironment(managedRuntimeEnvironment(binary, {}, 'cpu')), timeout: 20000, maxBuffer: Infinity });
+  const help = stdout + stderr, result = {};
+  for (const side of ['k', 'v']) {
+    const block = help.match(new RegExp('--cache-type-' + side + '(?=\\s|,|$)[\\s\\S]*?(?=\\n\\s*-[A-Za-z-]|$)'))?.[0];
+    const allowed = block?.match(/allowed values:\s*([\s\S]*?)(?=\(default:|\(env:|$)/)?.[1] || '';
+    result[side] = [...new Set(allowed.split(/[,\s]+/).filter(value => /^[a-z][a-z0-9_]*$/.test(value)))];
+  }
+  if (!result.k.length || !result.v.length) throw Error('The selected llama.cpp does not report its native K/V cache formats');
+  return result;
 }
 export async function validateBinary(engine, filename, backend, environment = {}) {
   requireLocalRuntime(); engineName(engine);
@@ -168,7 +193,7 @@ export async function validateBinary(engine, filename, backend, environment = {}
   const libraries = [...new Set([...linked.stdout.matchAll(/(?:=>\s*)?(\/[^\s]+)\s*\(/g)].map(match => match[1]))];
   if (environment.GGML_BACKEND_PATH) libraries.push(await fs.realpath(environment.GGML_BACKEND_PATH));
   const directory = path.dirname(filename);
-  for (const entry of await fs.readdir(directory)) if (/^lib(?:ggml|llama|whisper|parakeet|mtmd)[^/]*\.so(?:\.[0-9]+)*$/.test(entry)) libraries.push(await fs.realpath(path.join(directory, entry)));
+  for (const entry of await fs.readdir(directory)) if (/^lib(?:ggml|llama|whisper|parakeet|mtmd|cudart|cublas)[^/]*\.so(?:\.[0-9]+)*$/.test(entry)) libraries.push(await fs.realpath(path.join(directory, entry)));
   return { binary: filename, backend: selectedBackend, devices, libraries: [...new Set(libraries)], env: environment };
 }
 export async function installRuntime(job, { engine, config, selection, repair = false }, activate) {
@@ -217,6 +242,7 @@ export async function installRuntime(job, { engine, config, selection, repair = 
     await fs.rename(extracted, destination); inactive = destination;
     const next = { ...record, release: available.release, version: available.version,
       download: { url: artifact.url, file: artifact.file, sha256: artifact.sha256 },
+      sourceDownload: { url: artifact.sourceUrl, file: artifact.sourceFile, sha256: artifact.sourceSHA256 },
       root: destination, binary: path.join(destination, 'bin', executable(engine)), selectedBackend: verified.backend, devices: verified.devices };
     // The owner confirms stopped/idle and the still-saved Managed choice.
     await activate(next, async () => { await writeJson(path.join(runtimeDirectory, engine + '.json'), next); activated = true; });
