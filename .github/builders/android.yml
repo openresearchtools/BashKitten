@@ -364,6 +364,9 @@ jobs:
         python3 agent/packaging/android-components.py restore android-x11 "termux-$TERMUX_ARCH" --wait --directory "$RUNNER_TEMP/android-leaves/x11"
         printf '%s\n' "TASKARIAN_REMOTE_CLIENT_DIR=$RUNNER_TEMP/android-leaves/remote" "TASKARIAN_TOR_ANDROID_DIR=$RUNNER_TEMP/android-leaves/tor" "TASKARIAN_DISPLAY_ANDROID_DIR=$RUNNER_TEMP/android-leaves/x11" >> "$GITHUB_ENV"
         python3 agent/packaging/browser-release.py android-companion "$BROWSER_TARGET" --directory "$RUNNER_TEMP/android-companion"
+    - name: Reuse exact Android dependency sources by permanent reference
+      if: '!inputs.engine_only && (steps.component.outputs.hit != ''true'')'
+      run: python3 agent/packaging/browser-release.py android-sources "$BROWSER_TARGET" --directory "$RUNNER_TEMP/android-leaves/library-source"
     - name: Assemble the release browser
       working-directory: browser
       run: set -o pipefail; ./mach gradle :fenix:assembleRelease --profile 2>&1 | tee ../artifacts/apk-build.log

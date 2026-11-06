@@ -101,6 +101,23 @@ def native_tree(revision):
 
 
 @cache
+def source_finalizer_base(payload):
+    """Source-retention finalization does not compile Gecko or generate JNI."""
+    if b'TASKARIAN_ANDROID_LIBRARY_SOURCE_REFERENCE' not in payload:
+        return payload
+    path = 'browser/mobile/android/fenix/app/build.gradle'
+    baseline = '522a9d8a4e24ae2fdd0b76fd2cc9f98af2ba7190'
+    component.ensure_source(baseline)
+    original = git('show', baseline + ':' + path)
+    start = b"tasks.register('stageTaskarianDependencySources') {\n"
+    end = b"tasks.matching { it.name == 'assembleRelease' }.configureEach {\n    finalizedBy 'stageTaskarianDependencySources'\n}"
+    if payload.count(start) != 1 or payload.count(end) != 1 or original.count(start) != 1 or original.count(end) != 1:
+        raise ValueError('Android source finalizer boundaries differ; retain native inputs for review')
+    first, last = payload.index(start), payload.index(end) + len(end)
+    original_first, original_last = original.index(start), original.index(end) + len(end)
+    return payload[:first] + original[original_first:original_last] + payload[last:]
+
+
 def native_inputs(revision, target, legacy_android_module=False,
                   legacy_fixture_metadata=False, legacy_desktop_resources=False,
                   legacy_artifact_policy=False, legacy_resource_scope=False):
@@ -137,6 +154,11 @@ def native_inputs(revision, target, legacy_android_module=False,
             header, raw_path = entry.split(b'\t', 1)
             mode, kind, _identity = header.split()
             identity = component.blob_identity(component.artifact_policy_base(git('show', revision + ':' + path)))
+            entry = mode + b' ' + kind + b' ' + identity.encode() + b'\t' + raw_path
+        if path == 'browser/mobile/android/fenix/app/build.gradle':
+            header, raw_path = entry.split(b'\t', 1)
+            mode, kind, _identity = header.split()
+            identity = component.blob_identity(source_finalizer_base(git('show', revision + ':' + path)))
             entry = mode + b' ' + kind + b' ' + identity.encode() + b'\t' + raw_path
         entries.append(entry)
     recipe = native_recipe(git('show', revision + ':' + WORKFLOW).decode(), legacy_resource_scope)

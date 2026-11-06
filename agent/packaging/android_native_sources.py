@@ -79,6 +79,38 @@ def license_member(record, payload):
     return data
 
 
+def verify_correspondence(read, *, records=None, source_manifest=None, apk=None):
+    """Check the built Maven/native identities against already retained sources."""
+    records = records if records is not None else [r for r in json.loads(read(INVENTORY)) if r.get('nativeSource')]
+    roots = [record for record in records if 'cargoLock' in record]
+    if not roots:
+        raise ValueError('Missing retained Android native source roots')
+    for record in roots:
+        version_pin = record['versionPin']
+        match = re.search(version_pin['pattern'], read(version_pin['file']).decode())
+        if not match or match[1] != record['mavenCoordinate'].rsplit(':', 1)[1]:
+            raise ValueError('Android Maven/native source version mismatch: ' + record['mavenCoordinate'])
+    if source_manifest is not None:
+        actual = {r['component'] for r in source_manifest}
+        for record in roots:
+            coordinate = record['mavenCoordinate']
+            selected = {value for value in actual if value.rsplit(':', 1)[0] == coordinate.rsplit(':', 1)[0]}
+            if selected != {coordinate}:
+                raise ValueError('Native source differs from resolved Maven dependency: ' + record['mavenCoordinate'])
+    if apk is not None:
+        for record in roots:
+            expected = record['nativeLibraries']
+            matched = set(expected).intersection(apk.namelist())
+            if expected and not matched:
+                raise ValueError('Native source has no corresponding APK library: ' + record['mavenCoordinate'])
+            for name in matched:
+                if hashlib.sha256(apk.read(name)).hexdigest() != expected[name]:
+                    raise ValueError('APK native library differs from pinned Maven release: ' + name)
+    return [{'component': r['mavenCoordinate'], 'commit': r['commit'],
+             'source_sha256': r['sha256'], 'maven_artifact_sha256': r['mavenArtifactSha256']}
+            for r in roots]
+
+
 def collect(read, archive, *, source_manifest=None, apk=None, fetch_source=None):
     """Use one inventory for committed release source and the actual APK output.
 
@@ -93,7 +125,6 @@ def collect(read, archive, *, source_manifest=None, apk=None, fetch_source=None)
                 if r.get('cargoSource', '').startswith('registry+')}
     git = {r['cargoSource']: r for r in records if r.get('cargoSource', '').startswith('git+')}
     files = {r['file'] for r in records}
-    roots = []
     written = set()
 
     def add(record):
@@ -143,7 +174,6 @@ def collect(read, archive, *, source_manifest=None, apk=None, fetch_source=None)
                     raise ValueError('Native release revision mismatch: ' + revision['repository'])
             if 'cargoLock' not in record:
                 continue
-            roots.append(record)
             lock = upstream.extractfile(prefix + record['cargoLock']).read()
             if hashlib.sha256(lock).hexdigest() != record['cargoLockSha256']:
                 raise ValueError('Native Cargo lock mismatch: ' + record['file'])
@@ -164,32 +194,9 @@ def collect(read, archive, *, source_manifest=None, apk=None, fetch_source=None)
             for name in record.get('requiredSources', []):
                 if name not in files:
                     raise ValueError('Missing Android native build input: ' + name)
-            version_pin = record['versionPin']
-            match = re.search(version_pin['pattern'], read(version_pin['file']).decode())
-            if not match or match[1] != record['mavenCoordinate'].rsplit(':', 1)[1]:
-                raise ValueError('Android Maven/native source version mismatch: ' + record['mavenCoordinate'])
-
-    if source_manifest is not None:
-        actual = {r['component'] for r in source_manifest}
-        for record in roots:
-            coordinate = record['mavenCoordinate']
-            selected = {value for value in actual if value.rsplit(':', 1)[0] == coordinate.rsplit(':', 1)[0]}
-            if selected != {coordinate}:
-                raise ValueError('Native source differs from resolved Maven dependency: ' + record['mavenCoordinate'])
-    if apk is not None:
-        for record in roots:
-            expected = record['nativeLibraries']
-            matched = set(expected).intersection(apk.namelist())
-            if expected and not matched:
-                raise ValueError('Native source has no corresponding APK library: ' + record['mavenCoordinate'])
-            for name in matched:
-                if hashlib.sha256(apk.read(name)).hexdigest() != expected[name]:
-                    raise ValueError('APK native library differs from pinned Maven release: ' + name)
     manifest = json.dumps(records, indent=2).encode() + b'\n'
     info = tarfile.TarInfo('android-native-sources/sources.json')
     info.size = len(manifest)
     info.mode = 0o644
     archive.addfile(info, io.BytesIO(manifest))
-    return [{'component': r['mavenCoordinate'], 'commit': r['commit'],
-             'source_sha256': r['sha256'], 'maven_artifact_sha256': r['mavenArtifactSha256']}
-            for r in roots]
+    return verify_correspondence(read, records=records, source_manifest=source_manifest, apk=apk)

@@ -234,6 +234,27 @@ def main():
                 raise ValueError('APK companion update bootstrap checksum mismatch')
             if archive.read(TERMUX_PREPARER_ASSET) != subprocess.check_output(['git', 'show', revision + ':agent/src/server/platform/termux/updates-prepare.py'], cwd=ROOT):
                 raise ValueError('APK bundled-runtime preparation does not match this source')
+            # Published source identities can be checked against the actual APK
+            # without fetching any original source archive.
+            spec = importlib.util.spec_from_file_location('android_source_identity', ROOT / 'agent/packaging/android_native_sources.py')
+            native_sources = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(native_sources)
+            read_source = lambda name: subprocess.check_output(['git', 'show', revision + ':' + name], cwd=ROOT)
+            pins = json.loads(read_source('browser/taskarian/android/sources/sources.json'))
+            components = native_sources.verify_correspondence(read_source,
+                source_manifest=[{'component': item['component']} for item in pins['entries']], apk=archive)
+            if manifest.get('native_source_components') != components:
+                raise ValueError('APK library source provenance differs from its actual native libraries')
+            spec = importlib.util.spec_from_file_location('android_remote_identity', ROOT / 'agent/packaging/android-components.py')
+            android_components = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(android_components)
+            remote = manifest['remote_client']
+            remote_target = 'termux-x86_64' if abi == 'x86_64' else 'termux-aarch64'
+            if (remote.get('architecture') != abi or
+                    hashlib.sha256(archive.read('lib/' + abi + '/libgojni.so')).hexdigest() != remote.get('library_sha256') or
+                    android_components.binary_inputs('android-remote', remote_target, remote['source']) !=
+                    android_components.binary_inputs('android-remote', remote_target, revision)):
+                raise ValueError('APK remote client differs from its original compiled inputs/library')
         if pairing['sourceCommit'] != manifest['source']:
             raise ValueError('APK companion update manifest has a different producing source')
         pairings.append(pairing)

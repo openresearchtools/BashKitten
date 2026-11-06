@@ -7,11 +7,9 @@ import importlib.util
 import json
 import os
 import re
-import shutil
 import struct
 import subprocess
 import sys
-import tarfile
 import zipfile
 
 
@@ -102,11 +100,13 @@ actual_sources = sorted((entry['component'], entry['kind'], entry['file'], entry
                         for entry in source_manifest)
 if actual_sources != expected_sources:
     raise SystemExit('Staged Android dependency sources differ from their committed inventory')
+library_source_path = os.environ.get('TASKARIAN_ANDROID_LIBRARY_SOURCE_REFERENCE')
+library_source = json.loads(Path(library_source_path).read_text()) if library_source_path else None
 for entry in source_manifest:
     name = entry['file']
-    if Path(name).name != name or not (sources / name).is_file():
+    if Path(name).name != name or (not library_source and not (sources / name).is_file()):
         raise SystemExit('Missing Android dependency source: ' + name)
-    if hashlib.sha256((sources / name).read_bytes()).hexdigest() != entry.get('sha256'):
+    if not library_source and hashlib.sha256((sources / name).read_bytes()).hexdigest() != entry.get('sha256'):
         raise SystemExit('Android dependency source differs from its committed pin: ' + name)
 key = Path(os.environ['TASKARIAN_PUBLISHER_KEYSTORE'])
 if not key.is_file():
@@ -215,28 +215,30 @@ remote_components = importlib.util.module_from_spec(remote_spec)
 remote_spec.loader.exec_module(remote_components)
 remote_target = 'termux-x86_64' if abi == 'x86_64' else 'termux-aarch64'
 if (remote_manifest['architecture'] != abi or
-        remote_components.inputs('android-remote', remote_target, remote_manifest['source']) !=
-        remote_components.inputs('android-remote', remote_target, revision)):
+        remote_components.binary_inputs('android-remote', remote_target, remote_manifest['source']) !=
+        remote_components.binary_inputs('android-remote', remote_target, revision)):
     raise SystemExit('Native remote client compiler inputs/architecture do not match the APK')
 with zipfile.ZipFile(destination) as apk:
     if hashlib.sha256(apk.read(f'lib/{abi}/libgojni.so')).hexdigest() != remote_manifest['library_sha256']:
         raise SystemExit('APK remote client differs from its built library')
 manifest['remote_client'] = remote_manifest
-shutil.copy2(remote / 'share/source/remote-client-go.tar.gz', OUT / f'taskarian-remote-client-source_{abi}.tar.gz')
-shutil.copy2(remote / 'taskarian-remote-sources.jar', OUT / f'taskarian-remote-client-java-source_{abi}.jar')
-with tarfile.open(OUT / f'taskarian-android-library-source_{abi}.tar.gz', 'w:gz') as archive:
-    archive.add(sources, arcname='android-library-sources')
-    spec = importlib.util.spec_from_file_location('android_native_sources', ROOT.parent / 'agent/packaging/android_native_sources.py')
-    native_sources = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(native_sources)
-    sys.path.insert(0, str(ROOT.parent / 'agent/packaging'))
-    import source_cache
-    with zipfile.ZipFile(destination) as apk:
-        manifest['native_source_components'] = native_sources.collect(
-            lambda name: (ROOT.parent / name).read_bytes(), archive,
-            source_manifest=source_manifest, apk=apk,
-            fetch_source=lambda record, name: source_cache.fetch(
-                native_sources.download_pin(record), local=None if record.get('member') else ROOT.parent / name))
+spec = importlib.util.spec_from_file_location('browser_release', ROOT.parent / 'agent/packaging/browser-release.py')
+browser_release = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(browser_release)
+if library_source and library_source.get('inputs') != browser_release.android_source_inputs(target, revision):
+    raise SystemExit('Published Android library sources differ from this build input inventory')
+native_sources = browser_release.module('android_native_sources')
+with zipfile.ZipFile(destination) as apk:
+    components = native_sources.verify_correspondence(lambda name: (ROOT.parent / name).read_bytes(),
+        source_manifest=source_manifest, apk=apk)
+    if library_source:
+        if library_source['metadata']['nativeSourceComponents'] != components:
+            raise SystemExit('Published Android native sources differ from the actual APK libraries')
+    else:
+        library_source = browser_release.publish_android_sources(target,
+            Path(os.environ['TASKARIAN_ANDROID_LIBRARY_SOURCE_DIRECTORY']), sources, source_manifest, apk)
+manifest['native_source_components'] = components
+manifest['android_library_source'] = library_source['release']
 (OUT / 'build-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
 (OUT / 'signature.txt').write_text(signature)
 (OUT / 'manifest.txt').write_text(badging)

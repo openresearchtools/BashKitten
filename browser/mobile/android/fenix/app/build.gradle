@@ -857,6 +857,13 @@ tasks.register('stageTaskarianDependencySources') {
         def sha256 = { input ->
             java.security.MessageDigest.getInstance('SHA-256').digest(input.bytes).encodeHex().toString()
         }
+        def publishedPath = System.getenv('TASKARIAN_ANDROID_LIBRARY_SOURCE_REFERENCE')
+        def published = publishedPath ? new groovy.json.JsonSlurper().parse(file(publishedPath)) : null
+        if (published != null && (published.schema != 1 ||
+                published.inputs.pinsSha256 != sha256(new File(sourceRoot, 'sources.json')) ||
+                !(published.release.manifestSha256 ==~ /[0-9a-f]{64}/))) {
+            throw new GradleException('Published Android dependency sources differ from the pinned inventory')
+        }
         def destination = file("$buildDir/generated/taskarian-sources")
         // Never carry a removed dependency's source into a later candidate.
         delete destination
@@ -890,11 +897,13 @@ tasks.register('stageTaskarianDependencySources') {
             }
             inputs.each { input ->
                 def source = new File(sourceRoot, input.file).canonicalFile
-                if (!source.toPath().startsWith(sourceRoot.canonicalFile.toPath()) ||
-                        !source.isFile() || sha256(source) != input.sha256) {
-                    throw new GradleException('Missing or changed pinned Android source: ' + input.file)
+                if (published == null) {
+                    if (!source.toPath().startsWith(sourceRoot.canonicalFile.toPath()) ||
+                            !source.isFile() || sha256(source) != input.sha256) {
+                        throw new GradleException('Missing or changed pinned Android source: ' + input.file)
+                    }
+                    copy { from source; into destination }
                 }
-                copy { from source; into destination }
                 manifest << [component: coordinate, kind: pin.kind,
                     file: source.name, sha256: input.sha256]
             }

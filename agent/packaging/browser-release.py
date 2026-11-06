@@ -372,6 +372,113 @@ def blocker_sources(revision, target):
                                      'blocker-source-lock.json': 'metadata'}, source_commit=revision)
 
 
+def android_source_inputs(target, revision=None):
+    revision = revision or source()
+    native = module('native-component')
+    inventory = 'agent/vendor/native/android-sources.json'
+    pins = 'browser/taskarian/android/sources/sources.json'
+    records = json.loads(native.content(revision, inventory))
+    paths = sorted({pins, inventory, *(record['versionPin']['file'] for record in records if 'versionPin' in record)})
+    return {'schema': 1, 'target': target, 'files': {path: native.entry(revision, path) for path in paths},
+            'pinsSha256': hashlib.sha256(subprocess.check_output(['git', 'show', revision + ':' + pins], cwd=ROOT)).hexdigest()}
+
+
+def android_source_selection(result, target, directory):
+    directory = Path(directory)
+    store = module('component-store')
+    metadata = store.fetch(result, directory, roles=('metadata',), names=['android-library-source.json'])
+    if not metadata:
+        raise store.StoreUnavailable('The published Android library source metadata is unavailable')
+    record = json.loads((directory / 'android-library-source.json').read_text())
+    wanted = android_source_inputs(target)
+    if record.get('schema') != 1 or record.get('inputs') != wanted:
+        raise ValueError('Published Android library source inputs differ')
+    selection = {'schema': 1, 'inputs': wanted, 'release': reference(result), 'metadata': record}
+    file = directory / 'library-source-reference.json'
+    file.write_text(json.dumps(selection, indent=2) + '\n')
+    if os.environ.get('GITHUB_ENV'):
+        with Path(os.environ['GITHUB_ENV']).open('a') as output:
+            output.write('TASKARIAN_ANDROID_LIBRARY_SOURCE_REFERENCE=' + str(file.resolve()) + '\n')
+    return selection
+
+
+def prepare_android_sources(target, directory):
+    """Reuse only source metadata; seed unchanged originals by permanent reference."""
+    store = module('component-store')
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    if os.environ.get('GITHUB_ENV'):
+        with Path(os.environ['GITHUB_ENV']).open('a') as output:
+            output.write('TASKARIAN_ANDROID_LIBRARY_SOURCE_DIRECTORY=' + str(directory.resolve()) + '\n')
+    wanted = android_source_inputs(target)
+    hit = store.lookup('android-library-source', target, wanted)
+    if hit:
+        return android_source_selection(hit, target, directory)
+    baseline = module('source-delivery')
+    module('browser-component').ensure_source(baseline.BASE_SOURCE)
+    if wanted != android_source_inputs(target, baseline.BASE_SOURCE):
+        print('Android dependency source pins changed; publish matching originals once after resolution', flush=True)
+        return None
+    application = store.lookup('application', target, {'source': baseline.BASE_SOURCE,
+        'productVersion': baseline.BASE_VERSION, 'target': target})
+    if not application:
+        raise store.StoreUnavailable('The permanent Android source baseline is unavailable; retry without downloading sources')
+    ref = next(ref for ref in application['manifest']['dependencies']
+               if ref['manifestName'].startswith('component-browser-resources-' + target + '-'))
+    with tempfile.TemporaryDirectory(prefix='android-source-metadata-') as temporary:
+        temporary = Path(temporary)
+        original = store.fetch(ref, temporary, roles=('runtime',), names=['build-manifest.json'])
+        if not original:
+            raise store.StoreUnavailable('The complete verified Android source owner is unavailable')
+        built = json.loads((temporary / 'build-manifest.json').read_text())
+        abi = 'x86_64' if target.endswith('x86_64') else 'arm64-v8a'
+        archive = next(item for item in original['manifest']['assets']
+                       if item['name'] == 'taskarian-android-library-source_' + abi + '.tar.gz')
+        base_url = original['url'].rsplit('/', 1)[0] + '/'
+        metadata = {'schema': 1, 'inputs': wanted, 'nativeSourceComponents': built['native_source_components'],
+                    'sourceArchive': {**archive, 'role': 'source', 'parts': [
+                        {**part, 'url': base_url + part['asset']} for part in archive['parts']]},
+                    'originalSource': baseline.BASE_SOURCE}
+        output = temporary / 'output'
+        output.mkdir()
+        (output / 'android-library-source.json').write_text(json.dumps(metadata, indent=2) + '\n')
+        (output / 'Taskarian-LICENSE.txt').write_bytes(subprocess.check_output(['git', 'show', source() + ':LICENSE'], cwd=ROOT))
+        hit = store.publish('android-library-source', target, version(source(), True), wanted, output,
+                            assets={'android-library-source.json': 'metadata', 'Taskarian-LICENSE.txt': 'legal'},
+                            source_commit=source(), dependencies=[reference(original)])
+    return android_source_selection(hit, target, directory)
+
+
+def publish_android_sources(target, directory, sources, source_manifest, apk):
+    """Package changed Maven/native originals once; ordinary APKs only link them."""
+    store, native_sources = module('component-store'), module('android_native_sources')
+    wanted = android_source_inputs(target)
+    if store.lookup('android-library-source', target, wanted):
+        return prepare_android_sources(target, directory)
+    abi = 'x86_64' if target.endswith('x86_64') else 'arm64-v8a'
+    with tempfile.TemporaryDirectory(prefix='android-library-source-') as temporary:
+        output = Path(temporary)
+        name = 'taskarian-android-library-source_' + abi + '.tar.gz'
+        with tarfile.open(output / name, 'w:gz') as archive:
+            archive.add(sources, arcname='android-library-sources')
+            archive.add(ROOT / 'LICENSE', arcname='Taskarian-LICENSE')
+            components = native_sources.collect(lambda name: (ROOT / name).read_bytes(), archive,
+                source_manifest=source_manifest, apk=apk,
+                fetch_source=lambda record, name: module('source_cache').fetch(
+                    native_sources.download_pin(record), local=None if record.get('member') else ROOT / name))
+        metadata = {'schema': 1, 'inputs': wanted, 'nativeSourceComponents': components,
+                    'sourceArchive': {'name': name, 'size': (output / name).stat().st_size, 'sha256': store.sha(output / name)}}
+        (output / 'android-library-source.json').write_text(json.dumps(metadata, indent=2) + '\n')
+        notices = [(ROOT / 'LICENSE').read_text(), apk.read('assets/raw/third_party_licenses').decode()]
+        notices += [apk.read('assets/' + name + '.txt').decode() for name in
+                    ('THIRD-PARTY-NOTICES', 'TASKARIAN-NOTICES', 'TOR-NOTICES', 'BLOCKER-NOTICES', 'QR-NOTICES')]
+        (output / 'android-library-source-NOTICES.txt').write_text('\n\n'.join(notices))
+        hit = store.publish('android-library-source', target, version(source(), True), wanted, output,
+                            assets={name: 'source', 'android-library-source.json': 'metadata',
+                                    'android-library-source-NOTICES.txt': 'legal'}, source_commit=source())
+    return android_source_selection(hit, target, directory)
+
+
 def checkpoint_proof(directory, target):
     browser = module('browser-component')
     repository, run_id = os.environ['GITHUB_REPOSITORY'], int(os.environ['GITHUB_RUN_ID'])
@@ -471,6 +578,8 @@ def publish(kind, directory, target):
         assets.update(source_assets)
         assets.update(packaged_legal(directory, staging, target))
         dependencies = source_dependencies
+        if kind != 'gecko' and os.environ.get('TASKARIAN_ANDROID_LIBRARY_SOURCE_REFERENCE'):
+            dependencies.append(json.loads(Path(os.environ['TASKARIAN_ANDROID_LIBRARY_SOURCE_REFERENCE']).read_text())['release'])
         ref = os.environ.get('TASKARIAN_GECKO_RELEASE_REFERENCE')
         if kind != 'gecko' and ref:
             dependencies.append(json.loads(Path(ref).read_text()))
@@ -483,7 +592,7 @@ def publish(kind, directory, target):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['inputs', 'native-key', 'require-engine', 'cache-contract', 'restore-cache', 'restore-engine', 'seed-engine', 'publish-engine',
-                                         'publish-resources', 'android-companion', 'dependencies'])
+                                         'publish-resources', 'android-companion', 'android-sources', 'dependencies'])
     parser.add_argument('target')
     parser.add_argument('--directory', type=Path)
     parser.add_argument('--output', type=Path)
@@ -517,6 +626,8 @@ def main():
         publish('gecko', args.directory, args.target); return
     if args.action == 'android-companion':
         android_companion(args.directory, args.target); return
+    if args.action == 'android-sources':
+        prepare_android_sources(args.target, args.directory); return
     if args.action == 'dependencies':
         args.output.write_text(json.dumps(dependencies([args.directory]), indent=2) + '\n'); return
     if args.action == 'restore-engine':
