@@ -47,8 +47,8 @@ def identity(engine, target, contract, repository=None):
 def index_identity(engine, target, contract, repository=None):
     repository, name, _ = identity(engine, target, contract, repository)
     digest = hashlib.sha256(store.canonical(contract)).hexdigest()
-    tag = f'compiler-cache-index-{engine}-{target}'
-    return repository, name, digest, tag
+    path = f'compiler-caches/{engine}/{target}/{digest}.json'
+    return repository, name, digest, path
 
 
 def validate_metadata(raw, engine, target, contract):
@@ -68,18 +68,19 @@ def validate_metadata(raw, engine, target, contract):
 
 
 def cache_index(engine, target, contract, repository=None):
-    repository, name, digest, tag = index_identity(engine, target, contract, repository)
-    raw = store.read_url(f'https://github.com/{repository}/releases/download/{tag}/index.json')
-    index = json.loads(raw) if raw else {'schema': 1, 'engine': engine, 'target': target, 'contracts': {}}
+    repository, name, digest, path = index_identity(engine, target, contract, repository)
+    raw = store.read_url(store.lookup_url(repository, path))
+    index = json.loads(raw) if raw else {'schema': 1, 'engine': engine, 'target': target,
+                                       'contractSha256': digest, 'snapshot': None}
     if (index['schema'] != 1 or index['engine'] != engine or index['target'] != target
-            or not isinstance(index['contracts'], dict)):
+            or index['contractSha256'] != digest):
         raise ValueError('Compiler cache index differs')
-    return repository, name, digest, tag, index
+    return repository, name, digest, path, index
 
 
 def resolve(engine, target, contract, repository=None):
     repository, name, digest, _, index = cache_index(engine, target, contract, repository)
-    entry = index['contracts'].get(digest)
+    entry = index['snapshot']
     if entry:
         tag = entry['tag']
         if (not re.fullmatch(re.escape(f'compiler-cache-{engine}-{target}-{digest[:16]}-') + '[a-f0-9]{64}', tag)
@@ -144,7 +145,7 @@ def require_publisher(repository):
 
 
 def publish_snapshot(engine, target, contract, raw, directory, repository=None, *, archive=None, source=None):
-    repository, pointer, digest, index_tag, _ = cache_index(engine, target, contract, repository)
+    repository, pointer, digest, index_path, index = cache_index(engine, target, contract, repository)
     require_publisher(repository)
     metadata = validate_metadata(raw, engine, target, contract)
     tag = f'compiler-cache-{engine}-{target}-{digest[:16]}-{metadata["sha256"]}'
@@ -202,12 +203,10 @@ def publish_snapshot(engine, target, contract, raw, directory, repository=None, 
     else:
         file = directory / pointer; file.write_bytes(raw)
         store.gh('release', 'upload', tag, str(file), '--repo', repository)
-    store.ensure_release(repository, index_tag, f'{engine} compiler cache index · {target}')
-    # Reload the small index after the large upload so other contracts survive.
-    _, _, _, _, index = cache_index(engine, target, contract, repository)
-    index['contracts'][digest] = {'tag': tag, 'metadataSha256': checksum}
-    file = directory / 'index.json'; file.write_bytes(store.canonical(index) + b'\n')
-    store.gh('release', 'upload', index_tag, str(file), '--repo', repository, '--clobber')
+    # Each contract owns one small Git file. Concurrent unrelated contracts
+    # never replace one another; successful snapshots themselves stay immutable.
+    index['snapshot'] = {'tag': tag, 'metadataSha256': checksum}
+    store.put_lookup(repository, index_path, index)
     return True
 
 
