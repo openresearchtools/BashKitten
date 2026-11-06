@@ -1,0 +1,168 @@
+{
+  "schema": 1,
+  "toolkit": "12.9",
+  "release": "12.9.2",
+  "releaseNotes": "https://docs.nvidia.com/cuda/archive/12.9.2/cuda-toolkit-release-notes/index.html",
+  "eula": "https://docs.nvidia.com/cuda/archive/12.9.2/eula/index.html",
+  "platforms": {
+    "amd64": {
+      "repository": "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/",
+      "packages": {
+        "cuda-cccl-12-9": {
+          "package": "cuda-cccl-12-9",
+          "version": "12.9.27-1",
+          "url": "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-cccl-12-9_12.9.27-1_amd64.deb",
+          "size": 1040468,
+          "sha256": "255b92bd5e09cd10aedaf098d1ee0f66ca1a9062efe96e2e1f385583ddf18c73"
+        },
+        "cuda-crt-12-9": {
+          "package": "cuda-crt-12-9",
+          "version": "12.9.86-1",
+          "url": "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-crt-12-9_12.9.86-1_amd64.deb",
+          "size": 82138,
+          "sha256": "364c82d5fd53b6687aca004c4583fd119a98e0fe72798d88b0fdedc56ad5aecf"
+        },
+        "cuda-cudart-12-9": {
+          "package": "cuda-cudart-12-9",
+          "version": "12.9.79-1",
+          "url": "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-cudart-12-9_12.9.79-1_amd64.deb",
+          "size": 173102,
+          "sha256": "2649df5457dcf9a741f979b5c71e09aba563a11ef1c84a0725c3fe7a37625e6e"
+        },
+        "cuda-cudart-dev-12-9": {
+          "package": "cuda-cudart-dev-12-9",
+          "version": "12.9.79-1",
+          "url": "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-cudart-dev-12-9_12.9.79-1_amd64.deb",
+          "size": 1414876,
+          "sha256": "e3ca8561b6bec2a92928ebafd68ed9278bf66d5521a2584d6370792386b247c0"
+        },
+        "cuda-driver-dev-12-9": {
+          "package": "cuda-driver-dev-12-9",
+          "version": "12.9.79-1",
+          "url": "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-driver-dev-12-9_12.9.79-1_amd64.deb",
+          "size": 29308,
+          "sha256": "5fece9ec181860350dbda0e6368cee79797c6f00f9a44f376d241a1889e5608b"
+        },
+        "cuda-nvcc-12-9": {
+          "package": "cuda-nvcc-12-9",
+          "version": "12.9.86-1",
+          "url": "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-nvcc-12-9_12.9.86-1_amd64.deb",
+          "size": 38621260,
+          "sha256": "66c11ad4fba8c12c44a1fec346c5125011e2ed519b98a787966dda0df9043b45"
+        },
+        "cuda-nvvm-12-9": {
+          "package": "cuda-nvvm-12-9",
+          "version": "12.9.86-1",
+          "url": "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-nvvm-12-9_12.9.86-1_amd64.deb",
+          "size": 43128144,
+          "sha256": "679b7fa53d30dcb7d2f5f55107274fa502ff18071c6c1235cb941fcbe22a1403"
+        },
+        "libcublas-12-9": {
+          "package": "libcublas-12-9",
+          "version": "12.9.2.10-1",
+          "url": "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/libcublas-12-9_12.9.2.10-1_amd64.deb",
+          "size": 458723028,
+          "sha256": "b4990cbaee179951fca3d2758cf4fa7f66956510c63cf923548cd55a953225ca"
+        },
+        "libcublas-dev-12-9": {
+          "package": "libcublas-dev-12-9",
+          "version": "12.9.2.10-1",
+          "url": "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/libcublas-dev-12-9_12.9.2.10-1_amd64.deb",
+          "size": 485178614,
+          "sha256": "0751b73e30ea49b673f91c8a7f1b86080dcd6bd609b1401b6817f4d44615e17c"
+        },
+        "libnvjitlink-12-9": {
+          "package": "libnvjitlink-12-9",
+          "version": "12.9.86-1",
+          "url": "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/libnvjitlink-12-9_12.9.86-1_amd64.deb",
+          "size": 28602996,
+          "sha256": "e5db2bbbb1cc571360686ba6ce6898fd15da3db438592777a6472eb7dfe620b4"
+        }
+      }
+    },
+    "arm64": {
+      "repository": "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/sbsa/",
+      "packages": {
+        "cuda-cccl-12-9": {
+          "package": "cuda-cccl-12-9",
+          "version": "12.9.27-1",
+          "url": "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/sbsa/cuda-cccl-12-9_12.9.27-1_arm64.deb",
+          "size": 1039972,
+          "sha256": "85c63dc4351dbdb10045fe6f3d4b2f3160693b670696b816fd9544ac0002038a"
+        },
+        "cuda-crt-12-9": {
+          "package": "cuda-crt-12-9",
+          "version": "12.9.86-1",
+          "url": "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/sbsa/cuda-crt-12-9_12.9.86-1_arm64.deb",
+          "size": 82118,
+          "sha256": "1c0b5f2b19c94cce34eca3ed8cf6697b352491267b54f8982719ad2b1f2d8c72"
+        },
+        "cuda-cudart-12-9": {
+          "package": "cuda-cudart-12-9",
+          "version": "12.9.79-1",
+          "url": "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/sbsa/cuda-cudart-12-9_12.9.79-1_arm64.deb",
+          "size": 177170,
+          "sha256": "16fd9767849dcadfb3cc2e79b2f0cbb8cf565effec84879146be247e2a1f8ddc"
+        },
+        "cuda-cudart-dev-12-9": {
+          "package": "cuda-cudart-dev-12-9",
+          "version": "12.9.79-1",
+          "url": "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/sbsa/cuda-cudart-dev-12-9_12.9.79-1_arm64.deb",
+          "size": 1410684,
+          "sha256": "c99094e77ae2d5c506fdfdad26a717db867da820f7e9bd637ce62667bc3a3081"
+        },
+        "cuda-driver-dev-12-9": {
+          "package": "cuda-driver-dev-12-9",
+          "version": "12.9.79-1",
+          "url": "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/sbsa/cuda-driver-dev-12-9_12.9.79-1_arm64.deb",
+          "size": 30368,
+          "sha256": "683a7ced41fcae20e872efac1b2244bce8200dec7028ff0f683d2ec001674c67"
+        },
+        "cuda-nvcc-12-9": {
+          "package": "cuda-nvcc-12-9",
+          "version": "12.9.86-1",
+          "url": "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/sbsa/cuda-nvcc-12-9_12.9.86-1_arm64.deb",
+          "size": 33963780,
+          "sha256": "75ad546841a32612d762e62610cb7119cafefa2acb520498d4445fdf4482c7ca"
+        },
+        "cuda-nvvm-12-9": {
+          "package": "cuda-nvvm-12-9",
+          "version": "12.9.86-1",
+          "url": "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/sbsa/cuda-nvvm-12-9_12.9.86-1_arm64.deb",
+          "size": 39907488,
+          "sha256": "8c7af66aa7bada6e9a511e5652870d5e4a388c38396e81b9e1512a1e9e9634c2"
+        },
+        "libcublas-12-9": {
+          "package": "libcublas-12-9",
+          "version": "12.9.2.10-1",
+          "url": "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/sbsa/libcublas-12-9_12.9.2.10-1_arm64.deb",
+          "size": 457995416,
+          "sha256": "87a74c76e29c166cf6eee75ed0734bf52ba6d3cc55bac7affd8cb44e38cc1b5b"
+        },
+        "libcublas-dev-12-9": {
+          "package": "libcublas-dev-12-9",
+          "version": "12.9.2.10-1",
+          "url": "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/sbsa/libcublas-dev-12-9_12.9.2.10-1_arm64.deb",
+          "size": 483981284,
+          "sha256": "cd037990f00d511d748c10d0bedcf67045938f009fffed97dc957c409a762c90"
+        },
+        "libnvjitlink-12-9": {
+          "package": "libnvjitlink-12-9",
+          "version": "12.9.86-1",
+          "url": "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/sbsa/libnvjitlink-12-9_12.9.86-1_arm64.deb",
+          "size": 26552352,
+          "sha256": "4131b168c7df6e9060032c02b878088ab2ca91efc659ff5d812fb819049d1653"
+        }
+      }
+    }
+  },
+  "cccl": {
+    "repository": "https://github.com/NVIDIA/cccl",
+    "tag": "v2.8.2",
+    "commit": "207d20fb6a4165fcd2551bcf2f04b8a5ea40829f",
+    "file": "cccl-v2.8.2.tar.gz",
+    "url": "https://codeload.github.com/NVIDIA/cccl/tar.gz/207d20fb6a4165fcd2551bcf2f04b8a5ea40829f",
+    "sha256": "82f12b9ff47f0c15887cdf90ed0d0f9dab615fa89ffa26d0bf199b039a2a035e",
+    "size": 5416464
+  }
+}
