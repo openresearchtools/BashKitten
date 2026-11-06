@@ -93,7 +93,7 @@ jobs:
                 raise RuntimeError('Invalid GitHub SSH host keys')
             with tempfile.TemporaryDirectory(prefix='taskarian-release-tag-') as directory:
                 key = Path(directory) / 'key'
-                key.write_text(private_key)
+                key.write_text(private_key.rstrip('\r\n') + '\n')
                 key.chmod(0o600)
                 known_hosts = Path(directory) / 'known_hosts'
                 known_hosts.write_text(''.join('[ssh.github.com]:443 ' + key + '\n' for key in host_keys))
