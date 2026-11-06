@@ -16,6 +16,7 @@ def build_ui(source, args, env, payload):
          *branding.online_options(), '--with-lo-builddir=' + str(source / 'engine'),
          '--with-lokit-path=' + str(source / 'engine/include'),
          '--with-lo-path=' + str(source / 'engine/instdir')], cwd=source, env=env)
+    run(['make', '-C', 'browser', 'node_modules'], cwd=source, env=env)
     run(['make', '-C', 'browser', '-j' + str(args.jobs), 'build-cool', 'sbom-shipped-js.txt'], cwd=source, env=env)
     stage = args.work / 'ui-stage'; stage.mkdir(exist_ok=True)
     run(['make', '-C', 'browser', 'DESTDIR=' + str(stage), 'install'], cwd=source, env=env)
