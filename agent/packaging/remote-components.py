@@ -78,20 +78,22 @@ def dispatch(builder_target, workflow, request, **inputs):
 
 def build(target, *, force=False, native_only=False, linux_only=False, components='["all"]', warm_gkrust=False):
     request = f'{os.environ["GITHUB_RUN_ID"]}-{os.environ.get("GITHUB_RUN_ATTEMPT", "1")}-{target}'
+    selected = json.loads(components)
+    force_app = force and (selected == 'all' or 'all' in selected)
     def native_components():
         dispatch(target, 'components.yml', request + '-components', target=target,
                  components=components, force_rebuild=force)
         if target.startswith('termux-'):
-            if force or not store.lookup('application', target, application.inputs(target)):
-                dispatch(target, 'assemble.yml', request + '-application', target=target, force_rebuild=force)
+            if force_app or not store.lookup('application', target, application.inputs(target)):
+                dispatch(target, 'assemble.yml', request + '-application', target=target, force_rebuild=force_app)
     def browser():
         if target.startswith('linux-'):
-            if not native_only and (force or not store.lookup('application', target, application.inputs(target))):
-                build_browser(target, request, force=force, warm_gkrust=warm_gkrust)
+            if not native_only and (force_app or not store.lookup('application', target, application.inputs(target))):
+                build_browser(target, request, force=force_app, warm_gkrust=warm_gkrust)
         elif not native_only and not linux_only:
             android = 'android' if target == 'termux-aarch64' else 'android-x86_64'
-            if force or not store.lookup('application', android, application.inputs(android)):
-                build_browser(android, request, force=force)
+            if force_app or not store.lookup('application', android, application.inputs(android)):
+                build_browser(android, request, force=force_app)
     # Engine compilation/checkpoints can finish while services build. Only final
     # assembly waits for the required exact component manifests to be published.
     failures = []
