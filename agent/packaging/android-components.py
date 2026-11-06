@@ -141,8 +141,14 @@ def verify_payload(component, target, directory):
 
 
 def materialize(component, target):
-    paths = [path for path, value in inputs(component, target)['files'].items() if value]
+    values = inputs(component, target)
+    paths = [path for path, value in values['files'].items() if value]
     paths += ['agent/packaging', 'auth/build', 'auth/dependencies/go-toolchain']
+    if component == 'android-remote':
+        pins = [pin for entry in values['records']['goPins']['modules'] for pin in entry['files'].values()]
+        pins += values['records']['goPins']['moduleMetadata']
+        paths += ['auth/dependencies/go/' + pin['file'] for pin in pins
+                  if pin.get('file', '').startswith('proxy/') and pin['file'].endswith(('.mod', '.info'))]
     if component == 'android-x11':
         paths += ['browser']  # Native mach/Gradle configuration reads its actual source graph.
     env = {**os.environ, 'GIT_LFS_SKIP_SMUDGE': '1'}
@@ -217,9 +223,16 @@ def run(component, target, work, output, force=False):
     if component == 'android-remote':
         originals += list((runtime / 'share/source').glob('*'))
         originals += list(runtime.glob('*sources.jar'))
-        for entry in records['goPins']['modules']:
-            originals += [fetch(pin) for pin in entry['files'].values()]
-        originals += [fetch(pin) for pin in records['goPins']['moduleMetadata']]
+        pins = [pin for entry in records['goPins']['modules'] for pin in entry['files'].values()]
+        pins += records['goPins']['moduleMetadata']
+        for pin in pins:
+            local = None
+            if pin.get('file', '').startswith('proxy/'):
+                if pin['file'].endswith(('.mod', '.info')):
+                    local = ROOT / 'auth/dependencies/go' / pin['file']
+                if not pin.get('url'):
+                    pin = {**pin, 'url': 'https://proxy.golang.org/' + pin['file'][6:]}
+            originals.append(fetch(pin, local=local))
     elif component == 'android-tor':
         download_pin = module('android_native_sources').download_pin
         originals += [fetch(download_pin(pin)) for pin in records['dependencies']]
