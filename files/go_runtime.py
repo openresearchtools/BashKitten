@@ -33,6 +33,29 @@ def select(graph, read=None):
     return {**graph, 'components': selected, 'adaptation': 'runtime-go.json'}
 
 
+def component_sources(graph, native, component, read=None):
+    """The exact source/notice closure used by each native build owner."""
+    read = read or (lambda relative: (ROOT / relative).read_bytes())
+    components = graph['components'] + native['components']
+    if component == 'all':
+        return components
+    names = {'server': {'mupdf', 'nasm'}, 'ui': {'esbuild', 'rollup'},
+             'media': {'mupdf', 'ffmpeg', 'dav1d', 'nasm', 'quantum-ffmpeg-recipe'},
+             'office-addon': set()}[component]
+    key = lambda entry: entry['ecosystem'] + ':' + entry['name'] + '@' + entry['version']
+    wanted = {key(entry) for entry in components
+              if (entry['ecosystem'] == 'go' and (component == 'server' or
+                  component == 'office-addon' and entry['name'] == 'github.com/golang-jwt/jwt/v4'))
+              or (entry['ecosystem'] == 'npm' and component == 'ui') or entry['name'] in names}
+    supplements = json.loads(read('vendor/dependencies/notice-sources.json'))['components']
+    while True:
+        closure = wanted | {source['component'] for name in wanted
+            for source in supplements.get(name, {}).get('sources', []) if 'component' in source}
+        if closure == wanted:
+            return [entry for entry in components if key(entry) in wanted]
+        wanted = closure
+
+
 def prepare(source, components):
     config = configuration()
     for local in config['localModules']:

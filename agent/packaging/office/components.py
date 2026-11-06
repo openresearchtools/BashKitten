@@ -160,15 +160,15 @@ def inputs(component, target, revision):
             paths += ['files/' + name for name in tree if name.endswith('.mjs') or name == 'web']
         else:
             paths += ['files/patches/go-ffmpeg']
-        if component not in ('files-integration', 'files-office-addon'):
-            graph = document(revision, 'files/vendor/dependencies/sources.json')
-            selected['dependencies'] = [row for row in graph['components']
-                if component != 'files-media' and row['ecosystem'] == ('npm' if component == 'files-ui' else 'go')]
-            selected['nativeDependencies'] = [row for row in document(revision,
-                'files/vendor/dependencies/native-sources.json')['components']
-                if (row['name'] in ('mupdf', 'nasm') if component == 'files-server' else
-                    row['name'] in ('ffmpeg', 'dav1d', 'nasm', 'mupdf', 'quantum-ffmpeg-recipe')
-                    if component == 'files-media' else row['name'] in ('esbuild', 'rollup'))]
+        if component != 'files-integration':
+            owner = module('files_native_sources', ROOT / 'files/go_runtime.py')
+            read = lambda path: native.content(revision, 'files/' + path)
+            graph = owner.select(document(revision, 'files/vendor/dependencies/sources.json'), read)
+            rows = owner.component_sources(graph, document(revision,
+                'files/vendor/dependencies/native-sources.json'), component.removeprefix('files-'), read)
+            selected['dependencies'] = [row for row in rows if row['ecosystem'] in ('go', 'npm')]
+            selected['nativeDependencies'] = [row for row in rows if row['ecosystem'] not in ('go', 'npm')]
+        if component in ('files-server', 'files-ui'):
             tree = entries(revision, 'files/patches/quantum')
             selected['patches'] = {}
             for name in tree:
@@ -183,6 +183,7 @@ def inputs(component, target, revision):
         paths += ['references']
     if component.startswith('files-') and component != 'files-integration':
         selected['recipes'] = {'files/build.py': native.entry(revision, 'files/build.py'),
+                               'files/go_runtime.py': native.entry(revision, 'files/go_runtime.py'),
                                'files/termux.py': native.entry(revision, 'files/termux.py') if termux else None}
     if component not in ('files-integration', 'office-integration', 'references', 'office-ui', 'files-ui'):
         paths += ['agent/packaging/office/prepare-runner.sh']
@@ -364,7 +365,8 @@ def prepare_office(args, *, engine_dependencies=True):
         (source / 'dist_git_hash').write_text(pin['commit'][:10] + '\n')
         owner.patch_source(source)
         source_graph.prepare_browser_dependencies(source)
-        env = {**os.environ, 'CC': 'ccache gcc', 'CXX': 'ccache g++',
+        env = {**os.environ, 'CC': 'ccache gcc' if engine_dependencies else 'gcc',
+               'CXX': 'ccache g++' if engine_dependencies else 'g++',
                'SOURCE_REVISION': pin['commit'], 'npm_config_audit': 'false',
                'npm_config_fund': 'false', 'GIT_CEILING_DIRECTORIES': str(work)}
         toolchain = None
@@ -524,6 +526,8 @@ def source_assets(component, args, output, assets):
                      if row.get('ecosystem') == 'npm']
         if args.target.startswith('termux-'):
             pins += document(args.source, 'office/upstream/dependencies/native-termux/sources.json')['components']
+    elif component == 'files-integration':
+        paths += list(inputs(component, args.target, args.source)['trees'])
     elif component.startswith('files-'):
         paths += ['files', 'auth/build/go-notices.py', 'auth/dependencies/go-toolchain',
                   'agent/packaging/termux/native_toolchain.py', 'agent/packaging/node/lock.json']
@@ -539,7 +543,7 @@ def source_assets(component, args, output, assets):
             pins.append(document(args.source, 'auth/dependencies/go-toolchain/sources.json'))
     else:
         base = 'office' if component == 'office-integration' else 'references' if component == 'references' else 'files'
-        paths += [base]
+        paths += list(inputs(component, args.target, args.source)['trees']) if component == 'office-integration' else [base]
         if component == 'office-integration':
             paths += ['references/web', 'references/THIRD_PARTY_NOTICES.md', 'references/vendor/classic-dialog']
         npm = base + '/vendor/npm/sources.json'
@@ -552,21 +556,34 @@ def source_assets(component, args, output, assets):
                 pins.append({**row, 'url': row['archiveURL']})
     # Native dependency license metadata stays tracked; downloaded blobs are
     # retained from their exact URL/SHA in the external source cache.
-    tracked = output / (component + '-build-source.tar.gz')
+    tracked = output / (component + '-tracked-source.tar')
     existing = [name for name in dict.fromkeys(paths) if native.entry(args.source, name)]
-    run(['git', 'archive', '--format=tar.gz', '--output=' + str(tracked), args.source, '--', *existing], cwd=ROOT)
-    assets[tracked.name] = 'source'
-    seen = set()
-    for pin in pins:
-        url = pin.get('url') or pin.get('archiveURL')
-        if not url or (url, pin['sha256']) in seen:
-            continue
-        seen.add((url, pin['sha256']))
-        original = source_cache.fetch({'url': url, 'sha256': pin['sha256'],
-            **({'size': pin['size']} if 'size' in pin else {})}, args.cache)
-        name = 'source-' + pin['sha256'] + '.archive'
-        shutil.copyfile(original, output / name)
-        assets[name] = 'source'
+    run(['git', 'archive', '--format=tar', '--output=' + str(tracked), args.source, '--', *existing], cwd=ROOT)
+    source = output / (component + '-source.tar')
+    inventory = output / (component + '-source-inventory.json')
+    seen, stored, retained = set(), set(), []
+    # Original downloads are already compressed. A single plain tar preserves
+    # their bytes without another compression pass or one release asset per pin.
+    with tarfile.open(source, 'w') as bundle:
+        with tarfile.open(tracked) as selected:
+            for member in selected:
+                bundle.addfile(canonical_member(member), selected.extractfile(member) if member.isfile() else None)
+        for pin in pins:
+            url = pin.get('url') or pin.get('archiveURL')
+            if not url or (url, pin['sha256']) in seen:
+                continue
+            original = source_cache.fetch({'url': url, 'sha256': pin['sha256'],
+                **({'size': pin['size']} if 'size' in pin else {})}, args.cache)
+            name = 'external-sources/' + pin['sha256'] + '.archive'
+            if pin['sha256'] not in stored:
+                bundle.add(original, arcname=name, filter=canonical_member)
+                stored.add(pin['sha256'])
+            retained.append({'url': url, 'sha256': pin['sha256'], 'size': original.stat().st_size, 'file': name})
+            seen.add((url, pin['sha256']))
+        write_json(inventory, {'schema': 1, 'component': component, 'sourceCommit': args.source, 'archives': retained})
+        bundle.add(inventory, arcname='Taskarian-source-inventory.json', filter=canonical_member)
+    tracked.unlink(); inventory.unlink()
+    assets[source.name] = 'source'
     legal = output / (component + '-licenses.tar.gz')
     payload = args.work / 'payload'
     with tarfile.open(legal, 'w:gz') as archive:

@@ -84,23 +84,7 @@ def main():
     for name, expected in graph['inputHashes'].items():
         if sha((ROOT/name).read_bytes()) != expected: raise ValueError('Dependency lock changed: '+name)
     archives = work/'archives'; archives.mkdir(exist_ok=True); proxy = work/'goproxy'; proxy.mkdir(exist_ok=True)
-    npm_archives = []; all_components = graph['components'] + native['components']
-    if args.component != 'all':
-        wanted_native = {'server': {'mupdf', 'nasm'}, 'ui': {'esbuild', 'rollup'},
-                         'media': {'mupdf', 'ffmpeg', 'dav1d', 'nasm', 'quantum-ffmpeg-recipe'},
-                         'office-addon': set()}[args.component]
-        wanted = {notices.component_key(entry) for entry in all_components
-                  if (entry['ecosystem'] == 'go' and (args.component == 'server' or
-                      args.component == 'office-addon' and entry['name'] == 'github.com/golang-jwt/jwt/v4'))
-                  or (entry['ecosystem'] == 'npm' and args.component == 'ui')
-                  or entry['name'] in wanted_native}
-        supplements = json.loads(notices.SUPPLEMENTS.read_text())['components']
-        while True:
-            closure = wanted | {source['component'] for key in wanted
-                for source in supplements.get(key, {}).get('sources', []) if 'component' in source}
-            if closure == wanted: break
-            wanted = closure
-        all_components = [entry for entry in all_components if notices.component_key(entry) in wanted]
+    npm_archives = []; all_components = go_runtime.component_sources(graph, native, args.component)
     for entry in all_components:
         previous = archives / (entry.get('filename') or (safe_component(entry['name'])+'@'+entry['version']+('.zip' if entry['ecosystem']=='go' else '.tgz')))
         destination = source_archive(entry['archive'], entry['url'], args, previous if previous.is_file() else None)
