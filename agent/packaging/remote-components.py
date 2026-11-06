@@ -159,7 +159,10 @@ def source_index(roots, revision):
         pending.extend(manifest.get('dependencies', []))
     if not any(item['component'] == 'corresponding-source' and item['sourceCommit'] == revision for item in components):
         raise ValueError('Exact repository corresponding-source component is required')
-    return {'schema': 1, 'sourceCommit': revision, 'components': sorted(components, key=lambda x: (x['target'], x['component'], x['inputSha256']))}
+    return {'schema': 1, 'sourceCommit': revision,
+            'sourceArchiveInstructions': 'Each source asset records its original filename, size and SHA-256. Download its parts from their URLs, verify each part SHA-256, concatenate in listed order, then verify the complete asset SHA-256 before extraction. Single-part assets can be saved directly using the original filename.',
+            'licenseInstructions': 'Runtime component archives and shipped installers contain the full Taskarian and applicable upstream license texts. Legal assets also provide the retained original notices and license files.',
+            'components': sorted(components, key=lambda x: (x['target'], x['component'], x['inputSha256']))}
 
 
 def wanted_inputs(target, revision=None):
