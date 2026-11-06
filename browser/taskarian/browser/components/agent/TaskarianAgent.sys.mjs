@@ -1600,10 +1600,12 @@ class AgentView {
 
   async saveCurrentDraft() {
     const browser = this.activeBrowser;
-    const global = browser?.browsingContext.currentWindowGlobal;
-    if ((!this.off || DesktopLifetime.quitting) && global && new URL(browser.currentURI.spec).pathname === "/") {
-      await this.saveDraft(ownedViews.get(browser), global.getActor("TaskarianAgent"));
-    }
+    const context = browser?.browsingContext, global = context?.currentWindowGlobal;
+    const entry = ownedViews.get(browser);
+    if ((this.off && !DesktopLifetime.quitting) || !entry || !global || new URL(browser.currentURI.spec).pathname !== "/") return;
+    // An error document at the Agent URL has no draft to capture.
+    if (protectedAgentView({ browsingContext: context, manager: global }, true) !== entry) return;
+    await this.saveDraft(entry, global.getActor("TaskarianAgent"));
   }
 
   async contentReady(entry, actor, draftReady = false) {
