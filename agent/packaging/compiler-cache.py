@@ -18,6 +18,21 @@ spec = importlib.util.spec_from_file_location('compiler_component_store', Path(_
 store = importlib.util.module_from_spec(spec); spec.loader.exec_module(store)
 
 
+def has_objects(directory):
+    """Stop at the first native cache entry; ignore empty/statistics-only caches."""
+    for parent, directories, files in os.walk(directory):
+        directories[:] = [name for name in directories if name not in ('tmp', 'preprocessor')]
+        for name in files:
+            # Both caches use digest names; ccache also adds its entry suffix.
+            # Its compact digest alphabet extends beyond hexadecimal.
+            if not re.fullmatch(r'[0-9a-z]{16,}[MRW]?', name):
+                continue
+            path = Path(parent) / name
+            if not path.is_symlink() and path.is_file() and path.stat().st_size:
+                return True
+    return False
+
+
 def identity(engine, target, contract, repository=None):
     if engine not in ('ccache', 'sccache'):
         raise ValueError('Unsupported native compiler cache')
@@ -66,7 +81,7 @@ def restore(engine, target, contract, directory, repository=None):
                         bundle.extract(member, directory, filter='data')
                 if decoder.wait():
                     raise ValueError('Compiler backup decompression failed')
-        return True
+        return has_objects(directory)
     except (ValueError, KeyError, TypeError, OSError, tarfile.TarError) as error:
         print('Optional compiler backup is unusable: ' + str(error), flush=True)
         return False
@@ -81,7 +96,7 @@ def save(engine, target, contract, directory, repository=None):
     if os.environ.get('GITHUB_REPOSITORY', '').lower() != repository.lower() and os.environ.get('TASKARIAN_CACHE_MIGRATION') != '1':
         raise ValueError('Compiler cache publisher differs from its target builder')
     directory = Path(directory).resolve()
-    if not directory.is_dir() or not any(directory.iterdir()):
+    if not has_objects(directory):
         return False
     release = store.gh('api', f'repos/{repository}/releases/tags/{store.TAG}')
     if release is None:
@@ -183,13 +198,22 @@ def cleanup(engine, target, repository):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['restore', 'save'])
-    parser.add_argument('engine', choices=['ccache', 'sccache'])
-    parser.add_argument('target')
-    parser.add_argument('--contract', type=Path, required=True)
+    parser.add_argument('command', choices=['restore', 'save', 'available'])
+    parser.add_argument('engine', nargs='?', choices=['ccache', 'sccache'])
+    parser.add_argument('target', nargs='?')
+    parser.add_argument('--contract', type=Path)
     parser.add_argument('--directory', type=Path, required=True)
     parser.add_argument('--repository', help='One-time old Office compiler cache migration owner')
     args = parser.parse_args()
+    if args.command == 'available':
+        available = has_objects(args.directory)
+        if os.environ.get('GITHUB_OUTPUT'):
+            with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+                output.write('available=' + str(available).lower() + '\n')
+        print(json.dumps({'available': available}))
+        return
+    if not args.engine or not args.target or not args.contract:
+        parser.error('restore/save require engine, target and --contract')
     contract = json.loads(args.contract.read_text())
     result = globals()[args.command](args.engine, args.target, contract, args.directory, args.repository)
     print(json.dumps({'hit' if args.command == 'restore' else 'saved': result}))

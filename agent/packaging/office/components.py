@@ -231,7 +231,7 @@ def cache_contract(target, revision):
 def cache_objects(directory):
     value = hashlib.sha256()
     for path in sorted(directory.rglob('*')):
-        if path.is_file() and re.fullmatch(r'[a-f0-9]+[MR]', path.name):
+        if path.is_file() and re.fullmatch(r'[a-z0-9]+[MRW]', path.name):
             stat = path.stat()
             value.update((str(path.relative_to(directory)) + ':' + str(stat.st_size) + ':' + str(stat.st_mtime_ns)).encode())
     return value.hexdigest()
