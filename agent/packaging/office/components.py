@@ -446,8 +446,14 @@ def build_office(component, args, payload):
                 termux.configure_engine(source, args, env)
             else:
                 owner.configure_engine(source, args.cache, args.jobs, env)
-            run(['make', '-j' + str(args.jobs), 'poco.allbuild', 'libpng.allbuild',
-                 'zstd.allbuild', 'openssl.allbuild'], cwd=source / 'engine', env=env)
+            run(['make', '-j' + str(args.jobs),
+                 'cross-toolset' if platform == 'termux' else 'bootstrap', 'fetch'],
+                cwd=source / 'engine', env=env)
+            # One gbuild scheduler must own the shared external/host-tool targets.
+            # Parallel top-level .allbuild goals spawn competing recursive makes.
+            run(['make', '-j' + str(args.jobs), '-f', 'Makefile.gbuild',
+                 'Module_poco', 'Module_libpng', 'Module_zstd', 'Module_openssl'],
+                cwd=source / 'engine', env=env)
             if platform == 'termux':
                 termux.build_online(source, args, env, web=False)
             else:
