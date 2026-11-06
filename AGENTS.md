@@ -1,18 +1,24 @@
 # Taskarian · native Pi / Linux and Termux
 
-## 5 November reusable component builds
+## 6 November permanent component releases
 
 Build components and assemble applications only in the four existing architecture
 builder repositories: Linux amd64/arm64 and Android/Termux arm64/x86_64. The main
-repository coordinates and publishes. Each builder keeps one rolling `components`
-prerelease with binaries, exact matching sources, complete licenses and checksums;
-download reusable outputs by direct release URLs. Keep official upstream versions
-and compare only each component's actual source, patches, locks, recipe and native
-toolchain inputs. Reuse engines for UI/backend-only edits. Archive disk-backed
-Gecko sccache and LibreOffice ccache as release fallbacks, splitting oversized files
-into pieces smaller than 2 GiB. Preserve completed outputs independently of sibling
-failures. LocalAI stays with its existing automated repository. This supersedes
-earlier shared Office-builder and Actions-artifact-only storage instructions.
+repository coordinates and publishes. Publish permanent, versioned component
+prereleases with their binaries, complete matching sources, full upstream and
+Taskarian licenses, checksums and applicable compiler-cache backups. Keep official
+upstream versions separate from our source/patch/build revision. Resolve builds
+from their pinned component, target and actual build inputs; never select a newer
+incompatible engine blindly. Do not delete published component prereleases.
+Ordinary assembly downloads runtime files, required licenses and small metadata;
+it does not download sources or compiler caches. Main app releases contain shipped
+installers and a small source/license index linking to those permanent releases.
+Do not transport the whole release through a second massive Actions artifact.
+Reuse engines for UI/backend edits, with Actions compiler caches first and archived
+Gecko sccache/LibreOffice ccache as fallbacks. Split oversized archives below 2 GiB.
+Preserve successful outputs independently of sibling failures. LocalAI stays with
+its existing automated repository. This supersedes the 5 November shared rolling
+release and earlier shared Office-builder/Actions-artifact-only storage rules.
 
 ## 5 November product identity
 
