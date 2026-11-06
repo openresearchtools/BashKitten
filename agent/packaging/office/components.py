@@ -505,6 +505,7 @@ def build_integration(component, args, payload):
 def source_assets(component, args, output, assets):
     """Keep tracked build owners and original downloads, never generated substitutes."""
     source_cache = module('application_source_cache', ROOT / 'agent/packaging/source_cache.py')
+    source_archive = module('application_source_archive', ROOT / 'agent/packaging/source_archive.py')
     paths = ['LICENSE', 'agent/packaging', '.github/builders/native.yml', '.github/builders/office.yml']
     if args.target.startswith('termux-'):
         paths += ['agent/packaging/termux/native_toolchain.py', 'agent/packaging/node/lock.json',
@@ -556,18 +557,16 @@ def source_assets(component, args, output, assets):
                 pins.append({**row, 'url': row['archiveURL']})
     # Native dependency license metadata stays tracked; downloaded blobs are
     # retained from their exact URL/SHA in the external source cache.
-    tracked = output / (component + '-tracked-source.tar')
+    tracked = output / (component + '-tracked-source.tar.gz')
     existing = [name for name in dict.fromkeys(paths) if native.entry(args.source, name)]
-    run(['git', 'archive', '--format=tar', '--output=' + str(tracked), args.source, '--', *existing], cwd=ROOT)
+    source_archive.archive_revision(ROOT, args.source, tracked, prefix='', paths=existing)
     source = output / (component + '-source.tar')
     inventory = output / (component + '-source-inventory.json')
     seen, stored, retained = set(), set(), []
     # Original downloads are already compressed. A single plain tar preserves
     # their bytes without another compression pass or one release asset per pin.
     with tarfile.open(source, 'w') as bundle:
-        with tarfile.open(tracked) as selected:
-            for member in selected:
-                bundle.addfile(canonical_member(member), selected.extractfile(member) if member.isfile() else None)
+        bundle.add(tracked, arcname=tracked.name, filter=canonical_member)
         for pin in pins:
             url = pin.get('url') or pin.get('archiveURL')
             if not url or (url, pin['sha256']) in seen:
@@ -587,6 +586,7 @@ def source_assets(component, args, output, assets):
     legal = output / (component + '-licenses.tar.gz')
     payload = args.work / 'payload'
     with tarfile.open(legal, 'w:gz') as archive:
+        archive.add(ROOT / 'LICENSE', arcname='Taskarian-LICENSE', filter=canonical_member)
         for path in sorted(payload.rglob('*')):
             if path.is_file() and (path.suffix == '.json' and 'licen' in path.name.lower()
                 or any(word in path.name.lower() for word in ('license', 'copying', 'notice', 'copyright'))):
@@ -780,8 +780,9 @@ def seed_office(args):
             finally:
                 args.source = requested_source
             publisher_source = output / 'seed-publisher-source.tar.gz'
-            run(['git', 'archive', '--format=tar.gz', '--output=' + str(publisher_source), args.source,
-                 '--', 'agent/packaging', '.github/builders/office-seed.yml'], cwd=ROOT)
+            source_archive = module('seed_source_archive', ROOT / 'agent/packaging/source_archive.py')
+            source_archive.archive_revision(ROOT, args.source, publisher_source, prefix='',
+                paths=['LICENSE', 'agent/packaging', '.github/builders/office-seed.yml'])
             assets[publisher_source.name] = 'source'
             dependencies = [] if component == 'office-engine' else [reference(restored('office-engine', args))]
             result = store().publish(component, args.target, version(component, args.producer_source),
@@ -891,14 +892,28 @@ def aggregate(args, family):
             pack(combined, archive)
 
         source = args.directory / (family + '-sources.json')
-        write_json(source, {'schema': 1, 'dependencies': [reference(found[name]) for name in leaves]})
+        source_record = {'schema': 1, 'dependencies': [reference(found[name]) for name in leaves]}
+        schema_source = None
+        if family == 'office':
+            # Native upstream archives omit these original blobs via export-ignore.
+            # Retain them from the engine's true producer without changing its bytes.
+            schema_source = args.directory / 'office-schema-source.tar.gz'
+            producer_source = components['office-engine']['manifest']['sourceCommit']
+            paths = ['LICENSE', 'office/upstream/online/source/engine/schema']
+            source_archive = module('office_schema_source', ROOT / 'agent/packaging/source_archive.py')
+            source_archive.archive_revision(ROOT, producer_source, schema_source, prefix='', paths=paths)
+            source_record['supplement'] = {'file': schema_source.name, 'sourceCommit': producer_source, 'paths': paths}
+        write_json(source, source_record)
         legal = args.directory / (family + '-licenses.tar.gz')
         with tarfile.open(legal, 'w:gz') as bundle:
+            bundle.add(ROOT / 'LICENSE', arcname='Taskarian-LICENSE', filter=canonical_member)
             for path in sorted(combined.rglob('*')):
                 if path.is_file() and ('legal' in path.relative_to(combined).parts or
                     any(word in path.name.lower() for word in ('license', 'notice', 'copying', 'copyright'))):
                     bundle.add(path, arcname=str(path.relative_to(combined)), filter=canonical_member)
         assets = {archive.name: 'runtime', source.name: 'source', legal.name: 'legal'}
+        if schema_source is not None:
+            assets[schema_source.name] = 'source'
         if family == 'office':
             assets[archive.name + '.json'] = 'metadata'
         store().publish(family + '-runtime', args.target,
