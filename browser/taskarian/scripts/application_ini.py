@@ -15,4 +15,4 @@ def main(output, engine_ini, product_version):
     if application.get("App", "Name") != "Taskarian":
         raise ValueError("Expected Taskarian native application data")
     application.set("App", "Version", version)
-    application.write(output)
+    application.write(output, space_around_delimiters=False)
