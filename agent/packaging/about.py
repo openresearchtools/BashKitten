@@ -24,10 +24,11 @@ data = {'version': version, 'notice': notice, 'licenses': json.loads(args.licens
 # Component receipts already bind these URLs to the exact packaged inputs.
 # Reuse the existing Source provenance field and renderer without changing texts.
 directories = list(args.source_reference_directory)
-for name in ('TASKARIAN_REMOTE_CLIENT_DIR', 'TASKARIAN_TOR_ANDROID_DIR',
-             'TASKARIAN_DISPLAY_ANDROID_DIR', 'TASKARIAN_ANDROID_LIBRARY_SOURCE_DIRECTORY'):
-    if os.environ.get(name):
-        directories.append(Path(os.environ[name]))
+if args.shell == 'android':
+    for name in ('TASKARIAN_REMOTE_CLIENT_DIR', 'TASKARIAN_TOR_ANDROID_DIR',
+                 'TASKARIAN_DISPLAY_ANDROID_DIR', 'TASKARIAN_ANDROID_LIBRARY_SOURCE_DIRECTORY'):
+        if os.environ.get(name):
+            directories.append(Path(os.environ[name]))
 if directories:
     spec = importlib.util.spec_from_file_location('about_component_sources', ROOT / 'packaging/browser-release.py')
     owner = importlib.util.module_from_spec(spec)
