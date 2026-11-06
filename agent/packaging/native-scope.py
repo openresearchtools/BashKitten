@@ -133,7 +133,8 @@ def main():
             owner.native.local.cache_clear()
     selected = json.loads(args.components)
     if selected == 'all' or 'all' in selected:
-        selected = [*FUNCTIONS, *OFFICE]
+        # OS packages now use the resource-only owner and need real repackaging.
+        selected = [*(name for name in FUNCTIONS if name != 'os'), *OFFICE]
     if any(component not in (*FUNCTIONS, *OFFICE) for component in selected):
         raise ValueError('Unknown explicit native input-scope adoption')
     args.output = args.output.resolve(); args.work = args.work.resolve()

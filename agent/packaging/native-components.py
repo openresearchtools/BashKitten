@@ -493,8 +493,25 @@ def build_os_package(target, work, output):
     stage, dependencies = os_native_stage(target, work)
     architecture = target.split('-')[1]
     if target.startswith('termux-'):
-        run(['python3', 'agent/packaging/termux/os.py', '--architecture', architecture,
-             '--native-input', stage, '--work', work / 'native', '--output', output])
+        # These ELF files have already passed the native Termux framework. The
+        # existing shared packager only adds resources, schemas and Debian data;
+        # entering build-package.sh here would rebuild unrelated system libraries.
+        if not shutil.which('glib-compile-schemas'):
+            run(['sudo', 'apt-get', 'update'])
+            run(['sudo', 'apt-get', 'install', '-y', '--no-install-recommends', 'libglib2.0-bin'])
+        version = (ROOT / 'browser/taskarian/config/version.txt').read_text().strip() + '-1'
+        run(['python3', 'os/packaging/build.py', '--target', 'termux', '--architecture', architecture,
+             '--version', version, '--source-commit', head(), '--build-dir', work / 'package',
+             '--output', output, '--prebuilt-native', stage])
+        package, = Path(output).glob('*.deb')
+        metadata = Path(str(package) + '.json')
+        record = json.loads(metadata.read_text())
+        lock = json.loads((ROOT / 'agent/packaging/node/lock.json').read_text())['termux']
+        record.update(file=package.name, sha256=store.sha(package), framework=lock['recipes'],
+            ndk=lock['dependency_sources']['libc++'], nativeComponents=[{
+                'component': item['manifest']['component'],
+                'sourceCommit': item['manifest']['sourceCommit'], **reference(item)} for item in dependencies])
+        metadata.write_text(json.dumps(record, indent=2) + '\n')
     else:
         os_debian_command(target, work, output,
             'python3 /source/os/packaging/build.py --target linux --architecture "$ARCH" --version "$VERSION" '
