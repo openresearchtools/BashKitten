@@ -22,7 +22,7 @@ FUNCTIONS = {
     'os': ('os_native_stage', 'build_os_package', 'run', 'extract', 'restore_component'),
     'runtime-guard': ('run_component', 'run', 'pack'),
 }
-OFFICE = ('office-engine', 'office-server', 'files-server', 'files-media', 'files-office-addon')
+OFFICE = ('office-engine', 'files-server', 'files-media', 'files-office-addon')
 PRIMP_HEADER = '''#!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-only
 """Native Primp recipe using the pinned upstream Termux build framework."""
