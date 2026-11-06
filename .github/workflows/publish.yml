@@ -60,11 +60,12 @@ jobs:
       id: draft
       env:
         GH_TOKEN: ${{ github.token }}
+        RELEASE_TAG_SSH_KEY: ${{ secrets.RELEASE_TAG_SSH_KEY }}
         CANDIDATE_REVISION: ${{ steps.candidate.outputs.revision }}
       run: |
         python3 -B agent/packaging/release_version.py check
         python3 - <<'PY'
-        import json, os, subprocess
+        import json, os, shlex, subprocess, tempfile
         from pathlib import Path
         repository = os.environ['GH_REPO']
         revision = os.environ['CANDIDATE_REVISION']
@@ -82,7 +83,30 @@ jobs:
             return json.loads(result.stdout)
         ref = api('git/ref/tags/' + tag)
         if ref is None:
-            ref = api('git/refs', {'ref': 'refs/tags/' + tag, 'sha': revision})
+            # GITHUB_TOKEN cannot tag an older commit with different workflows.
+            # This repository-only deploy key creates just the verified tag.
+            private_key = os.environ.get('RELEASE_TAG_SSH_KEY', '')
+            if not private_key:
+                raise RuntimeError('The repository release-tag deploy key is required')
+            host_keys = json.loads(subprocess.check_output(['gh', 'api', 'meta'], text=True))['ssh_keys']
+            if not host_keys or any('\n' in key or '\r' in key for key in host_keys):
+                raise RuntimeError('Invalid GitHub SSH host keys')
+            with tempfile.TemporaryDirectory(prefix='taskarian-release-tag-') as directory:
+                key = Path(directory) / 'key'
+                key.write_text(private_key)
+                key.chmod(0o600)
+                known_hosts = Path(directory) / 'known_hosts'
+                known_hosts.write_text(''.join('[ssh.github.com]:443 ' + key + '\n' for key in host_keys))
+                environment = os.environ.copy()
+                environment.pop('RELEASE_TAG_SSH_KEY', None)
+                environment['GIT_SSH_COMMAND'] = shlex.join([
+                    'ssh', '-F', '/dev/null', '-i', str(key), '-o', 'IdentitiesOnly=yes',
+                    '-o', 'StrictHostKeyChecking=yes', '-o', 'UserKnownHostsFile=' + str(known_hosts),
+                    '-o', 'ConnectTimeout=30'])
+                subprocess.run(['git', '-c', 'core.hooksPath=/dev/null', 'push', '--porcelain',
+                                'ssh://git@ssh.github.com:443/' + repository + '.git',
+                                revision + ':refs/tags/' + tag], env=environment, check=True)
+            ref = api('git/ref/tags/' + tag)
         target = ref['object']
         seen = set()
         while target['type'] == 'tag':
