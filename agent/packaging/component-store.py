@@ -30,6 +30,7 @@ REPOSITORIES = {'openresearchtools/taskarian-build-' + suffix
                 for suffix in ('amd64', 'arm64', 'android', 'android-x86_64')}
 ASSET_LIMIT = 1000
 MAIN_REPOSITORY = 'openresearchtools/Taskarian'
+_RELEASE_IDS = {}
 MANIFEST = re.compile(r'component-(.+)-(linux-amd64|linux-arm64|termux-aarch64|termux-x86_64|android(?:-x86_64)?)-[0-9a-f]{64}\.json')
 
 
@@ -347,23 +348,24 @@ def fetch(reference, directory, roles=None, names=None):
         raise ValueError('Component reference identity differs')
     directory = Path(directory); directory.mkdir(parents=True, exist_ok=True)
     wanted = ROLES if roles is None else set(roles)
+    role = runtime_owner().effective_role
     if names is not None and not set(names) <= {item['name'] for item in manifest['assets']}:
         raise ValueError('Requested component filenames are absent')
-    selected = [item for item in manifest['assets'] if item['role'] in wanted and (names is None or item['name'] in names)]
+    selected = [item for item in manifest['assets'] if role(item) in wanted and (names is None or item['name'] in names)]
     missing = [item for item in selected if not (directory / item['name']).is_file() or
                (directory / item['name']).stat().st_size != item['size'] or sha(directory / item['name']) != item['sha256']]
-    use_bundle = names is None and manifest['component'] not in ('application', 'corresponding-source') and any(item['role'] in ('runtime', 'build-support') for item in missing)
-    runtime_missing = [item for item in missing if item['role'] != 'source'] if use_bundle else []
+    use_bundle = names is None and manifest['component'] not in ('application', 'corresponding-source') and any(role(item) in ('runtime', 'build-support') for item in missing)
+    runtime_missing = [item for item in missing if role(item) != 'source'] if use_bundle else []
     if runtime_missing:
         descriptor_raw = read_url(f'https://github.com/{repo}/releases/download/{tag}/{name[:-5]}.runtime.json')
         if descriptor_raw is None:
             raise StoreUnavailable('Permanent component runtime/license bundle is missing; retry without rebuilding')
-        descriptor = json.loads(descriptor_raw)
+        descriptor = runtime_owner().validate(json.loads(descriptor_raw))
         record = read_revision(repo, manifest['component'], manifest['target'], manifest['inputSha256'])
         if not record or hashlib.sha256(descriptor_raw).hexdigest() != record.get('runtimeSha256'):
             raise ValueError('Component runtime descriptor checksum differs')
         expected = [{key: item[key] for key in ('name', 'role', 'size', 'sha256')}
-                    for item in manifest['assets'] if item['role'] != 'source']
+                    for item in manifest['assets'] if role(item) != 'source']
         if (any(descriptor.get(key) != manifest[key] for key in ('component', 'target', 'version', 'inputSha256')) or
                 descriptor.get('assets') != expected):
             raise ValueError('Component runtime descriptor differs from canonical manifest')
@@ -371,7 +373,7 @@ def fetch(reference, directory, roles=None, names=None):
         runtime_owner().unpack(archive, directory, descriptor)
         archive.unlink()
     for item in missing:
-        if item['role'] == 'source' or not use_bundle:
+        if role(item) == 'source' or not use_bundle:
             fetch_asset(repo, tag, item, directory)
     for item in selected:
         destination = directory / item['name']
@@ -435,6 +437,7 @@ def ensure_release(repo, tag, title):
     if release.get('body') != NOTE or not release.get('prerelease'):
         gh('api', endpoint + '/' + str(release['id']), '--method', 'PATCH',
            data={'body': NOTE, 'prerelease': True, 'make_latest': 'false'})
+    _RELEASE_IDS[repo, tag] = release['id']
     return release
 
 
@@ -460,7 +463,15 @@ def upload_file(repo, tag, path, uploaded):
         return
     if len(uploaded) >= ASSET_LIMIT:
         raise ValueError('Component release exceeds the GitHub asset limit')
-    gh('release', 'upload', tag, str(path), '--repo', repo)
+    release_id = _RELEASE_IDS.get((repo, tag))
+    if release_id is None:
+        release_id = ensure_release(repo, tag, tag)['id']
+    # The release is already known. Upload directly instead of an extra API
+    # lookup for each archive part (hundreds during the one-time migration).
+    url = f'https://uploads.github.com/repos/{repo}/releases/{release_id}/assets?name=' + urllib.parse.quote(path.name, safe='')
+    result = gh('api', url, '--method', 'POST', '-H', 'Content-Type: application/octet-stream', '--input', str(path))
+    if result.get('size') != path.stat().st_size or result.get('digest') != 'sha256:' + checksum:
+        raise StoreUnavailable('Uploaded component checksum is not yet available; retry publication')
     uploaded[path.name] = {'size': path.stat().st_size, 'digest': 'sha256:' + checksum}
 
 

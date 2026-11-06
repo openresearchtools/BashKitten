@@ -80,7 +80,7 @@ def migrate_one(repo, name, raw, manifest, work):
         if existing and existing['manifestSha256'] != hashlib.sha256(raw).hexdigest():
             raise ValueError('Migration canonical manifest differs')
         for asset in manifest['assets']:
-            runtime = not existing and asset['role'] != 'source' and manifest['component'] not in ('application', 'corresponding-source')
+            runtime = not existing and store.runtime_owner().effective_role(asset) != 'source' and manifest['component'] not in ('application', 'corresponding-source')
             destination = temporary / asset['name']
             output = destination.open('wb') if runtime else None
             try:
@@ -140,7 +140,7 @@ def verify(metadata, repo, work):
             descriptor = json.loads(descriptor_raw)
             store.runtime_owner().validate(descriptor)
             expected = [{key: asset[key] for key in ('name', 'role', 'size', 'sha256')}
-                        for asset in manifest['assets'] if asset['role'] != 'source']
+                        for asset in manifest['assets'] if store.runtime_owner().effective_role(asset) != 'source']
             if descriptor['assets'] != expected:
                 raise ValueError('Runtime descriptor includes sources or misses payloads/licenses')
             restore.append((descriptor['archive']['size'], result))
@@ -151,7 +151,7 @@ def verify(metadata, repo, work):
         preferred = [item for item in restore if item[1]['manifest']['component'] in ('photon', 'runtime-guard')]
         _, representative = min(preferred or restore, key=lambda item: item[0])
         source_urls = {part['asset'] for _, manifest in metadata.values() for asset in manifest['assets']
-                       if asset['role'] == 'source' for part in asset['parts']}
+                       if store.runtime_owner().effective_role(asset) == 'source' for part in asset['parts']}
         original_download = store.download
         downloads = []
         def runtime_download(url, *args):
