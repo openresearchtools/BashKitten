@@ -196,7 +196,7 @@ def prepare_remote_metadata(records):
     retained = importlib.util.module_from_spec(spec); spec.loader.exec_module(retained)
     proxy = cache.default_cache() / 'auth-go-proxy' / store.sha(sources / 'sources.json')
     for pin in records['moduleListingMetadata']:
-        original = cache.fetch(pin, local=sources / pin['file'])
+        original = retained.checked(sources, pin)
         retained.stage_file(original, proxy / Path(pin['file']).relative_to('proxy'), pin['sha256'])
 
 

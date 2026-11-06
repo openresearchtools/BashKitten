@@ -28,23 +28,33 @@ go build -trimpath -o "$tools/gobind" golang.org/x/mobile/cmd/gobind
 # Do not run gomobile init: upstream init installs gobind@latest. Both tools
 # above are built from the pristine checked-in module and exact dependency lock.
 export PATH="$tools:$PATH"
-gomobile bind -target="android/$go_arch" -androidapi=31 -tags=taskarian_client -trimpath \
+TMPDIR="$tools" gomobile bind -work -target="android/$go_arch" -androidapi=31 -tags=taskarian_client -trimpath \
   -javapkg=com.taskarian.remote -ldflags='-s -w -extldflags=-Wl,-z,max-page-size=16384' \
   -o "$output/taskarian-remote.aar" github.com/openresearchtools/Taskarian/remote/mobile
+modules=("$tools"/gomobile-work-*/src-android-"$go_arch")
+if [[ ${#modules[@]} != 1 || ! -f ${modules[0]}/go.mod || ! -f ${modules[0]}/go.sum ]]; then
+  echo 'The native gomobile generated module is missing or ambiguous.' >&2; exit 1
+fi
+module=${modules[0]}
 export GOOS=android GOARCH="$go_arch" CGO_ENABLED=1
 export CC="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/$compiler"
 export GOFLAGS='-mod=readonly -tags=taskarian_client'
 mkdir -p "$output/share/metadata"
-go list -deps github.com/openresearchtools/Taskarian/remote/mobile > "$output/share/metadata/remote-client-packages.txt"
+(
+  cd "$module"
+  go mod verify
+  go list -deps ./gobind > "$output/share/metadata/remote-client-packages.txt"
+)
 if grep -Eq '^github.com/(openresearchtools/Taskarian/remote/(host|cmd/)|jpillora/chisel/server)' "$output/share/metadata/remote-client-packages.txt"; then
   echo 'Host code entered the Android client.' >&2; exit 1
 fi
-python3 "$root/auth/build/go-notices.py" "$PWD" "$output" remote-client
-python3 - "$output" "$root" "$abi" <<'PY'
+python3 "$root/auth/build/go-notices.py" "$module" "$output" remote-client
+python3 - "$output" "$root" "$abi" "$module" <<'PY'
 from pathlib import Path
-import hashlib, io, json, os, struct, subprocess, sys, zipfile
+import hashlib, io, json, os, struct, subprocess, sys, tempfile, zipfile
 output, root = map(Path, sys.argv[1:3])
 abi = sys.argv[3]
+module = Path(sys.argv[4])
 machine = 62 if abi == "x86_64" else 183
 with zipfile.ZipFile(output / 'taskarian-remote.aar') as aar:
     libraries = [p for p in aar.namelist() if p.endswith('.so')]
@@ -71,6 +81,47 @@ for i in range(count):
     alignments.append(alignment)
 if not alignments:
     raise SystemExit('Remote library has no load segments')
+with tempfile.TemporaryDirectory(prefix='taskarian-go-buildinfo-') as temporary:
+    binary = Path(temporary) / 'libgojni.so'
+    binary.write_bytes(library)
+    buildinfo = json.loads(subprocess.check_output(['go', 'version', '-m', '-json', str(binary)], text=True))
+settings = {item['Key']: item['Value'] for item in buildinfo['Settings']}
+if (buildinfo['Main']['Path'] != 'gobind' or buildinfo['Path'] != 'gobind/gobind' or
+        any(settings.get(key) != value for key, value in {
+            'GOOS': 'android', 'GOARCH': 'amd64' if abi == 'x86_64' else 'arm64',
+            'CGO_ENABLED': '1', '-buildmode': 'c-shared'}.items()) or
+        'taskarian_client' not in settings.get('-tags', '').split(',')):
+    raise SystemExit('Remote library build information does not match its native client target')
+inventory = json.loads((output / 'share/metadata/remote-client-go-modules.json').read_text())
+runtime, = (item for item in inventory if item['name'] == 'Go runtime and standard library')
+linked = {item['Path']: item.get('Version') or 'checked-in' for item in buildinfo['Deps']}
+notices = {item['name']: item['version'] or 'checked-in' for item in inventory if item is not runtime}
+if linked != notices or buildinfo['GoVersion'] != 'go' + runtime['version']:
+    raise SystemExit('Remote library linked modules/compiler differ from its full notices and sources')
+raw = subprocess.check_output(['go', 'list', '-m', '-mod=readonly', '-json', 'all'], cwd=module, text=True)
+decoder, offset, resolved = json.JSONDecoder(), 0, {}
+while offset < len(raw):
+    while offset < len(raw) and raw[offset].isspace(): offset += 1
+    if offset == len(raw): break
+    item, offset = decoder.raw_decode(raw, offset)
+    resolved[item['Path']] = item
+pins = json.loads((root / 'auth/dependencies/go/sources.json').read_text())
+retained = {(item['name'], item['version']): item for item in pins['modules']}
+for item in buildinfo['Deps']:
+    expected = resolved.get(item['Path'])
+    if not expected or (expected.get('Version') or 'checked-in') != linked[item['Path']]:
+        raise SystemExit('Remote library module differs from its generated native module: ' + item['Path'])
+    replacement = item.get('Replace')
+    source = expected.get('Replace')
+    if bool(replacement) != bool(source):
+        raise SystemExit('Remote library module replacement differs: ' + item['Path'])
+    if source:
+        if (Path(replacement['Path']).resolve() != Path(source.get('Dir', source['Path'])).resolve() or
+                (replacement.get('Version') or '(devel)') != (source.get('Version') or '(devel)')):
+            raise SystemExit('Remote library source replacement differs: ' + item['Path'])
+    elif retained.get((item['Path'], item['Version']), {}).get('sum') != item.get('Sum'):
+        raise SystemExit('Remote library source checksum is not pinned: ' + item['Path'])
+(output / 'share/metadata/remote-client-buildinfo.json').write_text(json.dumps(buildinfo, indent=2) + '\n')
 record = {'source': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip(),
           'architecture': abi, 'android_api': 31,
           'ndk': '29.0.14206865', 'go': subprocess.check_output(['go', 'version'], text=True).strip(),
