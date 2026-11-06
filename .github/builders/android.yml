@@ -121,7 +121,33 @@ jobs:
     - name: Materialize Android application build sources
       env:
         GIT_LFS_SKIP_SMUDGE: '1'
-      run: git sparse-checkout disable
+        NATIVE_REUSED: ${{ steps.component.outputs.hit }}
+      run: |
+        python3 - <<'PYTHON'
+        import json, os, subprocess
+        from pathlib import Path
+        payload = json.loads(Path('references/runtime-payload.json').read_text())
+        patterns = ['/LICENSE', '/AGENTS.md', '/.github/', '/agent/', '!/agent/machines/vendor/',
+                    '/auth/build/', '/auth/upstreams.lock.json', '/auth/dependencies/*/sources.json',
+                    '/auth/dependencies/termux-lock.json', '/node/',
+                    '/os/skills/', '/os/licenses/', '/os/NOTICE', '/os/packaging/', '/os/upstream/sources.json',
+                    '/office/', '!/office/upstream/', '/office/upstream/*.json',
+                    '/office/upstream/dependencies/*.json', '/office/upstream/dependencies/*.py',
+                    '/files/', '!/files/upstream/', '/files/upstream/*.json',
+                    '/references/connector/', '/references/vendor/translators/', '/references/legal/',
+                    '/references/vendor/npm/', '/references/web/theme.css']
+        if os.environ.get('NATIVE_REUSED') == 'true':
+            patterns += ['/browser/taskarian/config/', '/browser/taskarian/scripts/',
+                         '/browser/taskarian/browser/branding/']
+        else:
+            patterns += ['/browser/']
+        patterns += ['/references/' + pattern for pattern in payload['files']]
+        for item in payload['legal']:
+            patterns += ['/references/' + item['source']]
+            patterns += ['/references/' + path for path in item['files']]
+        subprocess.run(['git', 'sparse-checkout', 'set', '--no-cone', '--stdin'],
+                       input='\n'.join(patterns) + '\n', text=True, check=True)
+        PYTHON
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Prepare hosted runner
       run: |
