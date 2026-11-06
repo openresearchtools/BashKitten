@@ -10,10 +10,16 @@ builds and testing are in progress.
 
 Android ARM64 and x86_64 use an ordinary Termux installation for the Agent server. Linux packages
 include both the browser and server. Local connects automatically without an
-account login. Optional publishing and remote connections use Tor and
-an account with two-factor authentication. Turning Agent off stops its services;
-closing the Linux browser also stops its local Agent. Closing the Android
-browser leaves Termux work running until Agent is turned off.
+account login. **Share Local** offers independent Tor, Cloudflare Quick Tunnel,
+Tailcat instant and embedded Tailscale connections, which can run together. Each
+uses its own password-encrypted connection QR and Authelia two-factor login.
+Remote file sharing starts off for each backend and connection. Tailscale also
+requires its normal provider sign-in on host and client. After Cloudflare
+Off/On, update and reimport its connection image.
+
+Turning Agent off stops its services. Closing the Linux window preserves work;
+Quit stops its owned services. Closing the Android browser leaves Termux work
+running until Agent is turned off.
 
 Taskarian includes private Node/npm and Pi data. Pi extensions and `npm -g`
 installs made by its Agent stay in Taskarian’s data directory; ordinary project

@@ -216,7 +216,8 @@ def source_guide(index, version):
                   'target revision and Git-tree verification metadata. Source archives for updated external components remain available below.', '']
     labels = {'gecko': 'Gecko engine', 'office-engine': 'LibreOffice core', 'office-server': 'Collabora server / document workers',
               'office-ui': 'Collabora Office web UI', 'references': 'References', 'auth-tor': 'Tor', 'auth-caddy': 'Caddy',
-              'auth-authelia': 'Authelia', 'auth-valkey': 'Valkey', 'auth-chisel': 'Chisel', 'node': 'Node + npm',
+              'auth-authelia': 'Authelia', 'auth-valkey': 'Valkey', 'auth-chisel': 'Chisel',
+              'auth-cloudflared': 'Cloudflare Tunnel', 'node': 'Node + npm',
               'npm-runtime': 'Pi and locked npm runtime', 'photon': 'Photon WASM', 'browser-resources': 'Taskarian browser UI / Android resources',
               'agent-resources': 'Taskarian agent backend and UI', 'files-server': 'Files Quantum backend', 'files-ui': 'Files Quantum web UI',
               'application': 'Taskarian app assembly', 'corresponding-source': 'Complete corresponding source'}
@@ -530,7 +531,8 @@ def main():
              '- **Android:** install the ARM64 or x86_64 APK matching your device, open Agent and follow the Termux setup command.\n'
              '- **Linux:** install the AMD64 or ARM64 `.deb`, which includes the browser and Agent server.\n'
              '- **Updating Android:** update both the APK and the Taskarian package in Termux. Provider logins and chat history are retained.\n\n'
-             'Local Agent opens without an account login. Publishing from Linux and connecting to remotes still require Tor authorization and account two-factor authentication.\n\n'
+             'Local Agent opens without an account login. Share Local offers independent Tor, Cloudflare Quick Tunnel, Tailcat instant and embedded Tailscale connections, using the same encrypted QR and Authelia two-factor flow.\n\n'
+             'Remote file sharing starts off for each backend and connection. Tailscale requires normal provider sign-in on host and client. After Cloudflare Off/On, update the encrypted connection image and import it again.\n\n'
              f'Checksums are attached. [Download the source guide](https://github.com/openresearchtools/Taskarian/releases/download/{tag}/SOURCES.md) for complete source archives, component releases and verification steps.\n')
     (args.output / 'release-notes.md').write_text(notes)
     # Full build inputs remain in each installer and its pinned component manifest.

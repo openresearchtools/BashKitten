@@ -1,7 +1,7 @@
 # Using Taskarian
 
 Taskarian is a Firefox-based browser with a protected Agent view for stock
-Pi 1.0.2. Linux packages include the browser and server; Android runs the server
+Pi. Linux packages include the browser and server; Android runs the server
 in ordinary Termux. Current releases are for testing and are not ready for
 production; see the [README](../README.md).
 
@@ -161,24 +161,48 @@ show **—**, never a fabricated zero or the app's own usage presented as system
 
 ## Remotes and browser control
 
-Use the browser's **Local / remote** selector to add, import and select a remote.
-On Linux, **Settings → Remote access → Publish over Tor** enables publishing.
-First use opens account creation and authenticator enrollment; verify a code
-before publishing starts. Existing accounts are reused. The panel then shows
-the address, connection QR and file export. Publishing defaults off, remembers
-your choice and keeps Local on loopback. **Stop publishing** disables remote
-access without interrupting Local. Android can run its local Termux Agent,
-publish it through **Share local**, or connect to an authorized remote.
+The sidebar lists Local, desktop containers and saved remotes. Open **Share
+Local** in the owning Local or container backend's configuration. Android hosts
+its Local Agent through Termux; connecting to another host does not require
+Termux.
 
-Remote connections still require the exported Tor authorization, enrolled TLS
-identity and account with a second factor. Exports omit passwords and factor
-seeds. **Remember me** retains remote sessions across browser/service restarts
-until expiry or logout. Authelia and its durable session store run on the Linux
-publisher, separate from automatic local authentication.
+Choose **Tor**, **Cloudflare Quick Tunnel**, **Tailcat instant** or **Tailscale**.
+Each connection keeps its own account, authenticator, encrypted image and
+publishing choice. Several can run together and reach the same existing Agent
+and configured services. Tailscale uses an embedded node: authorize the host and
+client through normal Tailscale sign-in, with access to the same permitted
+Tailscale network. No separate system Tailscale daemon is required.
 
-The same server panel can publish named loopback websites as authenticated onion
-services. Available sites appear above chat. Linux also supports a separately
-authenticated llama.cpp endpoint and browser loopback relay.
+For each new connection, choose a username and password, add its authenticator
+and verify a code. Then download the password-encrypted **Connection QR**.
+**Connect to remote** can scan or import that image. Its password decrypts the
+image locally; then the genuine Authelia page asks for the account login,
+authenticator code and consent. The Tor client authorization and enrolled TLS
+identity travel inside the encrypted image. Passwords and authenticator seeds
+are not exported. **Remember me** retains the real Authelia session until expiry
+or logout.
+
+Publishing **Off** stops that connection's sharing stack without interrupting
+Local or its application services. The backend's sidebar sharing switch stops
+all selected connections, including ones still connecting, and retains their
+saved choices. **Start publishing automatically** is a separate saved choice.
+A Cloudflare Quick Tunnel gets a new temporary address after Off/On or a
+connector restart. Turn it on, wait for readiness, then enter the account
+password to **Update connection image** and import the updated image on clients.
+The account and keys are retained; an old image still names the old address.
+
+**Allow remote file manager** starts unchecked for every new or reissued
+connection on each backend. Publishing does not enable it. The setting applies
+only to that owning backend and connection; it controls remote Files, Changes
+and Office access through Files. Turning it off revokes existing file transfers
+and editor access for that connection. Local file access, chat attachments and
+Pi's normal tools keep their own permissions.
+
+**Services** configures the backend's shared loopback applications. Remote
+clients can map published services to their own local ports; disabling a client
+mapping does not stop the host application. **Reissue identity** replaces only
+the selected connection's account, authenticator and keys, invalidating its old
+connection images and clients.
 
 Tools control ordinary tabs, including containers, private and Tor tabs. They
 cannot inspect the protected Agent/authentication views. Android requests native
@@ -190,8 +214,8 @@ requires its own native approval.
 
 **Turn on/off** owns the Agent services and their Pi workers. On Android it also
 acquires/releases the browser CPU wake lock and Termux's stock app-wide lock.
-Closing the Android browser leaves Termux work running. Closing the Linux browser
-stops its adopted local group. Turning off a remote-only client disconnects it
+Closing the Android browser leaves Termux work running. Closing the Linux window
+preserves work; **Quit** stops its owned local group. Turning off a remote-only client disconnects it
 without stopping the remote machine. A standalone CLI server stays independent
 until the Linux browser adopts it.
 
