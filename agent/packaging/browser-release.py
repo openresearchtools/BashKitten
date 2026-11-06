@@ -311,7 +311,9 @@ def packaged_legal(directory, staging, target):
     captured = list(Path(directory).glob('gecko-built-license-*.html'))
     if captured:
         for page in captured:
-            shutil.copy2(page, staging / page.name)
+            destination = staging / page.name
+            if not destination.exists() or not page.samefile(destination):
+                shutil.copy2(page, destination)
         return {page.name: 'legal' for page in captured}
     archives = []
     if target.startswith('linux'):
