@@ -116,6 +116,15 @@ def remember(result, directory, kind):
 def engine_record(result, directory, target):
     browser = module('browser-component')
     directory = Path(directory)
+    # SHA256SUMS belongs to the original native checkpoint. The release also
+    # carries full corresponding legal archives, outside that payload inventory.
+    checkpoint_files = {line.split('  ', 1)[1]
+                        for line in (directory / 'SHA256SUMS').read_text().splitlines()}
+    for asset in result['manifest']['assets']:
+        if asset['role'] == 'legal' and asset['name'] not in checkpoint_files:
+            legal = directory.parent / 'legal'
+            legal.mkdir(exist_ok=True)
+            shutil.move(directory / asset['name'], legal / asset['name'])
     browser.verify_checksums(directory)
     if target.startswith('android'):
         native = module('android-native-component')
@@ -160,7 +169,8 @@ def engine_record(result, directory, target):
 
 def restore_engine(directory, target):
     directory = Path(directory)
-    result = module('component-store').restore('gecko', target, inputs('gecko', target), directory / 'producer',
+    store = module('component-store')
+    result = store.restore('gecko', target, inputs('gecko', target), directory / 'producer',
                     # Native checkpoints inventory their captured license page too.
                     roles=('runtime', 'metadata', 'build-support', 'legal'), requested_source=source())
     if result is None:
@@ -170,8 +180,9 @@ def restore_engine(directory, target):
         engine_record(result, directory / 'producer', target)
     except (ValueError, KeyError, TypeError, OSError, tarfile.TarError, zipfile.BadZipFile) as error:
         shutil.rmtree(directory / 'producer', ignore_errors=True)
-        print('Unusable optional Gecko release:', error, flush=True)
-        return False
+        raise store.StoreUnavailable(
+            f'Published Gecko checkpoint for {target} failed native verification; '
+            'retry without rebuilding the completed engine') from error
     remember(result, directory, 'gecko')
     print('Reused durable Gecko component:', result['url'], flush=True)
     return True
