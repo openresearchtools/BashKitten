@@ -120,7 +120,19 @@ fi
 # The checkout has its own index and worktree, while Git objects are borrowed
 # read-only from the developer repository. This avoids copying and recompressing
 # Firefox's multi-gigabyte history; all generated files still stay external.
+# TASKARIAN_ARTIFACT_ONLY_BEGIN
+if [[ "$(git -C "${source_repo}" config --bool --get remote.origin.promisor || true)" == true ]]; then
+  # A local clone of a promisor repository can request unmaterialized donor
+  # blobs from upload-pack, where lazy fetching is disabled. A native detached
+  # worktree shares the existing filtered remote and uses its own sparse index.
+  git -C "${source_repo}" worktree add --detach --no-checkout "${checkout_repo}" "${commit}"
+  git -C "${checkout_repo}" sparse-checkout init --cone
+else
+# TASKARIAN_ARTIFACT_ONLY_END
 git clone --shared --no-checkout -- "${source_repo}" "${checkout_repo}"
+# TASKARIAN_ARTIFACT_ONLY_BEGIN
+fi
+# TASKARIAN_ARTIFACT_ONLY_END
 browser_inputs=(browser references/connector references/vendor/translators references/legal references/web agent/packaging)
 # TASKARIAN_ARTIFACT_ONLY_BEGIN
 # These full notice texts feed the packaged browser license page.
