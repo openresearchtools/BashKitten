@@ -345,6 +345,35 @@ def blocker_sources(revision, target):
     if hit:
         return hit
     lock = json.loads(text(revision, paths[0]))
+    baseline = module('source-delivery')
+    module('browser-component').ensure_source(baseline.BASE_SOURCE)
+    if lock == json.loads(text(baseline.BASE_SOURCE, paths[0])):
+        original = store.lookup('corresponding-source', 'linux-amd64', {
+            'source': baseline.BASE_SOURCE, 'productVersion': baseline.BASE_VERSION, 'target': 'linux-amd64'})
+        if not original or original['manifestSha256'] != baseline.BASE_MANIFEST_SHA256:
+            raise store.StoreUnavailable('The permanent complete blocker source baseline is unavailable')
+        archive = next(item for item in original['manifest']['assets'] if item['name'] == lock['artifact'])
+        base_url = original['url'].rsplit('/', 1)[0] + '/'
+        with tempfile.TemporaryDirectory(prefix='blocker-source-reference-') as temporary:
+            output = Path(temporary)
+            metadata = {'schema': 1, 'inputs': wanted, 'lock': lock, 'originalSource': baseline.BASE_SOURCE,
+                        'sourceArchive': {**archive, 'parts': [
+                            {**part, 'url': base_url + part['asset']} for part in archive['parts']]}}
+            (output / 'blocker-source.json').write_text(json.dumps(metadata, indent=2) + '\n')
+            assets = {'blocker-source.json': 'metadata'}
+            for name, path, checksum in (
+                ('Taskarian-LICENSE.txt', 'LICENSE', None),
+                ('Brave-adblock-resources-LICENSE', 'browser/taskarian/android/notices/maven/texts/MPL-2.0.txt',
+                 lock['sources']['braveAdblockResources']['licenseSha256']),
+                ('uBlockOrigin-LICENSE.txt', 'browser/taskarian/android/notices/ublock-LICENSE',
+                 lock['sources']['uBlockOrigin']['licenseSha256'])):
+                data = subprocess.check_output(['git', 'show', revision + ':' + path], cwd=ROOT)
+                if checksum and hashlib.sha256(data).hexdigest() != checksum:
+                    raise ValueError('Retained blocker original license differs from its exact source lock')
+                (output / name).write_bytes(data)
+                assets[name] = 'legal'
+            return store.publish('blocker-source', target, lock['sources']['uBlockOrigin']['tag'], wanted, output,
+                                 assets=assets, source_commit=revision, dependencies=[reference(original)])
     with tempfile.TemporaryDirectory(prefix='blocker-source-') as temporary:
         temporary = Path(temporary)
         source = temporary / 'source.tar.gz'
