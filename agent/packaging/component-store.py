@@ -94,6 +94,7 @@ def download(url, destination, size, checksum):
     if destination.is_file() and destination.stat().st_size == size and sha(destination) == checksum:
         return
     partial = destination.with_name(destination.name + '.partial')
+    problem = 'download interrupted'
     for attempt in range(3):
         offset = partial.stat().st_size if partial.exists() else 0
         if offset > size or (offset == size and sha(partial) != checksum):
@@ -105,26 +106,26 @@ def download(url, destination, size, checksum):
             with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=180) as response:
                 append = offset and response.status == 206
                 if append and not response.headers.get('Content-Range', '').startswith(f'bytes {offset}-'):
-                    raise ValueError('Invalid component download range')
+                    raise http.client.HTTPException('Invalid component download range')
                 with partial.open('ab' if append else 'wb') as output:
                     shutil.copyfileobj(response, output, 8 * 1024 ** 2)
             if partial.stat().st_size != size or sha(partial) != checksum:
                 partial.unlink(missing_ok=True)
-                raise ValueError('Component asset checksum/size mismatch: ' + destination.name)
+                raise http.client.HTTPException('Component asset checksum/size mismatch: ' + destination.name)
             partial.replace(destination)
             return
         except urllib.error.HTTPError as error:
             if error.code == 416 and partial.exists() and partial.stat().st_size == size and sha(partial) == checksum:
                 partial.replace(destination); return
             if error.code in (404, 410):
-                raise ValueError('Published component asset is missing: ' + url) from error
-        except ValueError:
-            raise
-        except (urllib.error.URLError, http.client.HTTPException, TimeoutError, ConnectionError, OSError):
-            pass
+                problem = 'published asset is temporarily missing (' + str(error.code) + ')'
+            else:
+                problem = 'HTTP ' + str(error.code)
+        except (urllib.error.URLError, http.client.HTTPException, TimeoutError, ConnectionError, OSError) as error:
+            problem = str(error)
         if attempt < 2:
             time.sleep(2 ** attempt)
-    raise StoreUnavailable('Component asset download interrupted; retry without rebuilding: ' + url)
+    raise StoreUnavailable('Component asset download unavailable; retry without rebuilding: ' + url + ' (' + problem + ')')
 
 
 def validate(manifest, expected=None):
