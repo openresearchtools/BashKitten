@@ -57,6 +57,8 @@ class ReferencesCapturePopupDialogFragment : NoObscuredTouchesDialogFragment() {
 
     override fun onStart() {
         super.onStart()
+        // Keep native dialog keyboard resizing alongside the existing inset listener.
+        @Suppress("DEPRECATION")
         dialog?.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         resize()
     }
