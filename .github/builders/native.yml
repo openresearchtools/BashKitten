@@ -17,6 +17,7 @@ permissions:
 concurrency:
   group: native-components-${{ inputs.target }}
   cancel-in-progress: false
+  queue: max
 jobs:
   native:
     runs-on: ${{ inputs.target == 'linux-arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
