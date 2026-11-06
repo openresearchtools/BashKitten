@@ -292,25 +292,77 @@ def dependencies(directories):
     return list(found.values())
 
 
-def source_legal(directory, revision, target):
+def source_legal(directory, revision, target, kind):
     """Retain complete corresponding source and full native notice inputs."""
     browser = module('browser-component')
     browser.ensure_source(revision)
-    name = 'browser-source-' + revision + '.tar.gz'
-    paths = ['browser', 'references/connector', 'references/vendor/translators', 'references/legal',
-             'references/web/theme.css', 'agent/packaging', 'agent/machines/rust-toolchain',
-             'agent/search/third_party/unsloth-studio', 'LICENSE', 'AGENTS.md']
-    module('source_archive').archive_revision(ROOT, revision, directory / name, paths=paths)
+    dependencies = []
+    assets = {}
+    if kind == 'browser-resources':
+        assets, baseline = module('source-delivery').package_repository_source(revision, directory)
+        dependencies.extend([baseline, reference(blocker_sources(revision, target))])
+    else:
+        name = 'browser-source-' + revision + '.tar.gz'
+        paths = ['browser', 'references/connector', 'references/vendor/translators', 'references/legal',
+                 'references/web/theme.css', 'agent/packaging', 'agent/machines/rust-toolchain',
+                 'agent/search/third_party/unsloth-studio', 'LICENSE', 'AGENTS.md']
+        module('source_archive').archive_revision(ROOT, revision, directory / name, paths=paths)
+        assets[name] = 'source'
     legal = 'browser-licenses-' + revision + '.tar.gz'
     paths = ['LICENSE', 'browser/LICENSE', 'browser/COPYING', 'browser/taskarian/packaging',
              'browser/taskarian/android/notices', 'browser/toolkit/content/license.html',
              'browser/taskarian/SOURCE-NOTICE', 'agent/machines/rust-toolchain',
              'agent/search/third_party/unsloth-studio']
     module('source_archive').archive_revision(ROOT, revision, directory / legal, paths=paths)
-    pin = json.loads(text(revision, 'agent/machines/rust-toolchain/sources.json'))
-    rust = module('source_cache').fetch(pin)
-    shutil.copy2(rust, directory / pin['file'])
-    return {name: 'source', legal: 'legal', pin['file']: 'source'}
+    assets[legal] = 'legal'
+    if kind == 'gecko':
+        pin = json.loads(text(revision, 'agent/machines/rust-toolchain/sources.json'))
+        rust = module('source_cache').fetch(pin)
+        shutil.copy2(rust, directory / pin['file'])
+        assets[pin['file']] = 'source'
+    return assets, dependencies
+
+
+def blocker_sources(revision, target):
+    """Retain generated blocker resources' original donors once per exact lock."""
+    store = module('component-store')
+    paths = ['browser/browser/components/blocker/assets/SOURCES.lock.json',
+             'browser/browser/components/blocker/assets/resources',
+             'browser/browser/components/blocker/scripts/update-bundled-assets.js',
+             'browser/browser/components/blocker/scripts/verify-bundled-resource-source.js',
+             'browser/taskarian/scripts/blocker_asset_provenance.py',
+             'browser/taskarian/BLOCKER-ASSET-SOURCE-NOTICE']
+    listing = subprocess.check_output(['git', 'ls-tree', '-r', '-z', revision, '--', *paths], cwd=ROOT)
+    wanted = {'schema': 1, 'sourceInputsSha256': hashlib.sha256(listing).hexdigest(), 'target': target}
+    hit = store.lookup('blocker-source', target, wanted)
+    if hit:
+        return hit
+    lock = json.loads(text(revision, paths[0]))
+    with tempfile.TemporaryDirectory(prefix='blocker-source-') as temporary:
+        temporary = Path(temporary)
+        source = temporary / 'source.tar.gz'
+        module('source_archive').archive_revision(ROOT, revision, source, prefix='', paths=paths)
+        with tarfile.open(source) as archive:
+            archive.extractall(temporary / 'inputs', filter='data')
+        output = temporary / 'output'
+        output.mkdir()
+        script = temporary / 'inputs/browser/taskarian/scripts/blocker_asset_provenance.py'
+        subprocess.run(['python3', '-I', '-B', str(script), 'build',
+                        '--repository', str(temporary / 'inputs/browser'),
+                        '--cache-dir', str(Path(os.environ['RUNNER_TEMP']) / 'blocker-source-cache'),
+                        '--output', str(output / lock['artifact']), '--skip-reproduction-check'], check=True)
+        notices = [text(revision, 'LICENSE')]
+        with tarfile.open(output / lock['artifact']) as archive:
+            for member in archive:
+                if member.isfile() and '/licenses/' in member.name:
+                    notices.append(member.name + '\n\n' + archive.extractfile(member).read().decode())
+        if len(notices) != 3:
+            raise ValueError('Blocker source archive must retain both full original license texts')
+        (output / 'blocker-source-NOTICES.txt').write_text('\n\n'.join(notices))
+        (output / 'blocker-source-lock.json').write_text(json.dumps(lock, indent=2) + '\n')
+        return store.publish('blocker-source', target, lock['sources']['uBlockOrigin']['tag'], wanted, output,
+                             assets={lock['artifact']: 'source', 'blocker-source-NOTICES.txt': 'legal',
+                                     'blocker-source-lock.json': 'metadata'}, source_commit=revision)
 
 
 def checkpoint_proof(directory, target):
@@ -407,10 +459,11 @@ def publish(kind, directory, target):
                     os.link(file, staging / file.name)
                 except OSError:
                     shutil.copy2(file, staging / file.name)
-                assets[file.name] = 'runtime'
-        assets.update(source_legal(staging, revision, target))
+                assets[file.name] = ('source' if '-source' in file.name and any(ext in file.name for ext in ('.tar', '.jar')) else 'runtime')
+        source_assets, source_dependencies = source_legal(staging, revision, target, kind)
+        assets.update(source_assets)
         assets.update(packaged_legal(directory, staging, target))
-        dependencies = []
+        dependencies = source_dependencies
         ref = os.environ.get('TASKARIAN_GECKO_RELEASE_REFERENCE')
         if kind != 'gecko' and ref:
             dependencies.append(json.loads(Path(ref).read_text()))

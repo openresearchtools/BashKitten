@@ -140,6 +140,7 @@ def read_reference(ref):
 
 def source_index(roots, revision):
     pending, components, seen = list(roots), [], set()
+    effective_role = store.runtime_owner().effective_role
     while pending:
         ref = pending.pop()
         key = (ref['repository'], ref['manifestName'], ref['manifestSha256'])
@@ -149,8 +150,8 @@ def source_index(roots, revision):
         result = read_reference(ref)
         manifest = result['manifest']
         base = result['url'].rsplit('/', 1)[0] + '/'
-        assets = [{**item, 'role': 'source' if '-source_' in item['name'] else item['role'], 'parts': [{**part, 'url': base + part['asset']} for part in item['parts']]}
-                  for item in manifest['assets'] if item['role'] in ('source', 'legal') or '-source_' in item['name']]
+        assets = [{**item, 'role': effective_role(item), 'parts': [{**part, 'url': base + part['asset']} for part in item['parts']]}
+                  for item in manifest['assets'] if effective_role(item) in ('source', 'legal')]
         components.append({'component': manifest['component'], 'target': manifest['target'],
                            'version': manifest['version'], 'sourceCommit': manifest['sourceCommit'],
                            'inputSha256': manifest['inputSha256'], 'manifest': {**reference(result), 'url': result['url']},

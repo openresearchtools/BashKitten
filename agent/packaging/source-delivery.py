@@ -54,24 +54,19 @@ def repository_patch(revision, directory):
             'format': 'git diff --binary --full-index', 'patchSha256': module('component-store').sha(patch)}
 
 
-def main():
-    store, application = module('component-store'), module('application')
-    if os.environ.get('GITHUB_ACTIONS') != 'true' or os.environ.get('GITHUB_REPOSITORY') != store.repository('linux-amd64'):
-        raise ValueError('Repository source publication belongs to the AMD64 builder')
-    wanted = application.inputs('linux-amd64')
-    if store.lookup('corresponding-source', 'linux-amd64', wanted):
-        print('Exact repository sources are already published; no source payload downloaded')
-        return
+def package_repository_source(revision, output):
+    """Create the small exact-tree source package and return its permanent base."""
+    store = module('component-store')
     base = store.lookup('corresponding-source', 'linux-amd64', {
         'source': BASE_SOURCE, 'productVersion': BASE_VERSION, 'target': 'linux-amd64'})
     if not base or base['manifestSha256'] != BASE_MANIFEST_SHA256:
         raise ValueError('The permanent verified complete repository source baseline is unavailable')
     reference = {key: base[key] for key in ('repository', 'manifestName', 'manifestSha256', 'tag') if key in base}
-    with tempfile.TemporaryDirectory(prefix='taskarian-source-', dir=os.environ['RUNNER_TEMP']) as temporary:
+    with tempfile.TemporaryDirectory(prefix='taskarian-source-', dir=os.environ.get('RUNNER_TEMP')) as temporary:
         directory = Path(temporary)
         contents = directory / 'contents'
         contents.mkdir()
-        metadata = repository_patch(wanted['source'], contents)
+        metadata = repository_patch(revision, contents)
         baseline_archive = next(item for item in base['manifest']['assets']
                                 if item['name'] == 'taskarian-source-' + BASE_SOURCE[:12] + '.tar.gz')
         baseline_url = base['url'].rsplit('/', 1)[0] + '/'
@@ -79,7 +74,7 @@ def main():
                                 'archive': {**baseline_archive, 'parts': [
                                     {**part, 'url': baseline_url + part['asset']} for part in baseline_archive['parts']]}}
         (contents / 'source.json').write_text(json.dumps(metadata, indent=2) + '\n')
-        license_text = subprocess.check_output(['git', 'show', wanted['source'] + ':LICENSE'], cwd=ROOT)
+        license_text = subprocess.check_output(['git', 'show', revision + ':LICENSE'], cwd=ROOT)
         (contents / 'LICENSE').write_bytes(license_text)
         (contents / 'README.txt').write_text(
             'Complete Taskarian corresponding source\n\n'
@@ -91,9 +86,9 @@ def main():
             '  git write-tree\n'
             'The resulting tree must equal source.json tree. The patch includes every tracked addition, modification, mode change and deletion. '
             'Unchanged upstream and dependency source archives remain available through component-sources.json in the app release.\n')
-        output = directory / 'output'
-        output.mkdir()
-        name = 'taskarian-source-' + wanted['source'][:12] + '.tar.gz'
+        output = Path(output)
+        output.mkdir(parents=True, exist_ok=True)
+        name = 'taskarian-source-' + revision[:12] + '.tar.gz'
         with (output / name).open('wb') as raw, gzip.GzipFile(fileobj=raw, mode='wb', filename='', mtime=0) as compressed:
             with tarfile.open(fileobj=compressed, mode='w|', format=tarfile.PAX_FORMAT) as archive:
                 for file in sorted(contents.iterdir()):
@@ -104,9 +99,22 @@ def main():
                         archive.addfile(info, source)
         (output / 'Taskarian-LICENSE.txt').write_bytes(license_text)
         (output / 'repository-source.json').write_text(json.dumps(metadata, indent=2) + '\n')
+        return {name: 'source', 'Taskarian-LICENSE.txt': 'legal', 'repository-source.json': 'metadata'}, reference
+
+
+def main():
+    store, application = module('component-store'), module('application')
+    if os.environ.get('GITHUB_ACTIONS') != 'true' or os.environ.get('GITHUB_REPOSITORY') != store.repository('linux-amd64'):
+        raise ValueError('Repository source publication belongs to the AMD64 builder')
+    wanted = application.inputs('linux-amd64')
+    if store.lookup('corresponding-source', 'linux-amd64', wanted):
+        print('Exact repository sources are already published; no source payload downloaded')
+        return
+    with tempfile.TemporaryDirectory(prefix='taskarian-source-output-', dir=os.environ['RUNNER_TEMP']) as temporary:
+        output = Path(temporary)
+        assets, reference = package_repository_source(wanted['source'], output)
         store.publish('corresponding-source', 'linux-amd64', wanted['productVersion'], wanted, output,
-                      assets={name: 'source', 'Taskarian-LICENSE.txt': 'legal', 'repository-source.json': 'metadata'},
-                      source_commit=wanted['source'], dependencies=[reference])
+                      assets=assets, source_commit=wanted['source'], dependencies=[reference])
         print('Published exact verified source patch; no existing source archive downloaded')
 
 
