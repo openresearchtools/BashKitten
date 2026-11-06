@@ -30,6 +30,8 @@ jobs:
           sparse-checkout: |
             /LICENSE
             /agent/packaging/
+            /.github/builders/
+            /browser/mobile/android/installer/package-manifest.in
             /browser/taskarian/android/mozconfig
       - name: Move verified bytes or verify public restores without compilation
         working-directory: source
