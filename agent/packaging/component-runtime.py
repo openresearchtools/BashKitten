@@ -16,6 +16,14 @@ import tempfile
 
 ROLES = {'runtime', 'legal', 'build-support', 'metadata'}
 LICENSE_NAME = 'licenses/Taskarian/LICENSE'
+SOURCE_ARCHIVE = re.compile(
+    r'(?:^|[-_])(?:source|sources|provenance)(?:[-_][^.]*)?'
+    r'\.(?:tar(?:\.(?:gz|xz|zst|bz2))?|zip|jar)$', re.IGNORECASE)
+
+
+def effective_role(item):
+    """Honor legacy source filenames without changing canonical manifests."""
+    return 'source' if item['role'] == 'source' or SOURCE_ARCHIVE.search(item['name']) else item['role']
 
 
 def sha(path):
@@ -42,7 +50,7 @@ def validate(descriptor):
     for item in descriptor['assets']:
         name = item['name']
         if (Path(name).name != name or name in ('', '.', '..') or
-                name in names or item.get('role') not in ROLES):
+                name in names or effective_role(item) not in ROLES):
             raise ValueError('Invalid component runtime asset')
         names.add(name)
     if not names:
@@ -58,7 +66,7 @@ def pack(manifest, directory, output, license_path):
     if not license_bytes.strip():
         raise ValueError('The full Taskarian license is required')
     assets = [{key: item[key] for key in ('name', 'role', 'size', 'sha256')}
-              for item in manifest['assets'] if item['role'] in ROLES]
+              for item in manifest['assets'] if effective_role(item) in ROLES]
     descriptor = {'schema': 1, 'kind': 'taskarian-component-runtime',
                   'component': manifest['component'], 'target': manifest['target'],
                   'version': manifest['version'], 'inputSha256': manifest['inputSha256'],
