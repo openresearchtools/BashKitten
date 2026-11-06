@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "moduleMetadata": [
+    {
+      "name": "github.com/yuin/goldmark",
+      "version": "v1.4.13",
+      "file": "proxy/github.com/yuin/goldmark/@v/v1.4.13.info",
+      "url": "https://proxy.golang.org/github.com/yuin/goldmark/@v/v1.4.13.info",
+      "sha256": "b0302ffb76a1b14e08f0f9aeacf7f6fcc4897f5e19cd00543fe3ddd62f2ada71",
+      "size": 51
+    },
+    {
+      "name": "golang.org/x/telemetry",
+      "version": "v0.0.0-20260908163034-4bcc4b2ee518",
+      "file": "proxy/golang.org/x/telemetry/@v/v0.0.0-20260908163034-4bcc4b2ee518.info",
+      "url": "https://proxy.golang.org/golang.org/x/telemetry/@v/v0.0.0-20260908163034-4bcc4b2ee518.info",
+      "sha256": "b1dc3dbdce12f427a27c7aecff78d0cee3ce6d4cee05cff8d875f242a2439675",
+      "size": 197
+    }
+  ]
+}
