@@ -6,8 +6,10 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
+import traceback
 from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -38,7 +40,10 @@ def materialize(plan):
              'agent/machines/rust-toolchain/sources.json', 'browser/taskarian/config/version.txt'}
     for item in plan:
         component, value = item['component'], item.get('inputs') or {}
-        paths.update(name for key in ('files', 'sources', 'trees') for name, oid in value.get(key, {}).items() if oid)
+        if component == 'machines':
+            paths.update(('agent/packaging/machines/build.py', 'agent/machines/NOTICE'))
+        else:
+            paths.update(name for key in ('files', 'sources', 'trees') for name, oid in value.get(key, {}).items() if oid)
         if component.startswith('auth-'):
             paths.add('auth/build')
             if component in owner.tools.AUTH_GO:
@@ -86,6 +91,27 @@ def materialize(plan):
     subprocess.run(['git', 'sparse-checkout', 'set', '--no-cone', '--stdin'], cwd=ROOT,
                    input='\n'.join('/' + path + ('/' if owner.native.git('cat-file', '-t', owner.native.entry(owner.head(), path)) == 'tree' else '') for path in selected) + '\n',
                    text=True, check=True, env={**os.environ, 'GIT_LFS_SKIP_SMUDGE': '1'})
+
+
+def assemble_native(component, target, work, output, force):
+    """Use the existing aggregate owner without installing native compilers."""
+    work, output = work.resolve(), output.resolve()
+    if work.is_relative_to(ROOT) or output.is_relative_to(ROOT):
+        raise ValueError('Native work/output must remain outside the source checkout')
+    work.mkdir(parents=True, exist_ok=True); output.mkdir(parents=True, exist_ok=True)
+    if not force and owner.restore_component(component, target, output):
+        return
+    if os.environ.get('GITHUB_ACTIONS') != 'true' or owner.native.git('status', '--porcelain', '--untracked-files=no'):
+        raise ValueError('Assemble native components in Actions from committed source')
+    for path in output.iterdir():
+        shutil.rmtree(path) if path.is_dir() else path.unlink()
+    dependencies = owner.aggregate(component, target, work, output)
+    owner.validate_outputs(component, target, output)
+    owner.source_bundle(component, target, output)
+    from source_archive import archive_revision
+    archive_revision(ROOT, owner.head(), output / f'{component}-assembly-source-{target}.tar.gz',
+                     paths=['agent/packaging/native-worker.py'])
+    owner.publish(component, target, output, dependencies, validation_only=force)
 
 
 def main():
@@ -164,10 +190,10 @@ def main():
             with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
                 output.write('build=' + str(bool(plan)).lower() + '\n')
                 ids = {item['component'] for item in plan}
-                needs_rust = bool(ids & (owner.tools.MACHINE_RUST | {'photon'}))
+                needs_rust = bool(ids & ((owner.tools.MACHINE_RUST - {'machines'}) | {'photon'}))
                 output.write('needs_rust=' + str(needs_rust).lower() + '\n')
                 output.write('rust=' + json.loads(owner.native.content(owner.head(), 'agent/machines/rust-toolchain/sources.json'))['version'] + '\n')
-                output.write('needs_go=' + str(bool(ids & (owner.tools.AUTH_GO | owner.tools.MACHINE_GO | {'files-server', 'files-office-addon', 'android-remote'}))).lower() + '\n')
+                output.write('needs_go=' + str(bool(ids & (owner.tools.AUTH_GO | (owner.tools.MACHINE_GO - {'machines'}) | {'files-server', 'files-office-addon', 'android-remote'}))).lower() + '\n')
                 output.write('needs_node=' + str(bool(ids & {'auth-authelia', 'npm-runtime', 'office-ui', 'files-ui', 'references', 'office-integration', 'files-integration'})).lower() + '\n')
                 build_tools = json.loads(owner.native.content(owner.head(), 'auth/upstreams.lock.json'))['build']
                 node_pin = json.loads(owner.native.content(owner.head(), 'agent/packaging/node/lock.json'))['linux']['node_version']
@@ -189,6 +215,16 @@ def main():
         component = item['component']
         force = item.get('force', False)
         work = args.work / component; output = args.output / component
+        if component in ('auth', 'machines'):
+            print('::group::' + component, flush=True)
+            try:
+                assemble_native(component, args.target, work, output, force)
+            except Exception:
+                traceback.print_exc()
+                failed.append(component)
+                print('::error::Component failed: ' + component, flush=True)
+            print('::endgroup::', flush=True)
+            continue
         command = [sys.executable]
         if component in app.COMPONENTS:
             command += [str(HERE / 'app-runtime.py'), 'run', component, args.target,

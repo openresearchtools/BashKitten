@@ -159,7 +159,8 @@ def inputs(component, target, revision):
         job = 'assemble' if component == 'auth' else 'component'
         names = ('Assemble private runtime, notices and source',) if component == 'auth' else ('Native build prerequisites', 'Build tracked source for the target ABI')
         if component == 'auth':
-            paths += ['auth/upstreams.lock.json', 'auth/build/assemble.py', 'agent/packaging/native-components.py']
+            paths += ['auth/upstreams.lock.json', 'auth/build/assemble.py', 'agent/packaging/native-components.py',
+                      'agent/packaging/native-worker.py']
             records['guard'] = inputs('runtime-guard', target, revision)
             # An aggregate may contain independently restored native components.
             records['components'] = {name: inputs('auth-' + name, target, revision) for name in AUTH}
@@ -230,6 +231,8 @@ def inputs(component, target, revision):
                    'agent/machines/rust-toolchain', 'agent/machines/NOTICE', 'auth/build/go-notices.py', 'auth/dependencies/go-toolchain']
                   if component == 'machines' else ['browser/taskarian/display', 'agent/packaging/machines/build.py',
                                                   'agent/machines/rust-toolchain', 'auth/build/go-notices.py'])
+        if component == 'machines':
+            paths.append('agent/packaging/native-worker.py')
     elif component in ('guest-sudo', 'guest-fusermount'):
         paths += ['agent/machines/build-guest-native.py', 'agent/packaging/machines/build.py',
                   'agent/machines/image-base.json', 'auth/build/go-notices.py']
