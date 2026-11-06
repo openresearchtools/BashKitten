@@ -28,22 +28,6 @@ jobs:
       CANDIDATE_RUN: ${{ inputs.candidate_run }}
       PRERELEASE: ${{ inputs.prerelease }}
     steps:
-    - name: Reclaim unused hosted runner toolchains
-      run: |
-        df -h /
-        if [[ ${GITHUB_ACTIONS:-} == true && ${RUNNER_ENVIRONMENT:-} == github-hosted ]]; then
-          android_sdk="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          # Retain SDK build-tools and Java for the APK signature checks.
-          for path in "$android_sdk/ndk" "$android_sdk/ndk-bundle" \
-            "$android_sdk/emulator" "$android_sdk/system-images" \
-            "$android_sdk/platforms" "$android_sdk/sources" \
-            /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
-            /opt/hostedtoolcache/CodeQL /opt/hostedtoolcache/go \
-            /opt/hostedtoolcache/PyPy /opt/hostedtoolcache/Ruby /usr/local/share/boost; do
-            if [[ -e "$path" ]]; then sudo rm -rf --one-file-system -- "$path"; fi
-          done
-        fi
-        df -h /
     - name: Locate successful complete candidate
       id: candidate
       shell: bash
@@ -75,7 +59,7 @@ jobs:
     - name: Check version and publishing authority before installer downloads
       id: draft
       env:
-        GH_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}
+        GH_TOKEN: ${{ github.token }}
         CANDIDATE_REVISION: ${{ steps.candidate.outputs.revision }}
       run: |
         python3 -B agent/packaging/release_version.py check
@@ -118,6 +102,22 @@ jobs:
         with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
             output.write('tag=' + tag + '\n')
         PY
+    - name: Reclaim unused hosted runner toolchains
+      run: |
+        df -h /
+        if [[ ${GITHUB_ACTIONS:-} == true && ${RUNNER_ENVIRONMENT:-} == github-hosted ]]; then
+          android_sdk="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          # Retain SDK build-tools and Java for the APK signature checks.
+          for path in "$android_sdk/ndk" "$android_sdk/ndk-bundle" \
+            "$android_sdk/emulator" "$android_sdk/system-images" \
+            "$android_sdk/platforms" "$android_sdk/sources" \
+            /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL /opt/hostedtoolcache/go \
+            /opt/hostedtoolcache/PyPy /opt/hostedtoolcache/Ruby /usr/local/share/boost; do
+            if [[ -e "$path" ]]; then sudo rm -rf --one-file-system -- "$path"; fi
+          done
+        fi
+        df -h /
     - name: Download shipped installers once and verify original native release contracts
       run: |
         python3 agent/packaging/remote-components.py materialize --plan release-plan/candidate-plan.json --directory candidates
@@ -150,7 +150,7 @@ jobs:
       run: python3 -B agent/packaging/release_version.py check
     - name: Publish installers and permanent source/license index
       env:
-        GH_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}
+        GH_TOKEN: ${{ github.token }}
         RELEASE_TAG: ${{ steps.release.outputs.tag }}
         VERIFIED_TAG: ${{ steps.draft.outputs.tag }}
       run: |
