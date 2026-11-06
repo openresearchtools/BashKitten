@@ -296,7 +296,7 @@ export class RemoteAccess {
       const transport = this.kind === 'tor' ? null : await this.stack?.transportStatus();
       const qrRefreshRequired = state.phase === 'ready' && this.kind !== 'tor' && (this.kind === 'cloudflare' ? !transport?.address || transport.address !== state.transportAddress : Boolean(transport?.address && transport.address !== state.transportAddress));
       const running = this.isRunning(state);
-      return { instance: this.kind, kind: this.kind, phase: state.phase, enabled: state.enabled, startup: state.startup, running, allowFileManager: state.allowFileManager, migrationRequired, error: transport?.error || this.error,
+      return { instance: this.kind, kind: this.kind, phase: state.phase, enabled: state.enabled, groupEnabled: this.group?.enabled !== false, publicationRequested: this.shouldPublish(state), startup: state.startup, running, allowFileManager: state.allowFileManager, migrationRequired, error: transport?.error || this.error,
         transportState: transport?.state || (running ? 'running' : 'off'), loginUrl: transport?.login_url || null, qrRefreshRequired, awaitingNetwork: Boolean(this.pending?.verified && !['ready', 'running'].includes(transport?.state)),
         address: state.phase === 'ready' ? 'https://' + await this.hostname() : null,
         qrDataUrl: state.phase === 'ready' && !qrRefreshRequired ? 'data:image/png;base64,' + (await fs.readFile(this.paths.connectionQr)).toString('base64') : null };
@@ -310,7 +310,7 @@ export class RemoteAccess {
         } catch (failure) { this.stack.fatal?.(failure); throw failure; }
         finally { this.stack.reconfiguring = false; }
       }
-      return { instance: this.kind, kind: this.kind, phase: 'error', enabled: false, startup: false, running: false, allowFileManager: false, reissueRequired: true, error: error.message };
+      return { instance: this.kind, kind: this.kind, phase: 'error', enabled: false, groupEnabled: this.group?.enabled !== false, publicationRequested: false, startup: false, running: false, allowFileManager: false, reissueRequired: true, error: error.message };
     }
   }
 }

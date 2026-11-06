@@ -203,7 +203,7 @@ export class SharingInstances {
     if (value.instance) return this.get(value).status();
     const instances = await Promise.all([...this.remotes.values()].map(remote => remote.status()));
     const tor = instances[0];
-    return { ...tor, instances, error: instances.find(item => item.enabled && item.error)?.error || tor.error, enabled: this.enabled && instances.some(item => item.enabled || item.awaitingNetwork),
+    return { ...tor, instances, error: instances.find(item => item.enabled && item.error)?.error || tor.error, enabled: this.enabled && instances.some(item => item.publicationRequested || item.awaitingNetwork),
       running: instances.some(item => item.running), configured: instances.some(item => item.phase === 'ready' || item.awaitingNetwork),
       selectedInstances: instances.filter(item => item.enabled || item.awaitingNetwork).map(item => item.instance) };
   }
