@@ -83,6 +83,22 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
+    - name: Reclaim unused hosted runner toolchains
+      run: |
+        df -h /
+        if [[ ${GITHUB_ACTIONS:-} == true && ${RUNNER_ENVIRONMENT:-} == github-hosted ]]; then
+          android_sdk="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          # Retain SDK build-tools and Java for the APK signature checks.
+          for path in "$android_sdk/ndk" "$android_sdk/ndk-bundle" \
+            "$android_sdk/emulator" "$android_sdk/system-images" \
+            "$android_sdk/platforms" "$android_sdk/sources" \
+            /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL /opt/hostedtoolcache/go \
+            /opt/hostedtoolcache/PyPy /opt/hostedtoolcache/Ruby /usr/local/share/boost; do
+            if [[ -e "$path" ]]; then sudo rm -rf --one-file-system -- "$path"; fi
+          done
+        fi
+        df -h /
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         persist-credentials: false
