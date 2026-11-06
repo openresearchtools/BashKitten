@@ -460,7 +460,8 @@ def build_office(component, args, payload):
             else:
                 owner.build_online(source, args.jobs, env, web=False)
             stage = args.work / 'server-stage'; stage.mkdir(exist_ok=True)
-            make = ['make', 'SUBDIRS=.', 'DESTDIR=' + str(stage), 'install']
+            from server import SERVER_DATA
+            make = ['make', 'SUBDIRS=.', SERVER_DATA, 'DESTDIR=' + str(stage), 'install']
             if platform == 'termux':
                 make += termux.online_make_inputs(termux.build_libcap(args, env), termux.build_libiconv(args, env))
             run(make, cwd=source, env=env)
@@ -854,6 +855,7 @@ def seed_office(args):
                             shutil.copy2(path, libraries / path.name, follow_symlinks=False)
             if component == 'office-server':
                 shutil.rmtree(payload / 'share/coolwsd/browser', ignore_errors=True)
+                (payload / 'share/coolwsd/collabora-online-sbom.spdx.json').unlink(missing_ok=True)
                 # Extension output belongs to the freshly built integration component.
                 shutil.rmtree(payload / 'share/taskarian', ignore_errors=True)
             elif component == 'office-ui':
@@ -981,6 +983,10 @@ def aggregate(args, family):
             for row in licenses}.values()))
         resources = None
         if family == 'office':
+            # This generated report hashes the original coupled UI. Keep all
+            # original notice texts; current leaf/aggregate inventories cover
+            # the separately assembled runtime without that stale report.
+            (combined / 'share/coolwsd/collabora-online-sbom.spdx.json').unlink(missing_ok=True)
             import branding
             branding.inputs()
             installed = []

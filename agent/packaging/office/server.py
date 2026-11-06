@@ -5,6 +5,9 @@ import re
 import branding
 PREFIX = '/usr/lib/taskarian/office/runtime'
 RUNTIME = '/data/data/com.termux/files/usr/lib/taskarian/office/runtime'
+# The coupled upstream data list also includes a browser-hashing SPDX report.
+# Separate native/UI releases keep their own actual inventories and full notices.
+SERVER_DATA = 'coolwsddata_DATA=discovery.xml favicon.ico'
 def run(command, cwd=None, env=None):
     print('+', ' '.join(map(str, command)), flush=True)
     subprocess.run(list(map(str, command)), cwd=cwd, env=env, check=True)
@@ -18,7 +21,7 @@ def build_linux(source, jobs, env, *, web=True):
          '--with-lokit-path=' + str(source / 'engine/include'),
          '--with-lo-path=' + PREFIX + '/engine'], cwd=source, env=env)
     branding.verify_online(source)
-    run(['make', '-j' + str(jobs), *([] if web else ['SUBDIRS=.'])], cwd=source, env=env)
+    run(['make', '-j' + str(jobs), *([] if web else ['SUBDIRS=.', SERVER_DATA])], cwd=source, env=env)
     run(['make', 'sbom-check'], cwd=source, env=env)
 
 def build_termux(source, args, env, *, web=True):
@@ -48,7 +51,7 @@ def build_termux(source, args, env, *, web=True):
     # configure's COKit/Poco/OpenSSL additions for the remaining autotools units;
     # overriding top-level CPPFLAGS would remove those required include paths.
     run(['make', '-j' + str(args.jobs), *online_make_inputs(libcap, libiconv),
-         *([] if web else ['SUBDIRS=.'])], cwd=source, env=native)
+         *([] if web else ['SUBDIRS=.', SERVER_DATA])], cwd=source, env=native)
     run(['make', 'sbom-check'], cwd=source, env=native)
     readelf = args.ndk / 'toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf'
     server = source / 'coolwsd'
