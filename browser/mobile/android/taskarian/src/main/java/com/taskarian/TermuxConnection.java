@@ -92,14 +92,20 @@ public final class TermuxConnection {
         String revision = target.getString("sourceCommit");
         String version = target.getString("productVersion");
         String architecture = target.getString("architecture");
+        boolean embedded = target.getInt("schema") == 2;
         String backend = null, desktop = null;
         org.json.JSONArray requirements = target.getJSONArray("packages");
         for (int i = 0; i < requirements.length(); i++) {
             JSONObject item = requirements.getJSONObject(i);
             if (!architecture.equals(item.getString("architecture"))) throw new IllegalStateException("The setup package architecture is invalid.");
             if (item.getString("name").equals("taskarian") && backend == null) backend = item.getString("version");
-            else if (item.getString("name").equals("taskarian-os") && desktop == null) desktop = item.getString("version");
+            else if (!embedded && item.getString("name").equals("taskarian-os") && desktop == null) desktop = item.getString("version");
             else throw new IllegalStateException("The setup package list is invalid.");
+        }
+        if (embedded) {
+            JSONObject component = target.getJSONObject("components").getJSONObject("os");
+            if (!architecture.equals(component.getString("architecture"))) throw new IllegalStateException("The embedded OS architecture is invalid.");
+            desktop = component.getString("version");
         }
         if (!revision.matches("[a-f0-9]{40}") || !version.matches("[0-9]+\\.[0-9]+(?:\\.[0-9]+)?") ||
             !version.equals(backend) || desktop == null || !desktop.matches("[0-9][0-9A-Za-z.+:~_-]*") ||
@@ -116,7 +122,8 @@ public final class TermuxConnection {
                 + "https://raw.githubusercontent.com/openresearchtools/Taskarian/" + revision + "/agent/packaging/termux/install.sh "
                 + "-o \"$TMPDIR/taskarian-install.sh\"; "
                 + "bash \"$TMPDIR/taskarian-install.sh\" " + shellQuote(destination.flattenToShortString()) + " "
-                + shellQuote(backend) + " " + shellQuote(desktop) + " " + shellQuote(architecture) + ")";
+                + shellQuote(backend) + " " + shellQuote(desktop) + " " + shellQuote(architecture)
+                + (embedded ? " embedded" : "") + ")";
     }
 
     public void probe(Consumer<JSONObject> done, Consumer<String> fail) {

@@ -23,13 +23,15 @@ CERT = '2f6a2ceae1a80e98b3a12156d37e7dc5541ce0968dd48285bc71bb555713df38'
 TERMUX_UPDATE_ASSET = 'assets/termux-update.json'
 TERMUX_BOOTSTRAP_ASSET = 'assets/updates-bootstrap.mjs'
 TERMUX_PREPARER_ASSET = 'assets/updates-prepare.py'
+TERMUX_OS_FILES = {'build': 'data/data/com.termux/files/usr/share/taskarian-os/build.json',
+                   'installed': 'data/data/com.termux/files/usr/share/taskarian-os/installed-files.md5sums'}
 # GitHub requires each release asset to be strictly smaller than 2 GiB.
 ASSET_SIZE_LIMIT = 2 * 1024 ** 3
 
 
 def validate_termux_update(value, version=None, abi=None):
-    """Validate immutable APK expectations, without inventing package provenance."""
-    if not isinstance(value, dict) or value.get('schema') != 1:
+    """Read old two-package APKs and the current single-parent package contract."""
+    if not isinstance(value, dict) or value.get('schema') not in (1, 2):
         raise ValueError('Missing Android companion update manifest')
     architecture = value.get('architecture')
     expected_abi = {'aarch64': 'arm64-v8a', 'x86_64': 'x86_64'}.get(architecture)
@@ -42,58 +44,74 @@ def validate_termux_update(value, version=None, abi=None):
     revision = value.get('sourceCommit', '')
     if not isinstance(revision, str) or not re.fullmatch('[0-9a-f]{40}', revision):
         raise ValueError('Android companion update source revision is missing')
-    bootstrap = value.get('bootstrapSha256')
-    if not isinstance(bootstrap, str) or not re.fullmatch('[0-9a-f]{64}', bootstrap):
+    def matches(pattern, text):
+        return isinstance(text, str) and re.fullmatch(pattern, text)
+    if not matches('[0-9a-f]{64}', value.get('bootstrapSha256')):
         raise ValueError('Android companion update bootstrap checksum is missing')
     packages = value.get('packages')
-    if not isinstance(packages, list) or len(packages) != 2:
-        raise ValueError('Android companion update must name both owned packages')
-    names = set()
+    if value['schema'] == 2 and not isinstance(value.get('components'), dict):
+        raise ValueError('Android embedded component identities are missing')
+    names = ('taskarian', 'taskarian-os') if value['schema'] == 1 else ('taskarian',)
+    if not isinstance(packages, list) or len(packages) != len(names):
+        raise ValueError('Android companion update must name the exact parent package')
+    seen = set()
     for item in packages:
-        if not isinstance(item, dict):
+        if not isinstance(item, dict) or item.get('name') not in names or item['name'] in seen:
             raise ValueError('Invalid Android companion package expectation')
-        name = item.get('name')
-        expected_version = {'taskarian': product_version, 'taskarian-os': item.get('version')}.get(name)
-        if name == 'taskarian-os' and not re.fullmatch(r'[0-9][0-9A-Za-z.+:~_-]*', str(expected_version)):
-            raise ValueError('Android companion OS package version is invalid')
-        if not expected_version or name in names or item.get('version') != expected_version or item.get('architecture') != architecture:
+        name = item['name']; seen.add(name)
+        if (item.get('architecture') != architecture or
+                not matches(r'[0-9][0-9A-Za-z.+:~_-]*', item.get('version')) or
+                not matches('[0-9a-f]{40}', item.get('sourceCommit')) or
+                name == 'taskarian' and (item['version'] != product_version or item['sourceCommit'] != revision)):
             raise ValueError('Android companion package identity/version mismatch')
-        names.add(name)
-        source = item.get('sourceCommit', '')
-        if not isinstance(source, str) or not re.fullmatch('[0-9a-f]{40}', source):
-            raise ValueError('Android companion package source revision is missing')
-        if name == 'taskarian' and source != revision:
-            raise ValueError('Android companion backend source revision mismatch')
-        digest = item.get('sha256')
-        if (name == 'taskarian-os' or digest is not None) and (not isinstance(digest, str) or not re.fullmatch('[0-9a-f]{64}', digest)):
-            raise ValueError('Android companion package checksum is missing or invalid')
-        if name == 'taskarian-os' and (not isinstance(item.get('installedManifestSha256'), str)
-                or not re.fullmatch('[0-9a-f]{64}', item['installedManifestSha256'])):
-            raise ValueError('Android companion installed OS manifest checksum is missing')
+        if item.get('sha256') is not None and not matches('[0-9a-f]{64}', item['sha256']):
+            raise ValueError('Android companion package checksum is invalid')
+    os_component = (next(item for item in packages if item['name'] == 'taskarian-os')
+                    if value['schema'] == 1 else (value.get('components') or {}).get('os'))
+    if (not isinstance(os_component, dict) or os_component.get('architecture') != architecture or
+            not matches(r'[0-9][0-9A-Za-z.+:~_-]*', os_component.get('version')) or
+            not matches('[0-9a-f]{40}', os_component.get('sourceCommit')) or
+            not matches('[0-9a-f]{64}', os_component.get('installedManifestSha256')) or
+            value['schema'] == 1 and not matches('[0-9a-f]{64}', os_component.get('sha256'))):
+        raise ValueError('Android embedded OS identity is missing or invalid')
     return value
 
 
-def termux_os_identity(file):
-    """Read producer identity and installed-file manifest from the actual .deb."""
-    members = {}
-    for mode, name in [('--fsys-tarfile', 'data/data/com.termux/files/usr/share/taskarian-os/build.json'),
-                       ('--ctrl-tarfile', 'md5sums')]:
-        with subprocess.Popen(['dpkg-deb', mode, str(file)], stdout=subprocess.PIPE) as process:
+def termux_os_identity(file, *, members=None):
+    """Read the OS identity from a parent package or a legacy OS component."""
+    names = TERMUX_OS_FILES
+    if members is not None:
+        if not all(members.get(key) for key in names):
+            raise ValueError('Taskarian package is missing its embedded OS identity')
+    elif Path(file).is_dir():
+        members = {key: (Path(file) / name).read_bytes() for key, name in names.items() if (Path(file) / name).is_file()}
+    else:
+        members = {}
+        with subprocess.Popen(['dpkg-deb', '--fsys-tarfile', str(file)], stdout=subprocess.PIPE) as process:
             with tarfile.open(fileobj=process.stdout, mode='r|') as archive:
                 for item in archive:
-                    if item.name.removeprefix('./') == name and item.isfile():
-                        if name in members:
-                            raise ValueError('Duplicate Termux OS identity file')
-                        members[name] = archive.extractfile(item).read()
-            if process.wait() != 0 or name not in members or not members[name]:
-                raise ValueError('Termux OS package is missing its producer stamp or installed-file manifest')
-    stamp = json.loads(members['data/data/com.termux/files/usr/share/taskarian-os/build.json'])
+                    for key, name in names.items():
+                        if item.name.removeprefix('./') == name and item.isfile():
+                            if key in members: raise ValueError('Duplicate embedded OS identity file')
+                            members[key] = archive.extractfile(item).read()
+            if process.wait() != 0 or not members.get('build'):
+                raise ValueError('Termux package is missing its embedded OS producer stamp')
+    embedded = 'installed' in members
+    if not embedded:
+        with subprocess.Popen(['dpkg-deb', '--ctrl-tarfile', str(file)], stdout=subprocess.PIPE) as process:
+            with tarfile.open(fileobj=process.stdout, mode='r|') as archive:
+                for item in archive:
+                    if item.name.removeprefix('./') == 'md5sums' and item.isfile():
+                        members['installed'] = archive.extractfile(item).read()
+            if process.wait() != 0 or not members.get('installed'):
+                raise ValueError('Termux OS component is missing its installed-file manifest')
+    stamp = json.loads(members['build'])
     if (stamp.get('schemaVersion') != 1 or stamp.get('target') != 'termux'
             or stamp.get('architecture') not in ('aarch64', 'x86_64')
             or not re.fullmatch('[0-9a-f]{40}', stamp.get('sourceCommit', ''))
             or not isinstance(stamp.get('version'), str) or not stamp['version']):
-        raise ValueError('Termux OS package has invalid producer identity')
-    return {**stamp, 'installedManifestSha256': hashlib.sha256(members['md5sums']).hexdigest()}
+        raise ValueError('Termux OS component has invalid producer identity')
+    return {**stamp, 'embedded': embedded, 'installedManifestSha256': hashlib.sha256(members['installed']).hexdigest()}
 
 
 def sha(file):
@@ -226,7 +244,7 @@ def source_guide(index, version):
     return '\n'.join(lines)
 
 
-def package(file):
+def package(file, *, require_embedded=False):
     fields = dict(line.split(': ', 1) for line in subprocess.check_output(
         ['dpkg-deb', '-f', str(file), 'Package', 'Version', 'Architecture'], text=True).splitlines())
     termux = fields['Architecture'] in {'aarch64', 'x86_64'}
@@ -246,7 +264,7 @@ def package(file):
             parent = parent.parent
     modes = {}
     process = subprocess.Popen(['dpkg-deb', '--fsys-tarfile', str(file)], stdout=subprocess.PIPE)
-    stamp = None
+    stamp, os_members = None, {}
     with tarfile.open(fileobj=process.stdout, mode='r|') as archive:
         for item in archive:
             name = item.name.removeprefix('./').rstrip('/')
@@ -254,6 +272,12 @@ def package(file):
                 modes[name] = item if name not in modes else None
             if item.name.endswith('/lib/taskarian/build-platform.json'):
                 stamp = json.load(archive.extractfile(item))
+            if termux and require_embedded:
+                for key, expected in TERMUX_OS_FILES.items():
+                    if name == expected and item.isfile():
+                        if key in os_members:
+                            raise ValueError('Duplicate embedded OS identity: ' + name)
+                        os_members[key] = archive.extractfile(item).read()
     if process.wait() != 0 or not stamp:
         raise ValueError('Package has no valid build provenance: ' + str(file))
     for name, (directory, mask) in required.items():
@@ -262,6 +286,13 @@ def package(file):
             raise ValueError('Package runtime path is missing, duplicated or has the wrong type: ' + name)
         if item.mode & mask != mask:
             raise ValueError(f'Package runtime path has inaccessible permissions: {name} ({item.mode & 0o777:04o})')
+    if termux and require_embedded:
+        identity = termux_os_identity(file, members=os_members)
+        component = stamp.get('components', {}).get('os', {})
+        if (not component.get('embedded') or
+                any(identity[key] != component.get(key) for key in
+                    ('version', 'architecture', 'sourceCommit', 'installedManifestSha256'))):
+            raise ValueError('Parent package OS payload differs from its build identity')
     return fields, stamp
 
 
@@ -330,6 +361,8 @@ def main():
             if any(archive.namelist().count(name) != 1 for name in (TERMUX_UPDATE_ASSET, TERMUX_BOOTSTRAP_ASSET, TERMUX_PREPARER_ASSET)):
                 raise ValueError('APK must contain one immutable companion update manifest and bootstrap')
             pairing = validate_termux_update(json.loads(archive.read(TERMUX_UPDATE_ASSET)), version, abi)
+            if not args.verify_existing_source and pairing['schema'] != 2:
+                raise ValueError('New APKs must use the single-parent Termux package contract')
             if pairing.get('integrationIteration'):
                 raise ValueError('A browser integration iteration APK is not a complete release candidate')
             if hashlib.sha256(archive.read(TERMUX_BOOTSTRAP_ASSET)).hexdigest() != pairing['bootstrapSha256']:
@@ -381,6 +414,8 @@ def main():
     for file in sorted(args.candidates.rglob('*.deb')):
         name = subprocess.check_output(['dpkg-deb', '-f', str(file), 'Package'], text=True).strip()
         if name != 'taskarian':
+            if not args.verify_existing_source:
+                raise ValueError('Only parent Taskarian packages may be shipped: ' + file.name)
             fields = dict(line.split(': ', 1) for line in subprocess.check_output(
                 ['dpkg-deb', '-f', str(file), 'Package', 'Version', 'Architecture'], text=True).splitlines())
             architecture = fields['Architecture']
@@ -405,7 +440,8 @@ def main():
             auxiliary_keys.add((name, architecture))
             auxiliary.append({**fields, **copy(file), 'build': metadata})
             continue
-        fields, stamp = package(file)
+        fields, stamp = package(file, require_embedded=not args.verify_existing_source or
+                                any(item['schema'] == 2 for item in pairings))
         architecture = fields['Architecture']
         if fields['Package'] != 'taskarian' or fields['Version'] != package_version:
             raise ValueError('Unexpected package name/version: ' + file.name)
@@ -419,6 +455,8 @@ def main():
         if node.get('architecture') != architecture or not node.get('node_version') or not node.get('npm_version'):
             raise ValueError('Package is missing its private Node/npm component')
         if architecture in {'aarch64', 'x86_64'}:
+            if stamp.get('components', {}).get('os', {}).get('embedded'):
+                os_identities[architecture] = stamp['components']['os']
             if stamp.get('components', {}).get('display', {}).get('developmentOnly'):
                 raise ValueError('Local development APK pairing cannot be published')
             display = stamp.get('components', {}).get('display', {}).get('metadata', {})
@@ -437,9 +475,11 @@ def main():
         packages.append({**fields, **copy(file), 'build': stamp})
     if architectures != {'amd64', 'arm64', 'aarch64', 'x86_64'}:
         raise ValueError('All four complete native packages are required')
-    required_auxiliary = {('taskarian-os', arch) for arch in architectures} | {('taskarian-machines-guest', arch) for arch in ['amd64', 'arm64']}
+    legacy_packages = any(item['schema'] == 1 for item in pairings)
+    required_auxiliary = ({('taskarian-os', arch) for arch in architectures} |
+                          {('taskarian-machines-guest', arch) for arch in ['amd64', 'arm64']}) if legacy_packages else set()
     if auxiliary_keys != required_auxiliary:
-        raise ValueError('All architecture-matched desktop customization and guest packages are required')
+        raise ValueError('Release package inventory does not match its APK packaging contract')
     for pairing in pairings:
         for expected in pairing['packages']:
             matches = [item for item in packages + auxiliary if item['Package'] == expected['name']
@@ -457,6 +497,12 @@ def main():
                 raise ValueError('APK companion pairing differs from the published package: '
                                  + expected['name'] + '/' + expected['architecture']
                                  + '; reassemble APK resources from the matching inputs')
+        if pairing['schema'] == 2:
+            expected = pairing['components']['os']
+            actual = os_identities.get(pairing['architecture'], {})
+            if not actual.get('embedded') or any(actual.get(key) != expected[key] for key in
+                    ('version', 'architecture', 'sourceCommit', 'installedManifestSha256')):
+                raise ValueError('APK OS pairing differs from its embedded parent package component')
     source_file = args.candidates / 'component-sources.json'
     source_index = json.loads(source_file.read_text())
     if source_index.get('schema') != 1 or source_index.get('sourceCommit') != revision:

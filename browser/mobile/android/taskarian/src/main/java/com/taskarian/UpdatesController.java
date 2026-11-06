@@ -63,7 +63,7 @@ public final class UpdatesController {
                 String source = new String(bootstrap, StandardCharsets.UTF_8);
                 String preparation;
                 try (InputStream input = app.getAssets().open("updates-prepare.py")) { preparation = new String(input.readAllBytes(), StandardCharsets.UTF_8); }
-                if (manifest.getInt("schema") != 1 || !manifest.getString("productVersion").equals(info.versionName) ||
+                if (!Set.of(1, 2).contains(manifest.getInt("schema")) || !manifest.getString("productVersion").equals(info.versionName) ||
                     !manifest.getString("apkAbi").equals(TermuxConnection.downloadAbi()) || !manifest.getString("sourceCommit").matches("[a-f0-9]{40}"))
                     throw new IllegalStateException("This app's Termux update manifest is invalid.");
                 String command = runtime.termux.setupCommand(manifest);

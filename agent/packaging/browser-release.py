@@ -236,22 +236,23 @@ def android_companion(directory, target):
                            roles=('runtime', 'metadata', 'legal'))
     if result is None:
         raise ValueError('The exact paired Termux application is not published yet')
-    packages = {}
+    packages = []
     for file in directory.glob('*.deb'):
         fields = dict(line.split(': ', 1) for line in subprocess.check_output(
             ['dpkg-deb', '-f', str(file), 'Package', 'Architecture'], text=True).splitlines())
-        name = fields['Package']
-        if name not in ('taskarian', 'taskarian-os') or name in packages or fields['Architecture'] != architecture:
-            raise ValueError('Unexpected paired backend or OS package identity')
-        packages[name] = file
-    if set(packages) != {'taskarian', 'taskarian-os'}:
-        raise ValueError('Expected the actual paired backend and OS packages')
-    backend, operating_system = packages['taskarian'], packages['taskarian-os']
+        if fields != {'Package': 'taskarian', 'Architecture': architecture}:
+            raise ValueError('Android requires one matching parent Taskarian package')
+        packages.append(file)
+    if len(packages) != 1:
+        raise ValueError('Expected one Taskarian package with its embedded OS')
+    backend = packages[0]
     release = module('release')
-    os_identity = release.termux_os_identity(operating_system)
     with tempfile.TemporaryDirectory(prefix='android-companion-') as temporary:
         subprocess.run(['dpkg-deb', '-x', str(backend), temporary], check=True)
         app = Path(temporary) / 'data/data/com.termux/files/usr/lib/taskarian'
+        os_identity = release.termux_os_identity(Path(temporary))
+        if not os_identity['embedded']:
+            raise ValueError('The APK requires the OS inside its Taskarian package')
         licenses = app / 'licenses.json'
         records = json.loads(licenses.read_text())
         if not isinstance(records, list) or not records:
@@ -260,16 +261,15 @@ def android_companion(directory, target):
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(licenses, destination)
     pairing = release.validate_termux_update({
-        'schema': 1, 'productVersion': version(source()), 'sourceCommit': source(),
+        'schema': 2, 'productVersion': version(source()), 'sourceCommit': source(),
         'integrationIteration': False,
         'bootstrapSha256': hashlib.sha256((ROOT / 'agent/src/server/platform/termux/updates-bootstrap.mjs').read_bytes()).hexdigest(),
         'architecture': architecture, 'apkAbi': 'x86_64' if architecture == 'x86_64' else 'arm64-v8a',
         'packages': [
             {'name': 'taskarian', 'version': version(source()), 'architecture': architecture,
-             'sourceCommit': source(), 'sha256': store.sha(backend)},
-            {'name': 'taskarian-os', 'version': os_identity['version'], 'architecture': architecture,
-             'sourceCommit': os_identity['sourceCommit'], 'sha256': store.sha(operating_system),
-             'installedManifestSha256': os_identity['installedManifestSha256']}]})
+             'sourceCommit': source(), 'sha256': store.sha(backend)}],
+        'components': {'os': {key: os_identity[key] for key in
+            ('version', 'architecture', 'sourceCommit', 'installedManifestSha256')}}})
     (destination.parent / 'termux-update.json').write_text(json.dumps(pairing, indent=2) + '\n')
     remember(result, directory, 'termux-application')
 

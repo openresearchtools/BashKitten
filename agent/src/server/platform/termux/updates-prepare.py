@@ -238,11 +238,14 @@ def main():
                 job_target = {key: target[key] for key in
                               ('schema', 'productVersion', 'sourceCommit', 'bootstrapSha256', 'architecture', 'apkAbi')}
                 job_target['packages'] = []
-                for name in ('taskarian', 'taskarian-os'):
+                for name in (('taskarian', 'taskarian-os') if target['schema'] == 1 else ('taskarian',)):
                     item = next(item for item in target['packages'] if item['name'] == name)
                     package = {key: item[key] for key in ('name', 'version', 'architecture', 'sourceCommit')}
                     package.update({key: item[key] for key in ('sha256', 'installedManifestSha256') if item.get(key)})
                     job_target['packages'].append(package)
+                if target['schema'] == 2:
+                    job_target['components'] = {'os': {key: target['components']['os'][key] for key in
+                        ('version', 'architecture', 'sourceCommit', 'installedManifestSha256')}}
                 if job['kind'] != request['kind'] or job['input'] != {'target': job_target, 'channel': request['channel']}:
                     raise ValueError('Another package operation is running.')
             elif request['mode'] != 'status':

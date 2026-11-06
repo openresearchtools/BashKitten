@@ -69,7 +69,7 @@ with tempfile.TemporaryDirectory(prefix='taskarian-apk-notices-') as temporary:
     # The backend is assembled later from this exact recipe revision. The OS
     # package is already an input, so retain its actual checksum and provenance.
     pairing = validate_termux_update({
-        'schema': 1, 'productVersion': version, 'sourceCommit': revision,
+        'schema': 2, 'productVersion': version, 'sourceCommit': revision,
         'integrationIteration': args.integration_iteration,
         'bootstrapSha256': hashlib.sha256((ROOT / 'src/server/platform/termux/updates-bootstrap.mjs').read_bytes()).hexdigest(),
         'architecture': args.architecture,
@@ -77,9 +77,8 @@ with tempfile.TemporaryDirectory(prefix='taskarian-apk-notices-') as temporary:
         'packages': [
             {'name': 'taskarian', 'version': version, 'architecture': args.architecture,
              'sourceCommit': revision},
-            {'name': 'taskarian-os', 'version': os_metadata['version'], 'architecture': os_metadata['architecture'],
-             'sourceCommit': os_identity['sourceCommit'], 'sha256': os_metadata['sha256'],
-             'installedManifestSha256': os_identity['installedManifestSha256']},
         ],
+        'components': {'os': {key: os_metadata[key] for key in
+            ('version', 'architecture', 'sourceCommit', 'installedManifestSha256')}},
     })
     (args.output.parent / 'termux-update.json').write_text(json.dumps(pairing, indent=2) + '\n')

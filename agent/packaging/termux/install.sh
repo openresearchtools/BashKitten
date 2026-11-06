@@ -24,15 +24,18 @@ case "$architecture" in
         ;;
     *) echo "Unsupported Termux architecture: $architecture. Use ARM64 or x86_64 Termux." >&2; exit 1 ;;
 esac
-if [[ ( $# != 1 && $# != 4 ) || ! $1 =~ ^com\.taskarian/[A-Za-z0-9_.$]+$ ]]; then
+if [[ ( $# != 1 && $# != 4 && $# != 5 ) || ! $1 =~ ^com\.taskarian/[A-Za-z0-9_.$]+$ ]]; then
     echo 'Copy the complete setup command from the installed Taskarian APK; its package versions and architecture are required.' >&2
     exit 1
 fi
 destination=$1
 backend_version=${2:-}
 os_version=${3:-}
-if [[ $# == 4 && ( ! $backend_version =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ||
-      $os_version != "$backend_version-1" || $4 != "$architecture" ) ]]; then
+layout=${5:-separate}
+if [[ $# -ge 4 && ( ! $backend_version =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ||
+      ! $os_version =~ ^[0-9][0-9A-Za-z.+:~_-]*$ || $4 != "$architecture" ||
+      ( $layout != embedded && $os_version != "$backend_version-1" ) ||
+      ( $# == 5 && $layout != embedded ) ) ]]; then
     echo 'The setup package versions or architecture do not match this APK.' >&2
     exit 1
 fi
@@ -58,10 +61,12 @@ if [[ $(dpkg-query -W -f='${Status}' taskarian 2>/dev/null || true) == 'install 
 else
     # APT verifies the signed catalogue; new APK commands select exact versions.
     # The returning APK checks producer/OS identities before backend startup.
-    install_options=(--no-remove install -y
+    install_options=(install -y
         -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
+    if [[ $layout != embedded ]]; then install_options=(--no-remove "${install_options[@]}"); fi
     if [[ -n $backend_version ]]; then
-        install_options+=(--allow-downgrades "taskarian=$backend_version" "taskarian-os=$os_version")
+        install_options+=(--allow-downgrades "taskarian=$backend_version")
+        if [[ $layout != embedded ]]; then install_options+=("taskarian-os=$os_version"); fi
     else
         # Already-shipped APKs pass only their return Activity. Preserve their
         # bootstrap entry point; their APK-owned exact reconciler gates startup.
@@ -71,9 +76,16 @@ else
     fi
     apt-get -s "${install_options[@]}" > "$setup_dir/plan"
     cat "$setup_dir/plan"
-    # --allow-downgrades applies only to the two explicit APK requirements,
+    # --allow-downgrades applies only to the explicit APK requirements,
     # never a user's unrelated packages selected by other APT preferences.
     while IFS= read -r line; do
+        if [[ $line =~ ^Remv\ ([^[:space:]]+) ]]; then
+            package=${BASH_REMATCH[1]%%:*}
+            if [[ $layout != embedded || ( $package != taskarian-os && $package != xfce4-panel ) ]]; then
+                printf 'Refusing to remove unrelated package %s during app setup.\n' "$package" >&2
+                exit 1
+            fi
+        fi
         if [[ $line =~ ^Inst\ ([^[:space:]]+)\ \[([^]]+)\]\ \(([^[:space:]]+) ]]; then
             package=${BASH_REMATCH[1]%%:*}
             if [[ $package != taskarian && $package != taskarian-os ]] &&

@@ -22,27 +22,34 @@ const aptOptions = ['-o', 'DPkg::Lock::Timeout=300', '-o', 'Dpkg::Use-Pty=0', '-
 const importInstalled = name => import(pathToFileURL(path.join(app, 'src/server', name)).href);
 function termux() { if (process.platform !== 'android' || process.env.PREFIX !== prefix) throw Error('These package updates require the installed Termux backend'); }
 export function validateTarget(value) {
-  if (value?.schema !== 1 || !/^[a-f0-9]{40}$/.test(value.sourceCommit || '') || !/^[a-f0-9]{64}$/.test(value.bootstrapSha256 || '') ||
+  const legacy = value?.schema === 1;
+  if ((!legacy && value?.schema !== 2) || !/^[a-f0-9]{40}$/.test(value.sourceCommit || '') || !/^[a-f0-9]{64}$/.test(value.bootstrapSha256 || '') ||
       !['aarch64', 'x86_64'].includes(value.architecture) || value.apkAbi !== (value.architecture === 'aarch64' ? 'arm64-v8a' : 'x86_64') ||
-      !/^[0-9][0-9A-Za-z.+:~_-]*$/.test(value.productVersion || '') || !Array.isArray(value.packages) || value.packages.length !== 2)
+      !/^[0-9][0-9A-Za-z.+:~_-]*$/.test(value.productVersion || '') || !Array.isArray(value.packages) || value.packages.length !== (legacy ? 2 : 1))
     throw Error('The APK package manifest is invalid');
-  for (const name of ['taskarian', 'taskarian-os']) {
-    const records = value.packages.filter(item => item.name === name);
-    if (records.length !== 1) throw Error('The APK package manifest has an invalid package list');
-    const item = records[0];
+  const names = legacy ? ['taskarian', 'taskarian-os'] : ['taskarian'];
+  const packages = names.map(name => {
+    const matches = value.packages.filter(item => item.name === name);
+    if (matches.length !== 1) throw Error('The APK package manifest has an invalid package list');
+    const item = matches[0];
     if (!/^[0-9][0-9A-Za-z.+:~_-]*$/.test(item.version || '') || item.architecture !== value.architecture ||
         !/^[a-f0-9]{40}$/.test(item.sourceCommit || '') || item.sha256 !== undefined && !/^[a-f0-9]{64}$/.test(item.sha256)) throw Error('Invalid package release identity');
     if (name === 'taskarian' && (item.version !== value.productVersion || item.sourceCommit !== value.sourceCommit)) throw Error('The backend does not match the APK release');
-    if (name === 'taskarian-os' && (!item.sha256 || !/^[a-f0-9]{64}$/.test(item.installedManifestSha256 || ''))) throw Error('The APK has no OS package identity');
-  }
-  return { schema: 1, productVersion: value.productVersion, sourceCommit: value.sourceCommit, bootstrapSha256: value.bootstrapSha256,
-    architecture: value.architecture, apkAbi: value.apkAbi, packages: ['taskarian', 'taskarian-os'].map(name => {
-      const item = value.packages.find(record => record.name === name);
-      return { name, version: item.version, architecture: item.architecture, sourceCommit: item.sourceCommit,
-        ...(item.sha256 ? { sha256: item.sha256 } : {}),
-        ...(item.installedManifestSha256 ? { installedManifestSha256: item.installedManifestSha256 } : {}) };
-    }) };
+    return { name, version: item.version, architecture: item.architecture, sourceCommit: item.sourceCommit,
+      ...(item.sha256 ? { sha256: item.sha256 } : {}),
+      ...(item.installedManifestSha256 ? { installedManifestSha256: item.installedManifestSha256 } : {}) };
+  });
+  const os = legacy ? packages.find(item => item.name === 'taskarian-os') : value.components?.os;
+  if (!os || os.architecture !== value.architecture || !/^[0-9][0-9A-Za-z.+:~_-]*$/.test(os.version || '') ||
+      !/^[a-f0-9]{40}$/.test(os.sourceCommit || '') || !/^[a-f0-9]{64}$/.test(os.installedManifestSha256 || '') || legacy && !os.sha256)
+    throw Error('The APK has no embedded OS identity');
+  return { schema: value.schema, productVersion: value.productVersion, sourceCommit: value.sourceCommit, bootstrapSha256: value.bootstrapSha256,
+    architecture: value.architecture, apkAbi: value.apkAbi, packages,
+    ...(!legacy ? { components: { os: { version: os.version, architecture: os.architecture, sourceCommit: os.sourceCommit,
+      installedManifestSha256: os.installedManifestSha256 } } } : {}) };
 }
+const osManifest = path.join(prefix, 'share/taskarian-os/installed-files.md5sums');
+const osTarget = target => target.schema === 1 ? target.packages.find(item => item.name === 'taskarian-os') : target.components.os;
 async function json(file, fallback = null) {
   try { return JSON.parse(await fs.readFile(file, 'utf8')); }
   catch (error) { if (error.code === 'ENOENT') return fallback; throw error; }
@@ -65,12 +72,12 @@ export async function releaseStatus(target) {
     current.packages.some(item => item.name === expected.name && item.version === expected.version && item.architecture === expected.architecture));
   const build = current.build;
   const backend = build?.revision === target.sourceCommit && build?.packageVersion === target.productVersion && build?.architecture === target.architecture;
-  const expected = target.packages.find(item => item.name === 'taskarian-os');
+  const expected = osTarget(target);
   const osBuild = await json(path.join(prefix, 'share/taskarian-os/build.json'));
   let os = osBuild?.schemaVersion === 1 && osBuild.sourceCommit === expected.sourceCommit && osBuild.version === expected.version &&
     osBuild.target === 'termux' && osBuild.architecture === expected.architecture;
   if (os) {
-    try { os = sha(await fs.readFile(path.join(prefix, 'var/lib/dpkg/info/taskarian-os.md5sums'))) === expected.installedManifestSha256; }
+    try { os = sha(await fs.readFile(target.schema === 1 ? path.join(prefix, 'var/lib/dpkg/info/taskarian-os.md5sums') : osManifest)) === expected.installedManifestSha256; }
     catch (error) { if (error.code !== 'ENOENT') throw error; os = false; }
   }
   return { matched: Boolean(versions && backend && os), installed: { architecture: current.architecture, packages: current.packages,
@@ -120,12 +127,13 @@ async function packageOptions(job, target, channel) {
   await fs.writeFile(preferences, rules + '\n' + existing, { mode: 0o600 });
   return ['-o', 'Dir::Etc::preferences=' + preferences];
 }
-function checkRemoval(output) {
-  if (/^Remv (?:taskarian(?:-os)?|python|termux-tools|openresearchtools-termux-keyring)(?: |:)/m.test(output))
+function checkRemoval(output, target) {
+  const protectedPlan = target.schema === 2 ? output.replace(/^Remv taskarian-os(?: |:).*$/gm, '') : output;
+  if (/^Remv (?:taskarian(?:-os)?|python|termux-tools|openresearchtools-termux-keyring)(?: |:)/m.test(protectedPlan))
     throw Error('APT would remove a required Taskarian package; the transaction was not applied');
 }
 async function checkPlan(output, target) {
-  checkRemoval(output);
+  checkRemoval(output, target);
   for (const [, name, current, version] of output.matchAll(/^Inst (\S+)(?: \[([^\]]+)\])? \((\S+)/gm)) {
     const expected = target.packages.find(item => item.name === name.split(':')[0]);
     if (expected && version !== expected.version) throw Error('APT preferences would replace ' + expected.name + ' with a version that does not match this APK');
@@ -181,6 +189,11 @@ async function archives(job, target) {
         const build = await archiveBuild(file);
         if (build.revision !== expected.sourceCommit || build.packageVersion !== expected.version || build.architecture !== expected.architecture)
           throw Error('The configured APT repository does not contain the exact backend source release required by this APK');
+        if (target.schema === 2) {
+          const os = build.components?.os, expectedOs = osTarget(target);
+          if (!os?.embedded || ['version', 'architecture', 'sourceCommit', 'installedManifestSha256'].some(key => os[key] !== expectedOs[key]))
+            throw Error('The Taskarian package does not contain the OS component required by this APK');
+        }
       }
       found = file;
     }
@@ -225,7 +238,9 @@ export async function applyPackages(job, { target, channel }, { beforeApply = as
         !target.packages.every(expected => final.packages.some(item => item.name === expected.name && item.version === expected.version && item.architecture === expected.architecture)))
       throw Error('Package installation finished without the exact APK/backend match');
     if (!(await releaseStatus(target)).matched) throw Error('The installed OS package identity does not match this APK');
-    const verification = await command(job, 'dpkg', ['--verify', 'taskarian-os'], { captureAll: true });
+    const verification = target.schema === 1
+      ? await command(job, 'dpkg', ['--verify', 'taskarian-os'], { captureAll: true })
+      : await command(job, 'md5sum', ['--check', '--quiet', osManifest], { cwd: '/', captureAll: true });
     if (verification.trim()) throw Error('Installed package verification reported changed files; see update output');
   });
 }

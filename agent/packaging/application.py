@@ -24,6 +24,10 @@ def publish(target, directory, *, component='application', dependencies=(), vali
     for path in sorted(directory.iterdir()):
         if path.is_file() and not path.is_symlink():
             name = path.name
+            if component == 'application' and path.suffix == '.deb':
+                package = subprocess.check_output(['dpkg-deb', '-f', str(path), 'Package'], text=True).strip()
+                if package != 'taskarian':
+                    raise ValueError('Application outputs must contain only the parent Taskarian installer: ' + name)
             role = ('source' if any(token in name for token in ('-source', '-provenance')) and any(extension in name for extension in ('.tar', '.jar'))
                     else 'legal' if name.lower().endswith(('notices.txt', 'licenses.json'))
                     else 'runtime')

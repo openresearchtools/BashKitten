@@ -278,9 +278,9 @@ def install_termux_display(args, app, revision, bin_dir):
     return result
 
 
-def collect_termux_os(deb, app, revision, architecture, version):
+def collect_termux_os(deb, app, revision, architecture, version, package_stage=None):
     require(deb is not None and deb.is_file(), 'Termux requires matching --os-package')
-    fields = subprocess.check_output(['dpkg-deb', '-f', str(deb), 'Package', 'Version', 'Architecture'], text=True)
+    fields = subprocess.check_output(['dpkg-deb', '-f', str(deb), 'Package', 'Version', 'Architecture', 'Depends', 'Provides', 'Conflicts', 'Replaces'], text=True)
     info = dict(line.split(': ', 1) for line in fields.splitlines())
     require(info.get('Package') == 'taskarian-os' and info.get('Architecture') == architecture and
             re.fullmatch(r'\d+\.\d+(?:\.\d+)?-\d+', info.get('Version', '')),
@@ -290,13 +290,63 @@ def collect_termux_os(deb, app, revision, architecture, version):
             'Taskarian OS package version/hash mismatch')
     equivalence = native_components().verify_equivalence(deb.parent, 'os', 'termux-' + architecture, revision, metadata.get('sourceCommit'))
     with tempfile.TemporaryDirectory(prefix='termux-os-notices-', dir=app.parent) as temporary:
-        run(['dpkg-deb', '-x', str(deb), temporary])
-        root = Path(temporary) / 'data/data/com.termux/files/usr/share/taskarian-os'
+        temporary = Path(temporary)
+        run(['dpkg-deb', '--raw-extract', str(deb), str(temporary)])
+        root = temporary / 'data/data/com.termux/files/usr/share/taskarian-os'
         paths = license_files(root)
         require(paths, 'Termux OS package lacks full license texts')
         write_json(app / 'os-licenses.json', [{'name': 'Taskarian OS', 'version': info['Version'],
             'text': '\n\n'.join(str(p.relative_to(root)) + '\n' + p.read_text() for p in paths)}])
-    return {**metadata, 'inputEquivalence': equivalence} if equivalence else metadata
+        control = temporary / 'DEBIAN'
+        conffiles = (control / 'conffiles').read_text() if (control / 'conffiles').exists() else ''
+        preserved = {line.split()[-1].lstrip('/') for line in conffiles.splitlines() if line.strip()}
+        md5sums = (control / 'md5sums').read_text()
+        # User-modified conffiles remain authoritative; verify immutable OS data.
+        installed = ''.join(line + '\n' for line in md5sums.splitlines()
+                            if line.split(maxsplit=1)[1].lstrip('*/') not in preserved)
+        require(installed.strip(), 'Embedded OS requires its immutable installed-file inventory')
+        metadata = {**metadata, 'embedded': True, 'depends': dependencies(info.get('Depends', '').split(',') if info.get('Depends') else []),
+            'installedManifestSha256': hashlib.sha256(installed.encode()).hexdigest(),
+            '_packageFields': {name: info.get(name, '') for name in ('Provides', 'Conflicts', 'Replaces')},
+            '_maintainerScripts': {name: (control / name).read_text() for name in ('preinst', 'postinst', 'prerm', 'postrm')
+                                   if (control / name).is_file()}}
+        if package_stage is not None:
+            payload = temporary / 'data'
+            require(payload.is_dir() and not any(path.name not in ('data', 'DEBIAN') for path in temporary.iterdir()),
+                    'Termux OS payload must stay inside the Termux application prefix')
+            owned_prefix = Path('data/data/com.termux/files/usr')
+            for source in payload.rglob('*'):
+                relative = source.relative_to(temporary)
+                require(relative.is_relative_to(owned_prefix) or
+                        (owned_prefix.is_relative_to(relative) and source.is_dir() and not source.is_symlink()),
+                        'OS package must not own HOME or user desktop settings: ' + str(relative))
+                target = package_stage / relative
+                if (target.exists() or target.is_symlink()) and not source.is_dir():
+                    require((source.is_symlink() and target.is_symlink() and os.readlink(source) == os.readlink(target)) or
+                            (not source.is_symlink() and target.is_file() and not target.is_symlink() and sha(source) == sha(target)),
+                            'OS package conflicts with the parent payload: ' + str(relative))
+            shutil.copytree(payload, package_stage / 'data', dirs_exist_ok=True, symlinks=True)
+            inventory = package_stage / 'data/data/com.termux/files/usr/share/taskarian-os/installed-files.md5sums'
+            inventory.write_text(installed)
+            inventory.chmod(0o644)
+            destination = package_stage / 'DEBIAN'
+            destination.mkdir(exist_ok=True)
+            for name in ('conffiles', 'triggers'):
+                if (control / name).is_file():
+                    shutil.copy2(control / name, destination / name)
+    if equivalence:
+        metadata['inputEquivalence'] = equivalence
+    return metadata
+
+
+def maintainer_hook(script):
+    """Run the native component hook in a subshell, preserving its arguments."""
+    if not script:
+        return ''
+    body = script.split('\n', 1)[1] if script.startswith('#!') else script
+    return ('# Embedded Taskarian OS package hook; no per-user provisioning.\n(\n' + body +
+            '\n)\ntaskarian_os_status=$?\n[ "$taskarian_os_status" -eq 0 ] || exit "$taskarian_os_status"\n')
+
 
 def key_values(path):
     return dict(line.split('=', 1) for line in path.read_text().splitlines()
@@ -566,9 +616,12 @@ def assemble(args):
         }
         if auth_equivalence: components['auth']['inputEquivalence'] = auth_equivalence
         if search_equivalence: components['search']['inputEquivalence'] = search_equivalence
+        os_hooks, os_fields = {}, {}
         if termux:
             components['display'] = install_termux_display(args, app, revision, stage / prefix.lstrip('/') / 'bin')
-            components['os'] = collect_termux_os(args.os_package, app, revision, args.architecture, version)
+            components['os'] = collect_termux_os(args.os_package, app, revision, args.architecture, version, stage)
+            os_hooks = components['os'].pop('_maintainerScripts')
+            os_fields = components['os'].pop('_packageFields')
         if not termux:
             components['browser'] = package_browser(args, app, stage, version, auth)
         if not termux and not args.backend_only:
@@ -635,7 +688,7 @@ def assemble(args):
         search_launcher = app / 'search/taskarian-search'
         executable(search_launcher, f'#!{prefix}/bin/{"python" if termux else "python3"}\n' + search_launcher.read_text().split('\n', 1)[1])
         control = stage / 'DEBIAN'
-        control.mkdir()
+        control.mkdir(exist_ok=True)
         managed = json.dumps({'owner': 'taskarian', 'version': pi_version, 'lockSha256': lock_hash})
         display_postinst = f"chmod 400 '{installed_app}/display/taskarian-x11-loader.jar'\n" if termux else ''
         apparmor_postinst = apparmor_postrm = ''
@@ -646,7 +699,7 @@ def assemble(args):
         executable(control / 'postinst', f'''#!{shell}
 set -e
 umask 022
-{apparmor_postinst}{display_postinst}runtime='{runtime}'
+{apparmor_postinst}{display_postinst}{maintainer_hook(os_hooks.get('postinst'))}runtime='{runtime}'
 if [ ! -f "$runtime/ready" ]; then
   mkdir -p "$runtime"
   cp -a '{installed_app}/node_modules' "$runtime/"
@@ -663,11 +716,14 @@ chmod 644 '{installation}.tmp'
 mv '{installation}.tmp' '{installation}'
 ''')
         executable(control / 'postrm', f'''#!{shell}
-{apparmor_postrm}if [ "$1" = remove ] || [ "$1" = purge ]; then
+{maintainer_hook(os_hooks.get('postrm'))}{apparmor_postrm}if [ "$1" = remove ] || [ "$1" = purge ]; then
   if [ "$(readlink '{prefix}/bin/pi')" = taskarian-pi ]; then rm '{prefix}/bin/pi'; fi
 fi
 # Preserve user data, native Pi sessions/credentials and retained runtimes.
 ''')
+        for phase in ('preinst', 'prerm'):
+            if os_hooks.get(phase):
+                executable(control / phase, f'#!{shell}\n' + maintainer_hook(os_hooks[phase]))
         if termux:
             profile = stage / prefix.lstrip('/') / 'etc/profile.d/taskarian-privacy.sh'
             profile.parent.mkdir(parents=True)
@@ -683,8 +739,12 @@ fi
                                components.get('display', {}).get('metadata', {}).get('depends', []),
                                components.get('files', {}).get('metadata', {}).get('depends', []),
                                components.get('office', {}).get('metadata', {}).get('depends', []),
-                               [f"taskarian-os (= {components['os']['version']})"] if termux else [])
+                               components['os']['depends'] if termux else [])
         replacements = '' if termux or args.backend_only else 'Replaces: taskarian-desktop\nBreaks: taskarian-desktop\nProvides: taskarian-desktop\n'
+        if termux:
+            replacements = ('Replaces: ' + ', '.join(dependencies(['taskarian-os'], os_fields.get('Replaces', '').split(',') if os_fields.get('Replaces') else [])) + '\n'
+                            + 'Conflicts: ' + ', '.join(dependencies(['taskarian-os'], os_fields.get('Conflicts', '').split(',') if os_fields.get('Conflicts') else [])) + '\n'
+                            + 'Provides: ' + ', '.join(dependencies(["taskarian-os (= " + components['os']['version'] + ")"], os_fields.get('Provides', '').split(',') if os_fields.get('Provides') else [])) + '\n')
         doc = stage / prefix.lstrip('/') / 'share/doc/taskarian'
         doc.mkdir(parents=True)
         for name in ['LICENSE', 'PI_UPSTREAM.md', 'THIRD_PARTY_NOTICES.md', 'licenses.json', 'build-platform.json']:

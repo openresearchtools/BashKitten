@@ -85,12 +85,8 @@ def build(target, inputs_dir, output, browser_dir=None):
                           if name not in ('guest_packages', 'machines_archive', 'display_archive')}
         subprocess.run([*command, '--backend-only', '--output', str(guest), *arguments(backend_values)], check=True)
     subprocess.run([*command, '--output', str(output), *arguments(values)], check=True)
-    # Auxiliary packages and actual source/legal producer payloads are delivered
-    # with the app so final release collection needs no Actions artifact lookup.
-    for folder in (Path(values['guest_packages']) if platform == 'linux' else Path(values['os_package']).parent,):
-        for path in sorted(folder.iterdir()):
-            if path.is_file() and not path.name.startswith('taskarian-backend'):
-                shutil.copy2(path, output / path.name)
+    # OS/guest components stay inside the parent package or its private guest
+    # image. Only the matching Taskarian installer is a final application asset.
     return values
 
 
