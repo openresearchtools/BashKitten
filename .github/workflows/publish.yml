@@ -92,12 +92,17 @@ jobs:
             target = api('git/tags/' + target['sha'])['object']
         if target.get('type') != 'commit' or target.get('sha') != revision:
             raise RuntimeError('Release tag does not identify the successful candidate')
-        release = api('releases/tags/' + tag)
-        if release is None:
+        # REST's release-by-tag route can hide drafts. Use the same draft-aware
+        # lookup as the upload step so a failed publication can resume safely.
+        lookup = subprocess.run(['gh', 'release', 'view', tag, '--json', 'isDraft'],
+                                text=True, capture_output=True, check=False)
+        if lookup.returncode and 'release not found' not in lookup.stderr.lower():
+            raise RuntimeError(lookup.stderr)
+        if lookup.returncode:
             subprocess.run(['gh', 'release', 'create', tag, '--verify-tag', '--draft', '--prerelease',
                             '--latest=false', '--title', 'Taskarian ' + tag[1:] + ' · Testing release',
                             '--notes', 'Preparing verified Taskarian installers.'], check=True)
-        elif not release['draft']:
+        elif not json.loads(lookup.stdout)['isDraft']:
             raise RuntimeError('A published release is immutable; prepare a new product version')
         with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
             output.write('tag=' + tag + '\n')
