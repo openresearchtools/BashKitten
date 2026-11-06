@@ -399,11 +399,14 @@ def publish(kind, directory, target):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['inputs', 'cache-contract', 'restore-cache', 'restore-engine', 'publish-engine',
+    parser.add_argument('action', choices=['inputs', 'cache-contract', 'restore-cache', 'restore-engine', 'seed-engine', 'publish-engine',
                                          'publish-resources', 'android-companion', 'dependencies'])
     parser.add_argument('target')
     parser.add_argument('--directory', type=Path)
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--producer-source')
+    parser.add_argument('--producer-run', type=int)
+    parser.add_argument('--producer-artifact', type=int)
     args = parser.parse_args()
     if args.action == 'inputs':
         print(json.dumps(inputs('gecko', args.target), indent=2)); return
@@ -417,6 +420,12 @@ def main():
         print(hashlib.sha256(module('component-store').canonical(value)).hexdigest()); return
     if args.action == 'restore-cache':
         print(json.dumps({'hit': restore_cache(args.directory, args.target)})); return
+    if args.action == 'seed-engine':
+        if not all((args.directory, args.producer_source, args.producer_run, args.producer_artifact)):
+            parser.error('seed-engine requires --directory and an exact --producer-source/run/artifact')
+        module('android-native-component').seed_checkpoint(args.directory, args.target, args.producer_source,
+                                                          args.producer_run, args.producer_artifact)
+        publish('gecko', args.directory, args.target); return
     if args.action == 'android-companion':
         android_companion(args.directory, args.target); return
     if args.action == 'dependencies':

@@ -306,6 +306,72 @@ def early_producer(repository, run, artifact=None):
     return None
 
 
+def seed_checkpoint(directory, target, producer_source, producer_run, producer_artifact):
+    """Verify one explicitly identified native upload; never search old runs."""
+    repository = 'openresearchtools/taskarian-build-' + target
+    if target not in ('android', 'android-x86_64') or os.environ.get('GITHUB_REPOSITORY') != repository:
+        raise ValueError('Seed the checkpoint in its original Android architecture builder')
+    if not re.fullmatch('[0-9a-f]{40}', producer_source) or min(producer_run, producer_artifact) < 1:
+        raise ValueError('An exact native source/run/artifact is required')
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    if any(directory.iterdir()):
+        raise ValueError('Native checkpoint seed directory must be empty')
+    artifact = component.api(f'repos/{repository}/actions/artifacts/{producer_artifact}')
+    run = component.api(f'repos/{repository}/actions/runs/{producer_run}')
+    digest = native_inputs(producer_source, target)
+    evidence = early_producer(repository, run, artifact)
+    if (artifact.get('id') != producer_artifact or artifact.get('expired') or
+            artifact.get('workflow_run', {}).get('id') != producer_run or
+            artifact.get('name') != native_artifact(target, digest) or
+            not run.get('display_title', '').startswith('Taskarian ' + producer_source + ' / ') or
+            not evidence or digest != native_inputs(git('rev-parse', 'HEAD').decode().strip(), target) or
+            not re.fullmatch('sha256:[0-9a-f]{64}', artifact.get('digest', ''))):
+        raise ValueError('Explicit native upload, original workflow evidence or compiler inputs differ')
+    with tempfile.TemporaryFile() as stream:
+        for attempt in range(3):
+            stream.seek(0); stream.truncate()
+            result = subprocess.run(['gh', 'api', f'repos/{repository}/actions/artifacts/{producer_artifact}/zip'],
+                                    stdout=stream, stderr=subprocess.PIPE)
+            if result.returncode == 0:
+                break
+            if attempt == 2:
+                raise component.NetworkUnavailable('Explicit native checkpoint download unavailable; retry without compiling')
+            time.sleep(2 ** attempt)
+        stream.seek(0)
+        if (os.fstat(stream.fileno()).st_size != artifact['size_in_bytes'] or
+                'sha256:' + hashlib.file_digest(stream, 'sha256').hexdigest() != artifact['digest']):
+            raise ValueError('Explicit uploaded native checkpoint checksum or size differs')
+        stream.seek(0)
+        with zipfile.ZipFile(stream) as archive:
+            names = archive.namelist()
+            if (len(names) != len(set(names)) or not {'SHA256SUMS', 'native-gecko.json', 'gecko-libraries.apk'} <= set(names) or
+                    any(name not in ('SHA256SUMS', 'native-gecko.json', 'gecko-libraries.apk') and
+                        not re.fullmatch(r'gecko-built-license-[0-9]+\.html', name) for name in names) or
+                    any((item.external_attr >> 16) & 0o170000 == 0o120000 for item in archive.infolist())):
+                raise ValueError('Unexpected native checkpoint members')
+            archive.extractall(directory)
+    component.verify_checksums(directory)
+    manifest, payload = directory / 'native-gecko.json', directory / 'gecko-libraries.apk'
+    record = json.loads(manifest.read_text())
+    if (record.get('source') != producer_source or record.get('archiveSource') != producer_source or
+            record.get('input_sha256') != digest or record.get('producer') or
+            not any(page.stat().st_size for page in directory.glob('gecko-built-license-*.html'))):
+        raise ValueError('Original native source, complete built legal page or native input record differs')
+    proof = {'source': producer_source, 'runSource': producer_source,
+             'repository': repository, 'run': producer_run, 'artifact': producer_artifact,
+             'artifactName': artifact['name'], 'artifactSha256': artifact['digest'].removeprefix('sha256:'),
+             'manifest_sha256': sha(manifest), 'apk': payload.name, 'apk_sha256': sha(payload), 'steps': evidence}
+    record['producer'] = proof
+    verify_libraries(payload, record, target)
+    # Keep every uploaded checkpoint byte unchanged. The outside receipt binds
+    # the original native producer to the current source-equivalent publisher.
+    receipt = directory.parent / 'seed-native-gecko.json'
+    receipt.write_text(json.dumps(record, indent=2) + '\n')
+    os.environ['TASKARIAN_ANDROID_NATIVE_RECEIPT'] = str(receipt.resolve())
+    return receipt
+
+
 def early_attempt(repository, run):
     if run.get('event') != 'workflow_dispatch' or run.get('head_branch') != 'main' or run.get('path') != '.github/workflows/build.yml':
         return None

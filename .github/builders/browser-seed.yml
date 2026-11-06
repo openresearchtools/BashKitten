@@ -1,0 +1,57 @@
+name: Publish an explicitly verified Gecko checkpoint
+run-name: Gecko checkpoint ${{ inputs.target }} / ${{ inputs.producer_run }}
+'on':
+  workflow_dispatch:
+    inputs:
+      source_sha: {required: true, type: string}
+      target:
+        required: true
+        type: choice
+        options: [android, android-x86_64]
+      producer_source: {required: true, type: string}
+      producer_run: {required: true, type: string}
+      producer_artifact: {required: true, type: string}
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: gecko-checkpoint-${{ inputs.target }}
+  cancel-in-progress: false
+jobs:
+  seed:
+    runs-on: ${{ inputs.target == 'android' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GIT_LFS_SKIP_SMUDGE: '1'
+      TASKARIAN_SOURCE_CACHE: /tmp/taskarian-browser-seed-sources
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: openresearchtools/Taskarian
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /LICENSE
+            /AGENTS.md
+            /.github/builders/
+            /agent/packaging/
+            /agent/machines/rust-toolchain/
+            /agent/search/third_party/unsloth-studio/
+            /browser/
+            /references/connector/
+            /references/vendor/translators/
+            /references/legal/
+            /references/web/theme.css
+      - name: Verify the exact native upload and publish its complete source and licenses
+        env:
+          BROWSER_TARGET: ${{ inputs.target }}
+          PRODUCER_SOURCE: ${{ inputs.producer_source }}
+          PRODUCER_RUN: ${{ inputs.producer_run }}
+          PRODUCER_ARTIFACT: ${{ inputs.producer_artifact }}
+        run: |
+          python3 agent/packaging/browser-release.py seed-engine "$BROWSER_TARGET" \
+            --producer-source "$PRODUCER_SOURCE" --producer-run "$PRODUCER_RUN" \
+            --producer-artifact "$PRODUCER_ARTIFACT" --directory "$RUNNER_TEMP/native-checkpoint"
