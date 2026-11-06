@@ -122,6 +122,11 @@ def pack(directory, archive, root=None):
                 output.add(file, arcname=file.name)
 
 
+def archive_files(directory):
+    return sorted(path for path in Path(directory).glob('*.tar.*')
+                  if path.name.endswith(('.tar.gz', '.tar.xz', '.tar.zst', '.tar.bz2')))
+
+
 def source_bundle(component, target, output):
     """Selected tracked source plus exact downloaded native dependency originals."""
     from source_archive import archive_revision
@@ -175,9 +180,15 @@ def source_bundle(component, target, output):
             if pin['sha256'] in seen:
                 continue
             seen.add(pin['sha256'])
-            if not pin.get('url') and pin.get('file', '').startswith('proxy/'):
-                pin = {**pin, 'url': 'https://proxy.golang.org/' + pin['file'][6:]}
-            file = fetch(pin)
+            local = None
+            if pin.get('file', '').startswith('proxy/'):
+                # Go caches may normalize .mod/.info JSON; their exact retained
+                # bytes are already pinned in Git. Only original zip inputs
+                # need downloading when not present in the source cache.
+                local = ROOT / 'auth/dependencies/go' / pin['file']
+                if not pin.get('url'):
+                    pin = {**pin, 'url': 'https://proxy.golang.org/' + pin['file'][6:]}
+            file = fetch(pin, local=local)
             destination.add(file, arcname='originals/' + file.name)
     original.unlink()
     return archive
@@ -194,7 +205,7 @@ def legal_bundle(component, output):
             for path in (ROOT / 'os/upstream' / names[component[3:]]).rglob('*'):
                 if path.is_file() and path.name.upper().startswith(('COPYING', 'LICENSE', 'NOTICE')):
                     legal.add(path, arcname='upstream/' + str(path.relative_to(ROOT / 'os/upstream')))
-        for archive in sorted(Path(output).glob('*.tar.*')):
+        for archive in archive_files(output):
             if archive == destination or 'source' in archive.name:
                 continue
             decoder = subprocess.Popen(['zstd', '-dc', str(archive)], stdout=subprocess.PIPE) if archive.name.endswith('.zst') else None
@@ -217,7 +228,8 @@ def publish(component, target, output, dependencies=(), validation_only=False):
     legal = legal_bundle(component, output)
     assets = {}
     for file in output.iterdir():
-        if not file.is_file() or file.name.startswith('native-input-equivalence-'):
+        if (not file.is_file() or file.name == '.checksums.lock' or
+                file.name.startswith('native-input-equivalence-')):
             continue
         assets[file.name] = ('legal' if file == legal else 'source' if 'source' in file.name else
                              'build-support' if 'build-support' in file.name else
@@ -397,7 +409,7 @@ def validate_outputs(component, target, output):
     owner = module('build')
     with tempfile.TemporaryDirectory(prefix='native-abi-') as temporary:
         temporary = Path(temporary)
-        for archive in Path(output).glob('*.tar.*'):
+        for archive in archive_files(output):
             if any(word in archive.name for word in ('source', 'legal', 'build-support')):
                 continue
             if archive.name.endswith('.zst'):

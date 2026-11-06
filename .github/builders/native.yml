@@ -53,7 +53,7 @@ jobs:
         working-directory: source
         env:
           COMPONENTS: ${{ inputs.components }}
-          TARGET: ${{ inputs.target }}
+          TASKARIAN_COMPONENT_TARGET: ${{ inputs.target }}
           FORCE: ${{ inputs.force_rebuild }}
         run: |
           echo "TASKARIAN_SOURCE_CACHE=$RUNNER_TEMP/component-work/sources" >> "$GITHUB_ENV"
@@ -62,7 +62,7 @@ jobs:
           echo "CARGO_TARGET_DIR=$RUNNER_TEMP/native-cargo-target" >> "$GITHUB_ENV"
           arguments=()
           if [ "$FORCE" = true ]; then arguments+=(--force-rebuild); fi
-          python3 agent/packaging/native-worker.py plan "$TARGET" --components "$COMPONENTS" --plan "$RUNNER_TEMP/components.json" "${arguments[@]}"
+          python3 agent/packaging/native-worker.py plan "$TASKARIAN_COMPONENT_TARGET" --components "$COMPONENTS" --plan "$RUNNER_TEMP/components.json" "${arguments[@]}"
       - name: Materialize current build owners only after a component miss
         if: steps.plan.outputs.build == 'true'
         working-directory: source
@@ -76,6 +76,7 @@ jobs:
             source/auth/**/go.sum
             source/agent/native/remote/**/go.sum
             source/agent/machines/vendor/podman/source/go.sum
+            source/files/**/go.sum
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         if: steps.plan.outputs.needs_node == 'true'
         with:
@@ -109,13 +110,13 @@ jobs:
         if: steps.plan.outputs.build == 'true'
         working-directory: source
         env:
-          TARGET: ${{ inputs.target }}
+          TASKARIAN_COMPONENT_TARGET: ${{ inputs.target }}
           FORCE: ${{ inputs.force_rebuild }}
           TASKARIAN_OFFICE_ACTIONS_CACHE_MATCHED: ${{ steps.office-cache.outputs.cache-matched-key }}
         run: |
           arguments=()
           if [ "$FORCE" = true ]; then arguments+=(--force-rebuild); fi
-          python3 agent/packaging/native-worker.py build "$TARGET" --plan "$RUNNER_TEMP/components.json" --work "$RUNNER_TEMP/component-work" --output "$RUNNER_TEMP/component-output" "${arguments[@]}"
+          python3 agent/packaging/native-worker.py build "$TASKARIAN_COMPONENT_TARGET" --plan "$RUNNER_TEMP/components.json" --work "$RUNNER_TEMP/component-work" --output "$RUNNER_TEMP/component-output" "${arguments[@]}"
       - name: Retain Office compiler objects in Actions
         if: always() && steps.plan.outputs.needs_office_cache == 'true' && steps.office-cache.outcome == 'success'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830

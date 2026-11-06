@@ -62,6 +62,11 @@ def materialize(plan):
             paths.update(('office/branding', 'office/patches', 'files/patches/collabora',
                           'office/upstream/online/source.json', 'files/vendor/quantum/SOURCE.json',
                           'browser/taskarian/browser/branding'))
+            if component == 'office-runtime':
+                declared = json.loads(owner.native.content(owner.head(), 'office/branding/online/branding-sources.json'))
+                paths.update(declared[key]['path'] for key in ('artwork', 'wordmark'))
+                paths.update(item['source'] for item in declared['legal'].values())
+                paths.add('office/upstream/online/source/engine/schema')
         elif component in ('office-engine', 'office-server', 'office-ui'):
             paths.update(('office', 'files/patches/collabora', 'auth/build', 'auth/dependencies/go-toolchain',
                           'agent/machines/rust-toolchain', 'browser/taskarian/browser/branding'))
