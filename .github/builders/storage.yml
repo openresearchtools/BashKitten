@@ -1,0 +1,46 @@
+name: Permanent Taskarian component storage
+run-name: Component storage ${{ inputs.action }} / ${{ inputs.source_sha }}
+'on':
+  workflow_dispatch:
+    inputs:
+      source_sha: {required: true, type: string}
+      action: {required: true, type: choice, options: [migrate, verify], default: verify}
+permissions:
+  contents: write
+concurrency:
+  group: component-storage
+  cancel-in-progress: false
+jobs:
+  storage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GIT_LFS_SKIP_SMUDGE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: openresearchtools/Taskarian
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+          path: source
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /LICENSE
+            /agent/packaging/component-store.py
+            /agent/packaging/component-runtime.py
+            /agent/packaging/component-migrate.py
+            /agent/packaging/compiler-cache.py
+      - name: Move verified bytes or verify public restores without compilation
+        working-directory: source
+        env:
+          STORAGE_ACTION: ${{ inputs.action }}
+        run: |
+          python3 agent/packaging/component-migrate.py "$STORAGE_ACTION" \
+            --directory "$RUNNER_TEMP/component-storage" --receipt "$RUNNER_TEMP/storage-receipt.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: component-storage-receipt
+          path: ${{ runner.temp }}/storage-receipt.json
+          if-no-files-found: error
