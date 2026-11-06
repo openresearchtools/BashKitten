@@ -18,6 +18,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 COMPONENTS = ('android-remote', 'android-tor', 'android-x11')
+REMOTE_METADATA = 'auth/dependencies/go/android-remote.json'
 
 
 @cache
@@ -48,8 +49,10 @@ def inputs(component, target, revision=None):
         records.update(androidApi=31, ndk='29.0.14206865')
         sources = native.go_sources(revision, 'agent/native/remote/android')
         paths += [*sources, 'auth/build/remote-android.sh', 'auth/build/go-env.sh', 'auth/build/go-notices.py',
-                  'auth/dependencies/go-toolchain']
+                  'auth/dependencies/go-toolchain', REMOTE_METADATA]
         records['goPins'] = native.go_pins(revision, sources)
+        records['moduleListingMetadata'] = (json.loads(native.content(revision, REMOTE_METADATA))['moduleMetadata']
+                                           if native.entry(revision, REMOTE_METADATA) else [])
     elif component == 'android-tor':
         paths += ['browser/taskarian/android/tor', 'browser/third_party/tor', 'browser/taskarian/scripts/tor-runtime-provenance.py',
                   'browser/taskarian/android/scripts/tor.py',
@@ -151,6 +154,7 @@ def materialize(component, target):
         paths += ['auth/dependencies/go/sources.json', *retained['locks']]
         pins = [pin for entry in retained['modules'] for pin in entry['files'].values()]
         pins += retained['moduleMetadata']
+        pins += values['records']['moduleListingMetadata']
         paths += ['auth/dependencies/go/' + pin['file'] for pin in pins
                   if pin.get('file', '').startswith('proxy/') and pin['file'].endswith(('.mod', '.info'))]
     if component == 'android-x11':
@@ -183,6 +187,19 @@ def setup(component, target, work):
     os.environ['ANDROID_NDK_HOME'] = str(sdk / 'ndk/29.0.14206865')
 
 
+def prepare_remote_metadata(records):
+    # gomobile lists the complete module graph, including these pinned .info
+    # records which are not needed by the other native Go package closures.
+    sources = ROOT / 'auth/dependencies/go'
+    cache = module('source_cache')
+    spec = importlib.util.spec_from_file_location('retained_go_sources', ROOT / 'auth/build/retained-sources.py')
+    retained = importlib.util.module_from_spec(spec); spec.loader.exec_module(retained)
+    proxy = cache.default_cache() / 'auth-go-proxy' / store.sha(sources / 'sources.json')
+    for pin in records['moduleListingMetadata']:
+        original = cache.fetch(pin, local=sources / pin['file'])
+        retained.stage_file(original, proxy / Path(pin['file']).relative_to('proxy'), pin['sha256'])
+
+
 def run(component, target, work, output, force=False):
     work, output = Path(work).resolve(), Path(output).resolve()
     work.mkdir(parents=True, exist_ok=True); output.mkdir(parents=True, exist_ok=True)
@@ -193,6 +210,7 @@ def run(component, target, work, output, force=False):
     setup(component, target, work)
     runtime = work / 'runtime'; runtime.mkdir(exist_ok=True)
     if component == 'android-remote':
+        prepare_remote_metadata(inputs(component, target)['records'])
         subprocess.run(['bash', str(ROOT / 'auth/build/remote-android.sh'), str(runtime)], cwd=ROOT, check=True)
     elif component == 'android-tor':
         subprocess.run(['python3', str(ROOT / 'browser/taskarian/android/tor/build.py'), '--abi', abi(target),
@@ -221,6 +239,9 @@ def run(component, target, work, output, force=False):
         bundle.add(runtime, arcname='.')
     from source_archive import archive_revision
     paths = [path for path, value in inputs(component, target)['files'].items() if value]
+    paths += ['agent/packaging/android-components.py', 'agent/packaging/native-component.py',
+              'agent/packaging/component-store.py', 'agent/packaging/native-tools.py',
+              'agent/packaging/source_archive.py', 'auth/build/retained-sources.py']
     tracked = work / (component + '-tracked-source.tar.gz')
     archive_revision(ROOT, head(), tracked, paths=paths)
     originals = []
@@ -231,6 +252,7 @@ def run(component, target, work, output, force=False):
         originals += list(runtime.glob('*sources.jar'))
         pins = [pin for entry in records['goPins']['modules'] for pin in entry['files'].values()]
         pins += records['goPins']['moduleMetadata']
+        pins += records['moduleListingMetadata']
         for pin in pins:
             local = None
             if pin.get('file', '').startswith('proxy/'):
