@@ -58,6 +58,18 @@ jobs:
       with:
         ref: ${{ steps.candidate.outputs.revision }}
         persist-credentials: false
+        filter: blob:none
+        sparse-checkout-cone-mode: false
+        sparse-checkout: |
+          /agent/packaging/
+          /agent/src/server/platform/termux/updates-prepare.py
+          /browser/taskarian/config/version.txt
+          /browser/browser/config/version.txt
+          /browser/browser/config/version_display.txt
+          /browser/taskarian/upstreams.toml
+          /browser/taskarian/scripts/firefox_release.py
+          /README.md
+          /LICENSE
     - name: Download small pinned release plan
       run: gh run download "$CANDIDATE_RUN" --name taskarian-complete-candidate --dir release-plan
     - name: Download shipped installers once and verify original native release contracts
