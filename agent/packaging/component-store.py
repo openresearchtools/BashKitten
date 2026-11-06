@@ -31,6 +31,9 @@ REPOSITORIES = {'openresearchtools/taskarian-build-' + suffix
 ASSET_LIMIT = 1000
 MAIN_REPOSITORY = 'openresearchtools/Taskarian'
 _RELEASE_IDS = {}
+_BUILDER_HEADS = {}
+_LOOKUPS = {}
+_PUBLISHED = {}
 MANIFEST = re.compile(r'component-(.+)-(linux-amd64|linux-arm64|termux-aarch64|termux-x86_64|android(?:-x86_64)?)-[0-9a-f]{64}\.json')
 
 
@@ -100,20 +103,61 @@ def lookup_path(component, target, digest):
     return f'components/{component}/{target}/{digest}.json'
 
 
-def lookup_url(repo, path):
+def lookup_url(repo, path, revision="main"):
     if repo not in REPOSITORIES or not re.fullmatch(r'[A-Za-z0-9._/-]+', path) or '..' in path.split('/'):
         raise ValueError('Invalid build lookup path')
-    return f'https://raw.githubusercontent.com/{repo}/main/{path}'
+    if revision != 'main' and not re.fullmatch('[0-9a-f]{40}', revision):
+        raise ValueError('Invalid builder lookup revision')
+    return f'https://raw.githubusercontent.com/{repo}/{revision}/{path}'
+
+
+def builder_head(repo, *, refresh=False):
+    if repo not in REPOSITORIES:
+        raise ValueError('Unsupported builder repository')
+    if not refresh and repo in _BUILDER_HEADS:
+        return _BUILDER_HEADS[repo]
+    for attempt in range(3):
+        try:
+            result = subprocess.run(['git', 'ls-remote', 'https://github.com/' + repo + '.git', 'refs/heads/main'],
+                                    capture_output=True, text=True, timeout=120)
+            revision = result.stdout.split()[0] if result.stdout.split() else ''
+            if result.returncode == 0 and re.fullmatch('[0-9a-f]{40}', revision):
+                _BUILDER_HEADS[repo] = revision
+                return revision
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+        if attempt < 2:
+            time.sleep(2 ** attempt)
+    raise StoreUnavailable('Builder lookup revision is unavailable; retry without rebuilding')
 
 
 def read_revision(repo, component, target, digest):
-    raw = read_url(lookup_url(repo, lookup_path(component, target, digest)))
+    path = lookup_path(component, target, digest)
+    if (repo, path) in _LOOKUPS:
+        return _LOOKUPS[repo, path]
+    # A raw URL at mutable main can retain a pre-publication 404. Read the tiny
+    # index at Git's actual immutable HEAD instead; refresh only on a miss.
+    revision = builder_head(repo)
+    raw = read_url(lookup_url(repo, path, revision))
     if raw is None:
-        return None
-    record = json.loads(raw)
-    if (record.get('schema') != 1 or record.get('component') != component or
-            record.get('target') != target or record.get('inputSha256') != digest):
+        latest = builder_head(repo, refresh=True)
+        if latest == revision:
+            return None
+        raw = read_url(lookup_url(repo, path, latest))
+        if raw is None:
+            return None
+    try:
+        record = json.loads(raw)
+    except (ValueError, TypeError, UnicodeError) as error:
+        raise StoreUnavailable('Invalid component version lookup; retry without rebuilding') from error
+    if (not isinstance(record, dict) or record.get('schema') != 1 or record.get('component') != component or
+            record.get('target') != target or record.get('inputSha256') != digest or
+            record.get('manifestName') != f'component-{component}-{target}-{digest}.json' or
+            not re.fullmatch('[0-9a-f]{64}', record.get('manifestSha256', '')) or
+            not isinstance(record.get('version'), str) or not record['version'] or
+            not isinstance(record.get('tag'), str)):
         raise StoreUnavailable('Invalid component version lookup; retry without rebuilding')
+    _LOOKUPS[repo, path] = record
     return record
 
 
@@ -127,6 +171,7 @@ def put_lookup(repo, path, record, *, immutable=False):
         if existing:
             previous = base64.b64decode(existing['content'])
             if previous == encoded:
+                _LOOKUPS[repo, path] = record
                 return
             if immutable:
                 raise ValueError('Immutable build lookup already exists with different bytes: ' + path)
@@ -135,7 +180,9 @@ def put_lookup(repo, path, record, *, immutable=False):
         if existing:
             body['sha'] = existing['sha']
         try:
-            gh('api', endpoint, '--method', 'PUT', data=body)
+            published = gh('api', endpoint, '--method', 'PUT', data=body)
+            _LOOKUPS[repo, path] = record
+            _BUILDER_HEADS[repo] = published['commit']['sha']
             return
         except StoreUnavailable:
             if attempt == 3:
@@ -277,6 +324,8 @@ def validate(manifest, expected=None):
 
 def lookup(component, target, inputs):
     ident = identity(component, target, inputs)
+    if ident['manifest'] in _PUBLISHED:
+        return dict(_PUBLISHED[ident['manifest']])
     record = read_revision(ident['repository'], component, target, ident['inputSha256'])
     if record is None:
         return None
@@ -532,6 +581,9 @@ def publish_index(manifest, manifest_sha, runtime_sha, tag):
               'version': manifest['version'], 'tag': tag, 'manifestName': name,
               'manifestSha256': manifest_sha, 'runtimeSha256': runtime_sha}
     put_lookup(repo, lookup_path(component, target, digest), record, immutable=True)
+    _PUBLISHED[name] = {'manifest': manifest, 'repository': repo, 'tag': tag,
+                        'manifestName': name, 'manifestSha256': manifest_sha,
+                        'url': f'https://github.com/{repo}/releases/download/{tag}/{name}'}
 
 
 def publish_runtime(manifest, directory, tag, uploaded, temporary):
@@ -608,6 +660,61 @@ def normalize_runtime(component, target, inputs, directory, assets, source_commi
     return assets
 
 
+def supplement_compiler_cache(result, directory):
+    component, target = result['manifest']['component'], result['manifest']['target']
+    if component not in ('gecko', 'office-engine'):
+        return
+    def owner(name, path=None):
+        spec = importlib.util.spec_from_file_location('cache_legal_' + name.replace('-', '_'),
+            path or Path(__file__).with_name(name + '.py'))
+        value = importlib.util.module_from_spec(spec); spec.loader.exec_module(value)
+        return value
+    cache = owner('compiler-cache')
+    if component == 'gecko':
+        engine, contract = 'sccache', owner('browser-release').cache_contract(target)
+    else:
+        engine = 'ccache'
+        contract = owner('office-components', Path(__file__).with_name('office') / 'components.py').cache_contract(
+            target, result['manifest']['sourceCommit'])
+    cache.supplement(engine, target, contract, Path(directory) / '.component-provenance' / 'cache-legal',
+                     engine_reference=result, engine_directory=directory)
+
+
+def recover_publication(component, target, version, inputs):
+    """Finish an interrupted index write from the complete immutable release."""
+    ident = identity(component, target, inputs)
+    tag = release_tag(component, target, version, ident['inputSha256'])
+    base = f'https://github.com/{ident["repository"]}/releases/download/{tag}/'
+    raw = read_url(base + ident['manifest'])
+    if raw is None:
+        return None
+    manifest = json.loads(raw); validate(manifest, ident)
+    if manifest['version'] != version:
+        raise ValueError('Stored official component version differs')
+    parts = [part for asset in manifest['assets'] for part in asset['parts']]
+    runtime_sha = None
+    if component not in ('application', 'corresponding-source'):
+        descriptor_raw = read_url(base + ident['manifest'][:-5] + '.runtime.json')
+        if descriptor_raw is None:
+            raise StoreUnavailable('Complete component runtime descriptor is unavailable; retry publication')
+        descriptor = runtime_owner().validate(json.loads(descriptor_raw))
+        expected = [{key: item[key] for key in ('name', 'role', 'size', 'sha256')}
+                    for item in manifest['assets'] if runtime_owner().effective_role(item) != 'source']
+        if descriptor['assets'] != expected or any(descriptor.get(key) != manifest[key]
+                for key in ('component', 'target', 'version', 'inputSha256')):
+            raise ValueError('Stored complete component runtime inventory differs')
+        parts += descriptor['archive']['parts']
+        runtime_sha = hashlib.sha256(descriptor_raw).hexdigest()
+    release = ensure_release(ident['repository'], tag, f'{component} {version} / {target}')
+    uploaded = {item['name']: item for item in release_assets(ident['repository'], release['id'])}
+    for part in parts:
+        item = uploaded.get(part['asset'])
+        if not item or item['size'] != part['size'] or item.get('digest') != 'sha256:' + part['sha256']:
+            raise StoreUnavailable('Complete component asset inventory is unavailable; retry without rebuilding')
+    publish_index(manifest, hashlib.sha256(raw).hexdigest(), runtime_sha, tag)
+    return dict(_PUBLISHED[ident['manifest']])
+
+
 def publish(component, target, version, inputs, directory, *, assets, source_commit, producer=None, dependencies=(), validation_only=False):
     ident = identity(component, target, inputs); directory = Path(directory)
     if os.environ.get('GITHUB_ACTIONS') != 'true' or os.environ.get('GITHUB_REPOSITORY') != ident['repository']:
@@ -615,6 +722,14 @@ def publish(component, target, version, inputs, directory, *, assets, source_com
     if not isinstance(version, str) or not version:
         raise ValueError('Use the real upstream/product version')
     existing = lookup(component, target, inputs)
+    if existing is None:
+        recovered = recover_publication(component, target, version, inputs)
+        if recovered:
+            for name in assets:
+                (directory / name).unlink(missing_ok=True)
+            result = fetch(recovered, directory, roles=ROLES - {'source'})
+            supplement_compiler_cache(result, directory)
+            return result
     if existing:
         if validation_only:
             for name in assets:
@@ -652,9 +767,11 @@ def publish(component, target, version, inputs, directory, *, assets, source_com
         file = temporary / ident['manifest']; file.write_bytes(encoded)
         upload_file(ident['repository'], tag, file, uploaded)
         publish_index(manifest, hashlib.sha256(encoded).hexdigest(), runtime_sha, tag)
-    return {'manifest': manifest, 'repository': ident['repository'], 'tag': tag, 'manifestName': ident['manifest'],
-            'manifestSha256': hashlib.sha256(encoded).hexdigest(),
-            'url': f'https://github.com/{ident["repository"]}/releases/download/{tag}/{ident["manifest"]}', 'directory': str(directory)}
+    result = {'manifest': manifest, 'repository': ident['repository'], 'tag': tag, 'manifestName': ident['manifest'],
+              'manifestSha256': hashlib.sha256(encoded).hexdigest(),
+              'url': f'https://github.com/{ident["repository"]}/releases/download/{tag}/{ident["manifest"]}', 'directory': str(directory)}
+    supplement_compiler_cache(result, directory)
+    return result
 
 
 def main():

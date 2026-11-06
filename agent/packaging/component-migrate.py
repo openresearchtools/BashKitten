@@ -141,7 +141,42 @@ def verify_native_checkpoints(metadata, repo, work):
         browser.verify(directory, target, browser.fingerprint(target))
         verified.append({'component': 'browser-resources', 'target': target, 'manifestName': name,
                          'nativeOwnerVerification': 'passed', 'compiled': False})
+    targets = sorted({manifest['target'] for (owner, _), (_, manifest) in metadata.items()
+                      if owner == repo and manifest['component'] == 'gecko'})
+    for target in targets:
+        blocker = browser_release.blocker_sources(browser_release.source(), target)
+        if not blocker:
+            raise ValueError('Pinned blocker source metadata was not published')
+        verified.append({'component': 'blocker-source', 'target': target,
+                         'manifestName': blocker['manifestName'], 'sourcePayloadDownloaded': False})
+        if target.startswith('android'):
+            selected = browser_release.prepare_android_sources(target, work / ('android-source-metadata-' + target))
+            if not selected:
+                raise ValueError('Unchanged Android library source metadata was not reused')
+            verified.append({'component': 'android-library-source', 'target': target,
+                             'sourcePayloadDownloaded': False})
     return verified
+
+
+def supplement_caches(repo, work):
+    cache = module('compiler-cache')
+    browser = module('browser-release')
+    office = module('office/components')
+    native_targets = [target for target in ('linux-amd64', 'linux-arm64', 'termux-aarch64', 'termux-x86_64')
+                      if store.repository(target) == repo]
+    results = []
+    for target in native_targets:
+        browser_target = {'termux-aarch64': 'android', 'termux-x86_64': 'android-x86_64'}.get(target, target)
+        for engine, cache_target, contracts in (
+                ('ccache', target, [office.cache_contract(target, browser.source())]),
+                ('sccache', browser_target, [browser.cache_contract(browser_target), browser.legacy_cache_contract(browser_target)])):
+            complete = any(cache.supplement(engine, cache_target, contract, work / ('cache-legal-' + engine))
+                           for contract in contracts)
+            if not complete:
+                raise ValueError('Matching compiler cache license/source metadata is missing')
+            results.append({'engine': engine, 'target': cache_target,
+                            'fullLicensesAndSourceIndex': True, 'objectsDownloaded': False, 'sourcesDownloaded': False})
+    return results
 
 
 def verify(metadata, repo, work, *, native=False):
@@ -279,7 +314,7 @@ def repack_components(repo, work):
                     **{key: existing[key] for key in ('repository', 'manifestName', 'manifestSha256', 'tag')}})
                 print('Source-free runtime adopted: ' + component + '/' + target, flush=True)
     return {'repository': repo, 'nativeCompilation': False, 'sourceArchivesDownloaded': False,
-            'runtimePackaging': results}
+            'runtimePackaging': results, 'compilerCacheLegal': supplement_caches(repo, work)}
 
 
 def main():
@@ -312,6 +347,8 @@ def main():
             if not cache.migrate(record['engine'], record['target'], record['contract'], args.directory / 'cache'):
                 raise ValueError('Exact compiler cache migration failed: ' + name)
     result = verify(metadata, repo, args.directory, native=args.action == 'verify')
+    if args.action == 'verify':
+        result['compilerCacheLegal'] = supplement_caches(repo, args.directory)
     if args.action == 'verify':
         result['crossRepositoryDependencies'] = []
         for (owner, name), (_, manifest) in metadata.items():
