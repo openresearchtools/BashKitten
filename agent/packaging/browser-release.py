@@ -229,14 +229,21 @@ def android_companion(directory, target):
                            roles=('runtime', 'metadata', 'legal'))
     if result is None:
         raise ValueError('The exact paired Termux application is not published yet')
-    backend = [file for file in directory.glob('*.deb') if file.name.startswith('taskarian_')]
-    operating_system = [file for file in directory.glob('*.deb') if file.name.startswith('taskarian-os_')]
-    if len(backend) != 1 or len(operating_system) != 1:
+    packages = {}
+    for file in directory.glob('*.deb'):
+        fields = dict(line.split(': ', 1) for line in subprocess.check_output(
+            ['dpkg-deb', '-f', str(file), 'Package', 'Architecture'], text=True).splitlines())
+        name = fields['Package']
+        if name not in ('taskarian', 'taskarian-os') or name in packages or fields['Architecture'] != architecture:
+            raise ValueError('Unexpected paired backend or OS package identity')
+        packages[name] = file
+    if set(packages) != {'taskarian', 'taskarian-os'}:
         raise ValueError('Expected the actual paired backend and OS packages')
+    backend, operating_system = packages['taskarian'], packages['taskarian-os']
     release = module('release')
-    os_identity = release.termux_os_identity(operating_system[0])
+    os_identity = release.termux_os_identity(operating_system)
     with tempfile.TemporaryDirectory(prefix='android-companion-') as temporary:
-        subprocess.run(['dpkg-deb', '-x', str(backend[0]), temporary], check=True)
+        subprocess.run(['dpkg-deb', '-x', str(backend), temporary], check=True)
         app = Path(temporary) / 'data/data/com.termux/files/usr/lib/taskarian'
         licenses = app / 'licenses.json'
         records = json.loads(licenses.read_text())
@@ -252,9 +259,9 @@ def android_companion(directory, target):
         'architecture': architecture, 'apkAbi': 'x86_64' if architecture == 'x86_64' else 'arm64-v8a',
         'packages': [
             {'name': 'taskarian', 'version': version(source()), 'architecture': architecture,
-             'sourceCommit': source(), 'sha256': store.sha(backend[0])},
+             'sourceCommit': source(), 'sha256': store.sha(backend)},
             {'name': 'taskarian-os', 'version': os_identity['version'], 'architecture': architecture,
-             'sourceCommit': os_identity['sourceCommit'], 'sha256': store.sha(operating_system[0]),
+             'sourceCommit': os_identity['sourceCommit'], 'sha256': store.sha(operating_system),
              'installedManifestSha256': os_identity['installedManifestSha256']}]})
     (destination.parent / 'termux-update.json').write_text(json.dumps(pairing, indent=2) + '\n')
     remember(result, directory, 'termux-application')
