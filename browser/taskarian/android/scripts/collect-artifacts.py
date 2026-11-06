@@ -214,6 +214,7 @@ remote_spec = importlib.util.spec_from_file_location('android_components', ROOT.
 remote_components = importlib.util.module_from_spec(remote_spec)
 remote_spec.loader.exec_module(remote_components)
 remote_target = 'termux-x86_64' if abi == 'x86_64' else 'termux-aarch64'
+remote_components.module('browser-component').ensure_source(remote_manifest['source'])
 if (remote_manifest['architecture'] != abi or
         remote_components.binary_inputs('android-remote', remote_target, remote_manifest['source']) !=
         remote_components.binary_inputs('android-remote', remote_target, revision)):

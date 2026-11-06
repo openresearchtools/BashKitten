@@ -250,6 +250,7 @@ def main():
             spec.loader.exec_module(android_components)
             remote = manifest['remote_client']
             remote_target = 'termux-x86_64' if abi == 'x86_64' else 'termux-aarch64'
+            android_components.module('browser-component').ensure_source(remote['source'])
             if (remote.get('architecture') != abi or
                     hashlib.sha256(archive.read('lib/' + abi + '/libgojni.so')).hexdigest() != remote.get('library_sha256') or
                     android_components.binary_inputs('android-remote', remote_target, remote['source']) !=
