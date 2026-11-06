@@ -65,6 +65,10 @@ args = ['cmake', '-S', str(root), '-B', str(build), '-G', 'Ninja', '-DCMAKE_BUIL
         '-DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=',
         '-DGGML_CUDA=' + ('ON' if backend == 'cuda' else 'OFF'),
         '-DGGML_VULKAN=' + ('ON' if backend == 'vulkan' else 'OFF')]
+if engine == 'llama' and backend == 'cuda':
+    # Use upstream's complete native K/V template selection, including mixed
+    # formats such as q8_0-q5_1, instead of its four-pair default.
+    args += ['-DGGML_CUDA_FA_QUANTS=all']
 if target_os == 'android':
     args += ['-DCMAKE_TOOLCHAIN_FILE=' + str(ndk / 'build/cmake/android.toolchain.cmake'),
              '-DANDROID_ABI=' + ('x86_64' if arch == 'amd64' else 'arm64-v8a'),
@@ -90,10 +94,14 @@ else:
              '-DWHISPER_BUILD_SERVER=ON', '-DWHISPER_CURL=OFF',
              '-DCMAKE_PROJECT_INCLUDE=' + str(inputs / 'vad.cmake')]
 subprocess.run(args, check=True)
+if engine == 'llama' and backend == 'cuda':
+    assert 'GGML_CUDA_FA_QUANTS:STRING=all' in (build / 'CMakeCache.txt').read_text().splitlines(), 'CUDA FlashAttention must retain all native quantized K/V combinations'
 commands = subprocess.check_output(['ninja', '-C', str(build), '-t', 'commands', *executables], text=True)
 (evidence / 'commands.txt').write_text(commands)
 shutil.copy2(build / 'CMakeCache.txt', evidence / 'CMakeCache.txt')
 capabilities = {'cpu': True, 'executionBackends': ['cpu', backend]}
+if engine == 'llama' and backend == 'cuda':
+    capabilities['cudaFlashAttentionQuants'] = 'all'
 if engine == 'whisper':
     capabilities['streamingVad'] = True
     (payload / 'models').mkdir()
