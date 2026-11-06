@@ -581,8 +581,16 @@ def assemble(args):
         if not termux:
             collector += ['--browser', str(app / 'browser')]
         run(collector)
-        run(['python3', str(ROOT / 'packaging/about.py'), args.target,
-             str(app / 'licenses.json'), str(app / 'about.html'), '--version', version])
+        about = ['python3', str(ROOT / 'packaging/about.py'), args.target,
+                 str(app / 'licenses.json'), str(app / 'about.html'), '--version', version]
+        source_directories = set()
+        for name, value in vars(args).items():
+            if isinstance(value, Path) and (name.endswith('_archive') or name in
+                    ('browser_dir', 'guest_packages', 'termux_display_dir', 'os_package')):
+                source_directories.add(value if value.is_dir() else value.parent)
+        for directory in sorted(source_directories):
+            about += ['--source-reference-directory', str(directory)]
+        run(about)
         # Per-user Pi integration registration happens at controller startup, never as root.
         installation = (prefix + '/var/lib' if termux else '/var/lib') + '/Taskarian/installed.json'
         runtime = (prefix + '/var/lib' if termux else '/var/lib') + '/Taskarian/runtimes/' + pi_version + '-' + lock_hash[:12]
