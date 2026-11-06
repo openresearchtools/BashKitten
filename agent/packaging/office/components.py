@@ -114,6 +114,7 @@ def inputs(component, target, revision):
             selected['source'] = {name: sha for name, sha in entries(revision, base).items()
                                   if name not in ('engine', 'browser', '.git')}
             selected['engineOptions'] = engine_options(revision)
+            selected['engineContract'] = inputs('office-engine', target, revision)
         else:
             paths += [base + '/browser', base + '/scripts', 'office/branding/online',
                       'office/upstream/supplements']
@@ -133,6 +134,7 @@ def inputs(component, target, revision):
             recipes.append('agent/packaging/office/engine-options.json')
         if group == 'ui':
             recipes.append('agent/packaging/office/web-prepare-runner.sh')
+            recipes.append('agent/packaging/office/web-support.py')
         if termux:
             if group == 'engine':
                 paths.append('office/patches/termux/donor.json')
@@ -457,6 +459,12 @@ def build_office(component, args, payload):
                         shutil.copy2(library, libraries / library.name, follow_symlinks=False)
         else:
             from web import build_ui
+            host = module('office_web_support', ROOT / 'agent/packaging/office/web-support.py')
+            prefix, support = host.prepare(args)
+            dependencies.append(support)
+            env = {**env, 'CPPFLAGS': '-I' + str(prefix / 'include') + ' ' + env.get('CPPFLAGS', ''),
+                   'LDFLAGS': '-L' + str(prefix / 'lib') + ' -Wl,-rpath,' + str(prefix / 'lib') + ' ' + env.get('LDFLAGS', ''),
+                   'LD_LIBRARY_PATH': str(prefix / 'lib') + (':' + env['LD_LIBRARY_PATH'] if env.get('LD_LIBRARY_PATH') else '')}
             build_ui(source, args, env, payload)
         # Preserve complete native notices. No donor license substitution.
         legal = payload / 'legal'; legal.mkdir(exist_ok=True)
@@ -671,6 +679,8 @@ def seed_office(args):
     """Explicit, one-time migration of verified original native outputs."""
     if args.seed_directory is None or args.producer_source is None or args.producer_run is None:
         raise ValueError('Office seeding requires its exact original source/run/archive directory')
+    if args.component not in (None, 'office-engine', 'office-server', 'office-ui'):
+        raise ValueError('Migrate only an original native Office leaf')
     historical = module('office_original_archive', ROOT / 'agent/packaging/remote-office.py')
     checksum, original, manifest_checksum = historical.verify_artifact(
         args.seed_directory, args.target, args.producer_source)
@@ -716,6 +726,8 @@ def seed_office(args):
         unpack(archive, Path(temporary))
         native_root = Path(temporary) / 'runtime'
         for component in ('office-engine', 'office-server', 'office-ui'):
+            if args.component and args.component != component:
+                continue
             if restored(component, args, required=False):
                 continue
             produced, requested = inputs(component, args.target, args.producer_source), inputs(component, args.target, args.source)
@@ -724,6 +736,8 @@ def seed_office(args):
             # did not execute in the original producer and is never attributed to it.
             for value in (produced, requested):
                 value.pop('recipes', None)
+                if 'engineContract' in value:
+                    value['engineContract'].pop('recipes', None)
             if produced != requested:
                 raise ValueError('Original Office native inputs changed: ' + component)
             if original.get('engineOptions', [])[:len(engine_options(args.source))] != engine_options(args.source):

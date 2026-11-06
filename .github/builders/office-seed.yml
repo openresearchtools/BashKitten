@@ -5,6 +5,11 @@ run-name: Office migration ${{ inputs.target }} / ${{ inputs.source_sha }}
     inputs:
       source_sha: {required: true, type: string}
       target: {required: true, type: string}
+      component:
+        description: Original native leaf to migrate without recompilation
+        default: office-server
+        type: choice
+        options: [office-engine, office-server, office-ui]
 permissions:
   contents: write
   actions: read
@@ -64,10 +69,10 @@ jobs:
         env:
           TARGET: ${{ inputs.target }}
           SOURCE_SHA: ${{ inputs.source_sha }}
+          COMPONENT: ${{ inputs.component }}
         run: |
           python3 agent/packaging/office/components.py seed-office --target "$TARGET" --source "$SOURCE_SHA" \
+            --component "$COMPONENT" \
             --seed-directory "$RUNNER_TEMP/office-original" --producer-source d0b83e413d4c9733fb621de2ce9f7a52660e3183 \
             --producer-run 42103511716 --directory "$RUNNER_TEMP/office-components" \
             --work "$RUNNER_TEMP/office-seed" --cache "$TASKARIAN_SOURCE_CACHE"
-          python3 agent/packaging/office/components.py aggregate --family office --target "$TARGET" \
-            --source "$SOURCE_SHA" --directory "$RUNNER_TEMP/office-components"
