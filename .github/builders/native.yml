@@ -82,6 +82,25 @@ jobs:
         if: steps.plan.outputs.build == 'true'
         working-directory: source
         run: python3 agent/packaging/native-worker.py materialize "${{ inputs.target }}" --plan "$RUNNER_TEMP/components.json"
+      - name: Select the small UI dependency cache
+        if: steps.plan.outputs.build == 'true'
+        id: ui-cache-plan
+        env:
+          TARGET: ${{ inputs.target }}
+          DEPENDENCY_KEY: ${{ hashFiles('source/references/package-lock.json', 'source/references/vendor/*/source.json', 'source/references/vendor/npm/sources.json', 'source/office/package-lock.json', 'source/office/vendor/npm/sources.json', 'source/office/upstream/dependencies/refresh.json', 'source/office/upstream/dependencies/sources.json', 'source/files/vendor/quantum/source/frontend/package-lock.json', 'source/files/vendor/dependencies/sources.json') }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          plan = json.loads((Path(os.environ['RUNNER_TEMP']) / 'components.json').read_text())
+          components = {item['component'] for item in plan}
+          downloads = {'references', 'office-integration', 'files-ui', 'office-ui'}
+          allowed = downloads | {'agent-resources', 'files-integration', 'office-runtime', 'files-runtime'}
+          enabled = bool(components & downloads) and components <= allowed
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('enabled=' + str(enabled).lower() + '\n')
+              output.write('key=ui-downloads-v1-' + os.environ['TARGET'] + '-' + os.environ['DEPENDENCY_KEY'] + '\n')
+          PY
       - uses: actions/setup-go@v6
         if: steps.plan.outputs.needs_go == 'true'
         with:
@@ -101,6 +120,20 @@ jobs:
         with:
           version: ${{ steps.plan.outputs.pnpm }}
           run_install: false
+      - name: Restore pinned UI downloads and npm caches
+        if: steps.ui-cache-plan.outputs.enabled == 'true'
+        id: ui-cache
+        continue-on-error: true
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ${{ runner.temp }}/component-work/sources
+            ${{ runner.temp }}/component-work/references/npm-cache
+            ${{ runner.temp }}/component-work/office-integration/npm-cache
+            ${{ runner.temp }}/component-work/files-ui/native/npmcache
+            ~/.npm
+          key: ${{ steps.ui-cache-plan.outputs.key }}
+          restore-keys: ui-downloads-v1-${{ inputs.target }}-
       - name: Restore native Rust objects from Actions
         if: steps.plan.outputs.needs_rust == 'true'
         id: rust-cache
@@ -132,6 +165,18 @@ jobs:
           arguments=()
           if [ "$FORCE" = true ]; then arguments+=(--force-rebuild); fi
           python3 agent/packaging/native-worker.py build "$TASKARIAN_COMPONENT_TARGET" --plan "$RUNNER_TEMP/components.json" --work "$RUNNER_TEMP/component-work" --output "$RUNNER_TEMP/component-output" "${arguments[@]}"
+      - name: Retain pinned UI downloads and npm caches
+        if: success() && steps.ui-cache-plan.outputs.enabled == 'true' && steps.ui-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ${{ runner.temp }}/component-work/sources
+            ${{ runner.temp }}/component-work/references/npm-cache
+            ${{ runner.temp }}/component-work/office-integration/npm-cache
+            ${{ runner.temp }}/component-work/files-ui/native/npmcache
+            ~/.npm
+          key: ${{ steps.ui-cache-plan.outputs.key }}
       - name: Retain Office compiler objects in Actions
         if: always() && steps.plan.outputs.needs_office_cache == 'true' && steps.office-cache.outcome == 'success'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
