@@ -161,7 +161,8 @@ def engine_record(result, directory, target):
 def restore_engine(directory, target):
     directory = Path(directory)
     result = module('component-store').restore('gecko', target, inputs('gecko', target), directory / 'producer',
-                    roles=('runtime', 'metadata', 'build-support'), requested_source=source())
+                    # Native checkpoints inventory their captured license page too.
+                    roles=('runtime', 'metadata', 'build-support', 'legal'), requested_source=source())
     if result is None:
         shutil.rmtree(directory / 'producer', ignore_errors=True)
         return False
