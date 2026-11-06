@@ -219,9 +219,14 @@ jobs:
         key: gecko-disk-v1-${{ env.BROWSER_TARGET }}-${{ steps.gecko-cache-contract.outputs.digest }}-${{ github.run_id }}
         restore-keys: |
           gecko-disk-v1-${{ env.BROWSER_TARGET }}-${{ steps.gecko-cache-contract.outputs.digest }}-
+          gecko-disk-v1-${{ env.BROWSER_TARGET }}-${{ steps.gecko-cache-contract.outputs.legacy_digest }}-
+    - name: Check whether the restored compiler cache contains objects
+      id: gecko-disk-availability
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true'
+      run: python3 agent/packaging/compiler-cache.py available --directory "$SCCACHE_DIR"
     - name: Restore compiler release backup only without an Actions copy
-      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-disk-cache.outputs.cache-matched-key == ''
-      run: python3 agent/packaging/compiler-cache.py restore sccache "$BROWSER_TARGET" --contract "$RUNNER_TEMP/gecko-cache-contract.json" --directory "$SCCACHE_DIR"
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-disk-availability.outputs.available != 'true'
+      run: python3 agent/packaging/browser-release.py restore-cache "$BROWSER_TARGET" --directory "$SCCACHE_DIR"
     - name: Bootstrap the pinned Mozilla Android toolchain
       working-directory: browser
       timeout-minutes: 30
@@ -271,6 +276,7 @@ jobs:
       working-directory: browser
       run: ./mach clobber
     - name: Record native cache hits and flush the completed disk objects
+      id: gecko-cache-state
       if: always() && !cancelled() && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-cache-contract.outputs.digest != '' && env.SCCACHE_PATH != ''
       run: |
         "$SCCACHE_PATH" --show-stats --stats-format=json > "$RUNNER_TEMP/sccache-gecko.json"
@@ -279,15 +285,16 @@ jobs:
           cat "$RUNNER_TEMP/sccache-stop.log" >&2
           if ! grep -q "couldn't connect to server" "$RUNNER_TEMP/sccache-stop.log"; then exit 1; fi
         fi
+        python3 agent/packaging/compiler-cache.py available --directory "$SCCACHE_DIR"
     - name: Save the Gecko disk compiler cache
-      if: always() && !cancelled() && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-cache-contract.outputs.digest != ''
+      if: always() && !cancelled() && steps.gecko-cache-state.outputs.available == 'true'
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       with:
         path: ${{ env.SCCACHE_DIR }}
         key: gecko-disk-v1-${{ env.BROWSER_TARGET }}-${{ steps.gecko-cache-contract.outputs.digest }}-${{ github.run_id }}
       continue-on-error: true
     - name: Keep the completed compiler objects as a release fallback
-      if: always() && !cancelled() && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-cache-contract.outputs.digest != ''
+      if: always() && !cancelled() && steps.gecko-cache-state.outputs.available == 'true'
       env:
         GH_TOKEN: ${{ github.token }}
       run: python3 agent/packaging/compiler-cache.py save sccache "$BROWSER_TARGET" --contract "$RUNNER_TEMP/gecko-cache-contract.json" --directory "$SCCACHE_DIR"

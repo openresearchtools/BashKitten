@@ -14,10 +14,10 @@ import subprocess
 import tarfile
 import tempfile
 import time
-import tomllib
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
+LEGACY_CACHE_MOZILLA_VERSION = '153.6.0esr'
 
 
 @cache
@@ -77,14 +77,27 @@ def cache_contract(target):
     revision = source()
     rust = json.loads(text(revision, 'agent/machines/rust-toolchain/sources.json'))
     contract = {'schema': 1, 'engine': 'sccache', 'target': target, 'sccacheVersion': '0.17.0',
-                'rust': {'version': rust['version'], 'commit': rust['commit']},
-                'mozillaVersion': tomllib.loads(text(revision, 'browser/taskarian/upstreams.toml'))['firefox']['version']}
+                'rust': {'version': rust['version'], 'commit': rust['commit']}}
     if target.startswith('android'):
         contract['mozconfig'] = hashlib.sha256(text(revision, 'browser/taskarian/android/mozconfig').encode()).hexdigest()
     else:
         contract['flags'] = ['--enable-application=browser', '--enable-optimize', '--disable-debug',
                              '--disable-crashreporter', '--disable-tests', '--disable-debug-symbols']
     return contract
+
+
+def legacy_cache_contract(target):
+    # The 54e2dd6 engine-only jobs keyed their first disk/backups on 153.6.0esr.
+    # Retain that exact historical alias; native sccache validates each object.
+    return {**cache_contract(target), 'mozillaVersion': LEGACY_CACHE_MOZILLA_VERSION}
+
+
+def restore_cache(directory, target):
+    helper = module('compiler-cache')
+    for contract in (cache_contract(target), legacy_cache_contract(target)):
+        if helper.restore('sccache', target, contract, directory):
+            return True
+    return False
 
 
 def remember(result, directory, kind):
@@ -384,7 +397,7 @@ def publish(kind, directory, target):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['inputs', 'cache-contract', 'restore-engine', 'publish-engine',
+    parser.add_argument('action', choices=['inputs', 'cache-contract', 'restore-cache', 'restore-engine', 'publish-engine',
                                          'publish-resources', 'android-companion', 'dependencies'])
     parser.add_argument('target')
     parser.add_argument('--directory', type=Path)
@@ -395,7 +408,13 @@ def main():
     if args.action == 'cache-contract':
         value = cache_contract(args.target)
         args.output.write_text(json.dumps(value, indent=2) + '\n')
+        if os.environ.get('GITHUB_OUTPUT'):
+            legacy = hashlib.sha256(module('component-store').canonical(legacy_cache_contract(args.target))).hexdigest()
+            with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
+                output.write('legacy_digest=' + legacy + '\n')
         print(hashlib.sha256(module('component-store').canonical(value)).hexdigest()); return
+    if args.action == 'restore-cache':
+        print(json.dumps({'hit': restore_cache(args.directory, args.target)})); return
     if args.action == 'android-companion':
         android_companion(args.directory, args.target); return
     if args.action == 'dependencies':
