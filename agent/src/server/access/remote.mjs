@@ -282,12 +282,15 @@ export class RemoteAccess {
     });
   }
   // Native private IPC only. The encrypted image is never a remote HTTP result.
-  isRunning(state) {
+  isAdmissible(state) {
     const stack = this.stack;
-    return Boolean(this.group?.enabled !== false && state.enabled && stack?.ready && !stack.stopping && !stack.reconfiguring && stack.authStarted &&
-      stack.tunnelStarted && (this.kind === 'tor' || ['ready', 'running'].includes(stack.transport?.state)) && stack.tunnel && !stack.tunnel.closed && stack.remoteOrigins?.length &&
+    return Boolean(state.phase === 'ready' && this.shouldPublish(state) && stack?.ready && !stack.stopping && !stack.reconfiguring && stack.authStarted &&
+      stack.tunnelStarted && stack.tunnel && !stack.tunnel.closed && stack.remoteOrigins?.length &&
       (this.kind === 'tor' ? ['backend', 'caddy', 'tor', 'remote', 'authelia', 'valkey'] : ['caddy', 'remote', 'authelia', 'valkey', ...(this.kind === 'cloudflare' ? ['cloudflared'] : [])]).every(name =>
         stack.children.some(child => child.name === name && child.exit === undefined && !child.stopping)));
+  }
+  isRunning(state) {
+    return this.isAdmissible(state) && (this.kind === 'tor' || ['ready', 'running'].includes(this.stack.transport?.state));
   }
   async status() {
     try {

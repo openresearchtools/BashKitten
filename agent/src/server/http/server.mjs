@@ -26,7 +26,7 @@ import { platform } from '../platform/index.mjs';
 import { visibleSession } from '../rpc/notifications.mjs';
 import { claimInstance, processStart, probeBackend } from '../instance.mjs';
 import { updateSettings } from '../settings.mjs';
-import { paths } from '../access/paths.mjs';
+import { paths, sharingScope, sharingKinds } from '../access/paths.mjs';
 import { handleBrowserChannel, closeBrowserChannels, ensureBrowserSocket, closeBrowserSocket } from '../access/browser-channel.mjs';
 import { transcribe } from '../localai/dictation.mjs';
 import { subagentSettings, readSubagentSettings, saveSubagentSettings } from '../rpc/subagents.mjs';
@@ -267,10 +267,22 @@ async function fileRequest(req, res, url, record) {
   throw Object.assign(Error('Not found'), { status: 404 });
 }
 let activeServer;
+async function trustedHost(req) {
+  const host = req.headers.host || '';
+  if (/^(?:127\.0\.0\.1:\d+|[a-z2-7]{56}\.onion(?::\d+)?)$/.test(host)) return host;
+  const identity = /^([a-f0-9]{48})\.taskarian\.invalid(?::443)?$/.exec(host);
+  if (!identity) throw Object.assign(Error('Invalid Agent host'), { status: 403 });
+  // Only the owning Caddy route can bind this enrolled identity to an instance.
+  auth.origin(req);
+  const instance = req.headers['x-taskarian-instance'];
+  if (req.headers['x-taskarian-access'] !== 'remote' || instance === 'tor' || !sharingKinds.includes(instance)) throw Object.assign(Error('Invalid Agent host'), { status: 403 });
+  const state = await readJson(sharingScope(instance).paths.share, null);
+  if (state?.phase !== 'ready' || state.enabled !== true || state.id !== identity[1] || state.onion !== identity[1] + '.taskarian.invalid') throw Object.assign(Error('Invalid Agent host'), { status: 403 });
+  return host;
+}
 async function handler(req, res) {
   try {
-    const requestHost = req.headers.host || '';
-    if (!/^(?:127\.0\.0\.1:\d+|[a-z2-7]{56}\.onion(?::\d+)?)$/.test(requestHost)) throw Object.assign(Error('Invalid Agent host'), { status: 403 });
+    const requestHost = await trustedHost(req);
     const url = new URL(req.url, `${scheme}://${requestHost}`), route = url.pathname;
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');

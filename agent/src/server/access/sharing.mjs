@@ -246,7 +246,9 @@ export class SharingInstances {
     if (!this.owner.ready || !this.enabled) return null;
     for (const remote of this.remotes.values()) {
       let state; try { state = await remote.state(); } catch { continue; }
-      if (state.id === generation && remote.isRunning(state)) return remote;
+      // Incoming authenticated traffic already reached its carrier. Cached
+      // provider readiness is for display, never a recovery admission gate.
+      if (state.id === generation && remote.isAdmissible(state)) return remote;
     }
     return null;
   }
