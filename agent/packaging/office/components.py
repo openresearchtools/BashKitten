@@ -835,6 +835,11 @@ def copy_ready(result, destination):
             shutil.copyfile(source, target)
 
 
+def resource_inputs(revision):
+    return {path: native.entry(revision, path) for path in
+        ('office/branding/engine', 'office/branding/online/branding-sources.json', 'LICENSE')}
+
+
 def aggregate_inputs(family, target, revision):
     found = {}
     for component in FAMILIES[family]:
@@ -842,8 +847,11 @@ def aggregate_inputs(family, target, revision):
         if result is None:
             return None
         found[component] = result
-    return {'schema': 1, 'component': family + '-runtime', 'target': target,
-            'leaves': {name: reference(found[name]) for name in FAMILIES[family]}}
+    result = {'schema': 1, 'component': family + '-runtime', 'target': target,
+              'leaves': {name: reference(found[name]) for name in FAMILIES[family]}}
+    if family == 'office':
+        result['resources'] = resource_inputs(revision)
+    return result
 
 
 def aggregate(args, family):
@@ -891,9 +899,22 @@ def aggregate(args, family):
                     shutil.copy2(path, destination)
         write_json(combined / 'licenses.json', list({digest(json.dumps(row, sort_keys=True).encode()): row
             for row in licenses}.values()))
+        resources = None
+        if family == 'office':
+            import branding
+            branding.inputs()
+            installed = []
+            for name in branding.ENGINE_IMAGES:
+                directory = 'program' if name.startswith('intro') else 'program/shell'
+                destination = combined / 'engine' / directory / name
+                shutil.copy2(branding.BRANDING / 'engine' / name, destination)
+                installed.append(str(destination.relative_to(combined)))
+            resources = {'sourceCommit': args.source, 'inputs': wanted['resources'], 'files': installed}
         manifest = {'schema': 2, 'target': target, 'architecture': architecture,
                     'assemblySource': args.source, 'components': {name: components[name] for name in leaves},
                     'depends': sorted(depends), 'files': inventory(combined)}
+        if resources is not None:
+            manifest['resources'] = resources
         if family == 'office':
             import build as office_owner
             import branding
@@ -927,10 +948,19 @@ def aggregate(args, family):
             source_archive = module('office_schema_source', ROOT / 'agent/packaging/source_archive.py')
             source_archive.archive_revision(ROOT, producer_source, schema_source, prefix='', paths=paths)
             source_record['supplement'] = {'file': schema_source.name, 'sourceCommit': producer_source, 'paths': paths}
+            resource_source = args.directory / 'office-resources-source.tar.gz'
+            provenance = document(args.source, 'office/branding/online/branding-sources.json')
+            paths = ['LICENSE', 'office/branding', 'browser/taskarian/browser/branding', 'agent/packaging',
+                     *[row['source'] for row in provenance['legal'].values()]]
+            source_archive.archive_revision(ROOT, args.source, resource_source, prefix='', paths=paths)
+            source_record['resources'] = {**resources, 'file': resource_source.name}
         write_json(source, source_record)
         legal = args.directory / (family + '-licenses.tar.gz')
         with tarfile.open(legal, 'w:gz') as bundle:
             bundle.add(ROOT / 'LICENSE', arcname='Taskarian-LICENSE', filter=canonical_member)
+            if family == 'office':
+                for name, row in provenance['legal'].items():
+                    bundle.add(ROOT / row['source'], arcname='branding/' + name, filter=canonical_member)
             for path in sorted(combined.rglob('*')):
                 if path.is_file() and ('legal' in path.relative_to(combined).parts or
                     any(word in path.name.lower() for word in ('license', 'notice', 'copying', 'copyright'))):
@@ -938,6 +968,7 @@ def aggregate(args, family):
         assets = {archive.name: 'runtime', source.name: 'source', legal.name: 'legal'}
         if schema_source is not None:
             assets[schema_source.name] = 'source'
+            assets[resource_source.name] = 'source'
         if family == 'office':
             assets[archive.name + '.json'] = 'metadata'
         store().publish(family + '-runtime', args.target,

@@ -259,6 +259,17 @@ def install(args, app, revision, cache, checked_archive, extract):
                     'files-server', 'files-ui', 'files-media', 'files-office-addon'}
                 if set(metadata.get('components', {})) != required:
                     raise ValueError('Application component dependency closure is incomplete')
+                if component == 'office':
+                    resources = metadata.get('resources', {})
+                    if (resources.get('inputs') != owner['resource_inputs'](revision) or
+                            not re.fullmatch('[0-9a-f]{40}', resources.get('sourceCommit', ''))):
+                        raise ValueError('Office resource source/inputs differ')
+                    branding = owner['module']('assembly_office_branding', ROOT / 'agent/packaging/office/branding.py')
+                    for name in branding.ENGINE_IMAGES:
+                        directory = 'program' if name.startswith('intro') else 'program/shell'
+                        installed = root / 'engine' / directory / name
+                        if installed.read_bytes() != (branding.BRANDING / 'engine' / name).read_bytes():
+                            raise ValueError('Office resource differs from its declared source: ' + name)
             elif metadata.get('sourceCommit') != revision:
                 owner = runpy.run_path(str(ROOT / 'agent/packaging/remote-office.py'))
                 equivalence = owner['verify_receipt'](archive.parent, component,
