@@ -69,6 +69,10 @@ def inputs(kind, target, revision=None, companion=None):
             'companion': companion}
 
 
+def native_key(target, revision=None):
+    return module('component-store').identity('gecko', target, inputs('gecko', target, revision))['inputSha256']
+
+
 def reference(result):
     return {key: result[key] for key in ('repository', 'manifestName', 'manifestSha256')}
 
@@ -399,7 +403,7 @@ def publish(kind, directory, target):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['inputs', 'cache-contract', 'restore-cache', 'restore-engine', 'seed-engine', 'publish-engine',
+    parser.add_argument('action', choices=['inputs', 'native-key', 'require-engine', 'cache-contract', 'restore-cache', 'restore-engine', 'seed-engine', 'publish-engine',
                                          'publish-resources', 'android-companion', 'dependencies'])
     parser.add_argument('target')
     parser.add_argument('--directory', type=Path)
@@ -410,6 +414,12 @@ def main():
     args = parser.parse_args()
     if args.action == 'inputs':
         print(json.dumps(inputs('gecko', args.target), indent=2)); return
+    if args.action == 'native-key':
+        print(native_key(args.target)); return
+    if args.action == 'require-engine':
+        if not engine_available(args.target):
+            raise ValueError('Required Gecko component is not published; complete its engine_only producer first')
+        print('Required canonical Gecko component is published'); return
     if args.action == 'cache-contract':
         value = cache_contract(args.target)
         args.output.write_text(json.dumps(value, indent=2) + '\n')

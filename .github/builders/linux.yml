@@ -37,9 +37,21 @@ run-name: Taskarian ${{ inputs.source_sha }} / ${{ inputs.request_id }}
         description: Build or validate the independent Gecko component without waiting for app dependencies
         default: false
         type: boolean
+      native_key:
+        description: Exact canonical Gecko input identity for the producer phase
+        default: ''
+        type: string
+      require_native:
+        description: Assemble resources only from an already published matching engine
+        default: false
+        type: boolean
 permissions:
   contents: write
   actions: read
+concurrency:
+  group: ${{ inputs.engine_only && format('gecko-{0}', inputs.native_key) || format('resources-{0}-{1}', inputs.source_sha, inputs.request_id) }}
+  cancel-in-progress: false
+  queue: max
 jobs:
   browser:
     runs-on: ${{ github.repository == 'openresearchtools/taskarian-build-arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
@@ -88,6 +100,23 @@ jobs:
           openresearchtools/taskarian-build-amd64) echo 'BROWSER_TARGET=linux-amd64' >> "$GITHUB_ENV"; echo 'BROWSER_ARCH=amd64' >> "$GITHUB_ENV" ;;
           *) exit 1 ;;
         esac
+    - name: Validate the requested native engine identity
+      if: inputs.engine_only || inputs.require_native || inputs.native_key != ''
+      env:
+        EXPECTED_NATIVE_KEY: ${{ inputs.native_key }}
+        ENGINE_ONLY: ${{ inputs.engine_only }}
+        REQUIRE_NATIVE: ${{ inputs.require_native }}
+      run: |
+        if [ "$ENGINE_ONLY" = true ] && [ "$REQUIRE_NATIVE" = true ]; then
+          echo 'Engine production and resource-only assembly are separate phases' >&2; exit 1
+        fi
+        actual=$(python3 source/taskarian/agent/packaging/browser-release.py native-key "$BROWSER_TARGET")
+        if [ "$actual" != "$EXPECTED_NATIVE_KEY" ]; then
+          echo 'Requested native key differs from the actual scoped compiler inputs' >&2; exit 1
+        fi
+    - name: Require the published Gecko component before resource assembly
+      if: inputs.require_native
+      run: python3 source/taskarian/agent/packaging/browser-release.py require-engine "$BROWSER_TARGET"
     - id: component
       name: Restore a matching completed browser artifact
       env:
@@ -101,8 +130,11 @@ jobs:
       name: Restore a matching custom Gecko engine for current resources
       if: steps.component.outputs.hit != 'true'
       env:
-        TASKARIAN_FORCE_FULL_BUILD: ${{ inputs.force_rebuild && '1' || '0' }}
+        TASKARIAN_FORCE_FULL_BUILD: ${{ inputs.force_rebuild && !inputs.require_native && '1' || '0' }}
       run: python3 source/taskarian/agent/packaging/browser-component.py restore-native "$BROWSER_TARGET" --directory "$RUNNER_TEMP/browser/native"
+    - name: Refuse native compilation in the resource-only phase
+      if: inputs.require_native && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true'
+      run: echo 'Required verified native engine could not be restored; retry its producer without compiling here' >&2; exit 1
     - name: Materialize required build or assembly sources
       working-directory: source/taskarian
       env:
@@ -141,11 +173,11 @@ jobs:
       if: steps.component.outputs.hit != 'true'
       run: source/taskarian/agent/packaging/linux/prepare-runner.sh
     - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
-      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true'
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && !inputs.require_native
       with:
         version: v0.17.0
     - name: Install the compatible Rust toolchain
-      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true'
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && !inputs.require_native
       run: |
         version=$(python3 -c 'import json; print(json.load(open("source/taskarian/agent/machines/rust-toolchain/sources.json"))["version"])')
         test "$RUSTUP_TOOLCHAIN" = "$version"
@@ -155,14 +187,14 @@ jobs:
       run: echo "TASKARIAN_SOURCE_CACHE=$RUNNER_TEMP/source-cache" >> "$GITHUB_ENV"
     - name: Select the Gecko compiler cache contract
       id: gecko-cache-contract
-      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true'
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && !inputs.require_native
       working-directory: source/taskarian
       run: |
         digest=$(python3 agent/packaging/browser-release.py cache-contract "$BROWSER_TARGET" --output "$RUNNER_TEMP/gecko-cache-contract.json")
         printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
     - name: Restore the Gecko disk compiler cache
       id: gecko-disk-cache
-      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true'
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && !inputs.require_native
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       with:
         path: ${{ env.SCCACHE_DIR }}
@@ -172,15 +204,15 @@ jobs:
           gecko-disk-v1-${{ env.BROWSER_TARGET }}-${{ steps.gecko-cache-contract.outputs.legacy_digest }}-
     - name: Check whether the restored compiler cache contains objects
       id: gecko-disk-availability
-      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true'
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && !inputs.require_native
       working-directory: source/taskarian
       run: python3 agent/packaging/compiler-cache.py available --directory "$SCCACHE_DIR"
     - name: Restore compiler release backup only without an Actions copy
-      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-disk-availability.outputs.available != 'true'
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-disk-availability.outputs.available != 'true' && !inputs.require_native
       working-directory: source/taskarian
       run: python3 agent/packaging/browser-release.py restore-cache "$BROWSER_TARGET" --directory "$SCCACHE_DIR"
     - name: Bootstrap pinned Mozilla toolchain
-      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true'
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && !inputs.require_native
       working-directory: source/taskarian/browser
       run: ./mach --no-interactive bootstrap --application-choice browser
     - name: Bootstrap Mozilla resource assembly tools
@@ -188,7 +220,7 @@ jobs:
       working-directory: source/taskarian/browser
       run: ./mach --no-interactive bootstrap --application-choice browser_artifact_mode
     - name: Optional native Rust cache warm-up
-      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && inputs.warm_gkrust
+      if: steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && inputs.warm_gkrust && !inputs.require_native
       run: source/taskarian/browser/taskarian/scripts/build-linux-external.sh --action gkrust --build-root "$RUNNER_TEMP/bk/warm" --jobs 2 --ref HEAD
     - name: Build the complete browser archive
       if: steps.component.outputs.hit != 'true'
@@ -217,7 +249,7 @@ jobs:
       run: ./mach clobber
     - name: Record native cache hits and flush the completed disk objects
       id: gecko-cache-state
-      if: always() && !cancelled() && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-cache-contract.outputs.digest != '' && env.SCCACHE_PATH != ''
+      if: always() && !cancelled() && !inputs.require_native && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-cache-contract.outputs.digest != '' && env.SCCACHE_PATH != ''
       working-directory: source/taskarian
       run: |
         "$SCCACHE_PATH" --show-stats --stats-format=json > "$RUNNER_TEMP/sccache-gecko.json"
@@ -241,7 +273,7 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: python3 agent/packaging/compiler-cache.py save sccache "$BROWSER_TARGET" --contract "$RUNNER_TEMP/gecko-cache-contract.json" --directory "$SCCACHE_DIR"
     - name: Upload actual Gecko compiler cache statistics
-      if: always() && !cancelled() && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-cache-contract.outputs.digest != ''
+      if: always() && !cancelled() && !inputs.require_native && steps.component.outputs.hit != 'true' && steps.native-component.outputs.hit != 'true' && steps.gecko-cache-contract.outputs.digest != ''
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: gecko-compiler-cache-statistics
