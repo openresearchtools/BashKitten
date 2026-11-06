@@ -171,8 +171,9 @@ def lookup(component, target, inputs):
         manifest = json.loads(raw)
         validate(manifest, ident)
     except (ValueError, KeyError, TypeError, UnicodeError) as error:
-        print(f'Unusable optional component manifest {component}/{target}: {error}', flush=True)
-        return None
+        raise StoreUnavailable(
+            f'Published component manifest is invalid for {component}/{target}; '
+            'retry without rebuilding completed components') from error
     return {'manifest': manifest, 'repository': ident['repository'], 'manifestName': ident['manifest'],
             'manifestSha256': hashlib.sha256(raw).hexdigest(), 'url': ident['url']}
 
