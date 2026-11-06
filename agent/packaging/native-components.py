@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import shlex
 import subprocess
 import sys
 import tarfile
@@ -43,15 +44,12 @@ def run(command, **kwargs):
 
 def inputs(component, target, revision=None):
     revision = revision or head()
+    if component.startswith('android-'):
+        return module('android-components').inputs(component, target, revision)
     if component == 'node':
         return {'schema': 1, 'component': component, 'target': target,
                 'files': {name: native.entry(revision, name) for name in
                           ('agent/packaging/node', 'agent/vendor/node', 'agent/packaging/source_cache.py')},
-                'recipe': native.native_toolchain(component, target, revision)}
-    if component == 'runtime-guard':
-        return {'schema': 1, 'component': component, 'target': target,
-                'files': {'agent/src/server/access/runtime-guard.c': native.entry(revision, 'agent/src/server/access/runtime-guard.c')},
-                'command': 'cc -std=c11 -Wall -Wextra -Werror -O2',
                 'recipe': native.native_toolchain(component, target, revision)}
     return native.inputs(component, target, revision)
 
@@ -60,23 +58,30 @@ component_inputs = inputs
 
 def version(component, target, revision=None):
     revision = revision or head()
+    if component.startswith('android-'):
+        return module('android-components').version(component, target, revision)
     if component.startswith('auth-') and component != 'auth-remote':
         return json.loads(native.content(revision, 'auth/upstreams.lock.json'))[component[5:]]['version']
+    if component == 'guest-fusermount':
+        return json.loads(native.content(revision, 'agent/machines/vendor/libfuse/source.json'))['version']
+    if component.startswith('os-'):
+        names = {'dbusmenu': 'libdbusmenu', 'windowing': 'libxfce4windowing', 'panel': 'xfce4-panel'}
+        return next(item['version'] for item in json.loads(native.content(revision, 'os/upstream/sources.json')) if item['name'] == names[component[3:]])
     if component.startswith('machines-'):
         return json.loads(native.content(revision, 'agent/machines/vendor/' + component[9:] + '/source.json'))['version']
     if component == 'node':
         return json.loads(native.content(revision, 'agent/packaging/node/lock.json'))[target.split('-')[0]]['node_version']
-    if component == 'search':
-        return next(item['version'] for item in json.loads(native.content(revision, 'agent/search/runtime-lock.json'))['packages'] if item['name'] == 'ddgs')
+    if component in ('search', 'search-primp'):
+        return next(item['version'] for item in json.loads(native.content(revision, 'agent/search/runtime-lock.json'))['packages'] if item['name'] == ('primp' if component == 'search-primp' else 'ddgs'))
     return native.content(revision, 'browser/taskarian/config/version.txt').strip()
 
 
 def components(target):
-    values = [*AUTH, 'auth', 'node', 'search']
+    values = ['runtime-guard', *AUTH, 'auth', 'node', *(['search-primp'] if target.startswith('termux-') else []), 'search']
     if target.startswith('linux-'):
-        values += ['runtime-guard', *('machines-' + name for name in MACHINES), 'machines', 'display', 'guest']
+        values += [*('machines-' + name for name in MACHINES), 'machines', 'display', 'os-windowing', 'os-panel', 'os', 'guest-sudo', 'guest-fusermount', 'guest']
     else:
-        values += ['os', 'loader']
+        values += ['os-dbusmenu', 'os-windowing', 'os-panel', 'os', 'loader', 'android-remote', 'android-tor', 'android-x11']
     return values
 
 
@@ -85,6 +90,8 @@ def reference(result):
 
 
 def restore_component(component, target, directory, roles=None):
+    if component.startswith('android-'):
+        return module('android-components').restore(component, target, directory)
     result = store.restore(component, target, inputs(component, target), directory,
                            roles=roles, requested_source=head())
     if result is None:
@@ -107,7 +114,7 @@ def extract(archive, destination):
 
 
 def pack(directory, archive, root=None):
-    with tarfile.open(archive, 'w:gz') as output:
+    with tarfile.open(archive, 'w:gz', compresslevel=1) as output:
         if root:
             output.add(directory, arcname=root)
         else:
@@ -121,9 +128,13 @@ def source_bundle(component, target, output):
     from source_cache import fetch
     values = inputs(component, target)
     paths = [path for path, identity in values.get('files', {}).items() if identity]
+    if component in ('auth', 'machines'):
+        paths = ['auth/build/assemble.py'] if component == 'auth' else ['agent/packaging/machines/build.py']
+    if component == 'runtime-guard' and target.startswith('termux-'):
+        paths += ['agent/packaging/node/lock.json', 'agent/vendor/node/libcxx']
     if component.startswith('machines-'):
-        paths.append('agent/packaging/machines/build.py')
-    paths += ['LICENSE', 'agent/packaging/component-store.py', 'agent/packaging/native-component.py',
+        paths += ['agent/packaging/machines/build.py', 'auth/build/go-notices.py']
+    paths += ['LICENSE', 'agent/packaging/build.py', 'agent/packaging/component-store.py', 'agent/packaging/native-component.py',
               'agent/packaging/native-components.py', 'agent/packaging/native-tools.py',
               'agent/packaging/source_archive.py', 'agent/packaging/source_cache.py']
     original = Path(output) / f'{component}-tracked-source.tar.gz'
@@ -154,10 +165,10 @@ def source_bundle(component, target, output):
             pins.append(json.loads((ROOT / 'agent/machines/rust-toolchain/sources.json').read_text()))
         if name == 'podman':
             pins.append(json.loads((ROOT / 'auth/dependencies/go-toolchain/sources.json').read_text()))
-    if component in ('display', 'guest'):
+    if component in ('display', 'guest-sudo'):
         pins.append(json.loads((ROOT / 'agent/machines/rust-toolchain/sources.json').read_text()))
-    archive = Path(output) / f'{component}-source-{target}.tar.gz'
-    with tarfile.open(archive, 'w:gz') as destination:
+    archive = Path(output) / (f'auth-{target}-source.tar.gz' if component == 'auth' else f'{component}-source-{target}.tar.gz')
+    with tarfile.open(archive, 'w:gz', compresslevel=1) as destination:
         destination.add(original, arcname=original.name)
         seen = set()
         for pin in pins:
@@ -174,20 +185,31 @@ def source_bundle(component, target, output):
 
 def legal_bundle(component, output):
     destination = Path(output) / f'{component}-legal.tar.gz'
-    with tarfile.open(destination, 'w:gz') as legal:
+    with tarfile.open(destination, 'w:gz', compresslevel=1) as legal:
         legal.add(ROOT / 'LICENSE', arcname='Taskarian-LICENSE')
+        if component.startswith('os-'):
+            for path in (ROOT / 'os/licenses').glob('*'):
+                if path.is_file():legal.add(path, arcname='OS/' + path.name)
+            names = {'dbusmenu': 'libdbusmenu', 'windowing': 'libxfce4windowing', 'panel': 'xfce4-panel'}
+            for path in (ROOT / 'os/upstream' / names[component[3:]]).rglob('*'):
+                if path.is_file() and path.name.upper().startswith(('COPYING', 'LICENSE', 'NOTICE')):
+                    legal.add(path, arcname='upstream/' + str(path.relative_to(ROOT / 'os/upstream')))
         for archive in sorted(Path(output).glob('*.tar.*')):
-            if archive == destination or 'source' in archive.name or archive.name.endswith('.zst'):
+            if archive == destination or 'source' in archive.name:
                 continue
-            with tarfile.open(archive) as payload:
+            decoder = subprocess.Popen(['zstd', '-dc', str(archive)], stdout=subprocess.PIPE) if archive.name.endswith('.zst') else None
+            with tarfile.open(name=None if decoder else archive, fileobj=decoder.stdout if decoder else None,
+                              mode='r|' if decoder else 'r:*') as payload:
                 for member in payload:
                     if member.isfile() and any(token in member.name.lower() for token in ('licens', 'copying', 'notice', 'copyright')):
                         data = payload.extractfile(member)
                         legal.addfile(member, data)
+            if decoder and decoder.wait():
+                raise ValueError('Native license archive decompression failed')
     return destination
 
 
-def publish(component, target, output, dependencies=()):
+def publish(component, target, output, dependencies=(), validation_only=False):
     output = Path(output)
     existing_sources = [path for path in output.glob('*source*.tar.*') if path.is_file()]
     if not existing_sources:
@@ -199,14 +221,12 @@ def publish(component, target, output, dependencies=()):
             continue
         assets[file.name] = ('legal' if file == legal else 'source' if 'source' in file.name else
                              'build-support' if 'build-support' in file.name else
-                             'metadata' if file.suffix in ('.json', '.txt') or file.name == 'SHA256SUMS' else 'runtime')
+                             'metadata' if file.suffix in ('.json', '.txt', '.sha256') or file.name in ('SHA256SUMS', '.checksums.lock') else 'runtime')
     return store.publish(component, target, version(component, target), inputs(component, target), output,
-                         assets=assets, source_commit=head(), dependencies=[reference(value) for value in dependencies])
+                         assets=assets, source_commit=head(), dependencies=[reference(value) for value in dependencies], validation_only=validation_only)
 
 
-def build_search(target, work, output):
-    if target.startswith('linux-'):
-        run(['python3', 'agent/search/build/runtime.py', target, '--output', output]); return
+def build_primp(target, work):
     architecture = target.split('-')[1]
     framework = Path(work) / 'termux-packages'
     lock = json.loads((ROOT / 'agent/search/runtime-lock.json').read_text())['termuxPackages']
@@ -221,19 +241,58 @@ def build_search(target, work, output):
     if len(debs) != 1:
         raise ValueError('Expected one native primp package')
     run(['dpkg-deb', '-x', debs[0], stage])
-    run(['python3', 'agent/search/build/runtime.py', target, '--output', output, '--termux-native',
-         stage / 'data/data/com.termux/files/usr/lib/taskarian/search/runtime/site-packages'])
+    return stage / 'data/data/com.termux/files/usr/lib/taskarian/search/runtime/site-packages'
+
+
+def build_primp_component(target, work, output):
+    native_path = build_primp(target, work)
+    verified = Path(work) / 'verified-runtime'
+    run(['python3', 'agent/search/build/runtime.py', target, '--output', verified, '--termux-native', native_path])
+    payload = Path(work) / 'payload'; payload.mkdir()
+    shutil.copy2(native_path / 'primp.abi3.so', payload / 'primp.abi3.so')
+    # Reuse the actual runtime owner's complete source/legal collector.
+    with subprocess.Popen(['zstd', '-dc', str(verified / f'search-runtime-{target}.tar.zst')], stdout=subprocess.PIPE) as decoder:
+        with tarfile.open(fileobj=decoder.stdout, mode='r|') as source:
+            for member in source:
+                if member.isfile() and ('licens' in member.name.lower() or 'notice' in member.name.lower()):
+                    target_file = payload / member.name
+                    target_file.parent.mkdir(parents=True, exist_ok=True)
+                    target_file.write_bytes(source.extractfile(member).read())
+        if decoder.wait():raise ValueError('Native primp license collection failed')
+    pack(payload, Path(output) / f'search-primp-{target}.tar.gz', 'primp')
+    shutil.copy2(verified / f'search-source-{target}.tar.zst', Path(output) / f'search-primp-source-{target}.tar.zst')
+
+
+def build_search(target, work, output):
+    if target.startswith('linux-'):
+        run(['python3', 'agent/search/build/runtime.py', target, '--output', output])
+        return []
+    incoming = Path(work) / 'primp'
+    dependency = restore_component('search-primp', target, incoming, roles={'runtime', 'metadata'})
+    if dependency is None:raise ValueError('Publish native primp first')
+    for item in dependency['manifest']['assets']:
+        if item['role'] == 'runtime':extract(incoming / item['name'], incoming)
+    run(['python3', 'agent/search/build/runtime.py', target, '--output', output, '--termux-native', incoming / 'primp'])
+    return [dependency]
 
 
 def run_component(component, target, work, output, force=False):
     work, output = Path(work).resolve(), Path(output).resolve()
+    if work.is_relative_to(ROOT) or output.is_relative_to(ROOT):
+        raise ValueError('Native work/output must remain outside the source checkout')
     work.mkdir(parents=True, exist_ok=True); output.mkdir(parents=True, exist_ok=True)
+    if component.startswith('android-'):
+        return module('android-components').run(component, target, work, output, force)
     if not force:
         existing = restore_component(component, target, output)
         if existing:
             return existing
     if os.environ.get('GITHUB_ACTIONS') != 'true':
         raise ValueError('Native builds run only in architecture GitHub Actions workers')
+    if native.git('status', '--porcelain', '--untracked-files=no'):
+        raise ValueError('Build components from their committed source inputs')
+    for path in output.iterdir():
+        shutil.rmtree(path) if path.is_dir() else path.unlink()
     contract = tools.contract(component, target, lambda name: (ROOT / name).read_text())
     tools.setup(contract)
     dependencies = []
@@ -251,8 +310,10 @@ def run_component(component, target, work, output, force=False):
             'producer': {'repository': os.environ['GITHUB_REPOSITORY'], 'run': os.environ['GITHUB_RUN_ID']}}, indent=2) + '\n')
         with (output / 'SHA256SUMS').open('a') as sums:
             sums.write(store.sha(provenance) + '  ' + provenance.name + '\n')
+    elif component == 'search-primp':
+        build_primp_component(target, work, output)
     elif component == 'search':
-        build_search(target, work, output)
+        dependencies = build_search(target, work, output)
     elif component.startswith('machines-'):
         name = component[9:]; arguments = []
         if name == 'fuse-overlayfs':
@@ -270,16 +331,48 @@ def run_component(component, target, work, output, force=False):
     elif component == 'display':
         run(['python3', 'browser/taskarian/display/build.py', '--work-dir', work / 'native', '--output', output])
     elif component == 'runtime-guard':
-        payload = work / 'guard/bin'; payload.mkdir(parents=True)
-        run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-O2', 'agent/src/server/access/runtime-guard.c', '-o', payload / 'runtime-guard'])
-        pack(payload.parent, output / 'runtime-guard.tar.gz')
+        payload = work / 'guard'; (payload / 'bin').mkdir(parents=True)
+        arguments = ['cc']; env = None
+        if target.startswith('termux-'):
+            from types import SimpleNamespace
+            sdk = Path(os.environ['ANDROID_HOME'])
+            run([sdk / 'cmdline-tools/latest/bin/sdkmanager', 'ndk;30.0.16248370'])
+            spec = importlib.util.spec_from_file_location('guard_ndk', ROOT / 'agent/packaging/termux/native_toolchain.py')
+            cross = importlib.util.module_from_spec(spec); spec.loader.exec_module(cross)
+            env, provenance = cross.build_environment(SimpleNamespace(ndk=sdk / 'ndk/30.0.16248370',
+                ndk_archive=None, architecture=architecture, work=work / 'toolchain'))
+            arguments = shlex.split(env['CC']) + shlex.split(env['CPPFLAGS']) + shlex.split(env['CFLAGS'])
+        arguments += ['-std=c11', '-Wall', '-Wextra', '-Werror', '-O2',
+                      str(ROOT / 'agent/src/server/access/runtime-guard.c')]
+        if env:
+            arguments += shlex.split(env['LDFLAGS']) + ['-Wl,-z,max-page-size=16384']
+        arguments += ['-o', str(payload / 'bin/runtime-guard')]
+        run(arguments, env=env)
+        legal = payload / 'share/licenses/runtime-guard'; legal.mkdir(parents=True)
+        shutil.copy2(ROOT / 'LICENSE', legal / 'LICENSE')
+        metadata = payload / 'share/metadata'; metadata.mkdir(parents=True)
+        if target.startswith('linux-'):
+            control = work / 'debian'; control.mkdir()
+            (control / 'control').write_text('Source: taskarian\nSection: utils\nPriority: optional\nMaintainer: Taskarian\n\nPackage: taskarian-runtime-guard\nArchitecture: any\nDescription: native process lifecycle helper\n')
+            text = subprocess.check_output(['dpkg-shlibdeps', '-O', '-e' + str(payload / 'bin/runtime-guard')], cwd=work, text=True)
+            (metadata / 'runtime-guard.dependencies').write_text(text.removeprefix('shlibs:Depends='))
+        else:
+            (metadata / 'runtime-guard.dependencies').write_text('\n')
+            (metadata / 'runtime-guard-toolchain.json').write_text(json.dumps(provenance, indent=2) + '\n')
+        pack(payload, output / 'runtime-guard.tar.gz')
+    elif component.startswith('os-'):
+        dependencies = build_os_unit(component, target, work, output)
     elif component == 'os':
-        run(['python3', 'agent/packaging/termux/os.py', '--architecture', architecture, '--work', work / 'native', '--output', output])
+        dependencies = build_os_package(target, work, output)
     elif component in ('auth', 'machines'):
         dependencies = aggregate(component, target, work, output)
+    elif component in ('guest-sudo', 'guest-fusermount'):
+        build_guest_unit(component, target, work, output)
     elif component == 'guest':
-        build_guest(target, work, output)
+        dependencies = build_guest(target, work, output)
     elif component == 'loader':
+        sdk = Path(os.environ['ANDROID_HOME'])
+        run([sdk / 'cmdline-tools/latest/bin/sdkmanager', 'platforms;android-37.0', 'build-tools;37.0.0'])
         jar = Path(os.environ['ANDROID_HOME']) / 'platforms/android-37.0/android.jar'
         from release import CERT
         run(['python3', 'browser/mobile/android/taskarian/display/loader/build.py', '--jdk', os.environ['JAVA_HOME_17_X64'],
@@ -287,13 +380,41 @@ def run_component(component, target, work, output, force=False):
              '--package', 'com.taskarian', '--signer', CERT, '--output', output])
     else:
         raise ValueError('Unsupported native component: ' + component)
-    return publish(component, target, output, dependencies)
+    validate_outputs(component, target, output)
+    return publish(component, target, output, dependencies, validation_only=force)
+
+
+def validate_outputs(component, target, output):
+    if component == 'node':
+        module('node-component').verify(output, target)
+    if component.startswith('auth-') or component in ('display', 'search'):
+        native.verify_payload(output, component, target)
+    if component in ('guest', 'os'):
+        native.verify_payload(output, component, target)
+        return
+    if component == 'loader':
+        return  # Paired native loader owner checks javac/D8 output and protocol.
+    owner = module('build')
+    with tempfile.TemporaryDirectory(prefix='native-abi-') as temporary:
+        temporary = Path(temporary)
+        for archive in Path(output).glob('*.tar.*'):
+            if any(word in archive.name for word in ('source', 'legal', 'build-support')):
+                continue
+            if archive.name.endswith('.zst'):
+                with subprocess.Popen(['zstd', '-dc', str(archive)], stdout=subprocess.PIPE) as decoder:
+                    with tarfile.open(fileobj=decoder.stdout, mode='r|') as payload:
+                        payload.extractall(temporary, filter='data')
+                    if decoder.wait():
+                        raise ValueError('Native archive decompression failed')
+            else:
+                extract(archive, temporary)
+        owner.elf_payload(temporary, target.split('-')[1], target.startswith('termux-'))
 
 
 def aggregate(component, target, work, output):
     dependencies = []
     payload = Path(work) / 'payload'; payload.mkdir(parents=True, exist_ok=True)
-    leaves = AUTH if component == 'auth' else tuple('machines-' + name for name in MACHINES)
+    leaves = (*AUTH, 'runtime-guard') if component == 'auth' else tuple('machines-' + name for name in MACHINES)
     for leaf in leaves:
         incoming = Path(work) / leaf
         result = restore_component(leaf, target, incoming, roles={'runtime', 'metadata'})
@@ -306,7 +427,7 @@ def aggregate(component, target, work, output):
     if component == 'auth':
         # Existing owner makes runtime metadata/licenses; corresponding-source
         # dependency releases are pinned beside the aggregate, not rebuilt.
-        run(['python3', 'auth/build/assemble.py', ROOT, payload, target, output, '--runtime-only'])
+        run(['python3', 'auth/build/assemble.py', ROOT, payload, target, output, work, '--runtime-only'])
     else:
         root = payload / 'machines'; manifests = []
         licenses = []
@@ -327,19 +448,114 @@ def aggregate(component, target, work, output):
     return dependencies
 
 
-def build_guest(target, work, output):
+def os_native_stage(target, work):
+    units = ['os-windowing', 'os-panel'] if target.startswith('linux-') else ['os-dbusmenu', 'os-windowing', 'os-panel']
+    stage = Path(work) / 'native-stage'; stage.mkdir(parents=True, exist_ok=True)
+    dependencies = []
+    for unit in units:
+        incoming = Path(work) / unit
+        result = restore_component(unit, target, incoming, roles={'runtime', 'metadata'})
+        if result is None:
+            raise ValueError('Publish native OS source unit first: ' + unit)
+        dependencies.append(result)
+        for item in result['manifest']['assets']:
+            if item['role'] == 'runtime':
+                extract(incoming / item['name'], stage)
+    return stage, dependencies
+
+
+def os_debian_command(target, work, output, command):
     architecture = target.split('-')[1]
     image = json.loads((ROOT / 'agent/machines/image-base.json').read_text())['image']
-    version_value = (ROOT / 'browser/taskarian/config/version.txt').read_text().strip()
+    packages = ('ca-certificates build-essential git python3 meson ninja-build gettext pkg-config libgtk-3-dev '
+                'libwnck-3-dev libxfce4ui-2-dev libxfce4util-dev libxfconf-0-dev libx11-dev libxrandr-dev '
+                'libdbusmenu-gtk3-dev libnotify-dev libexo-2-dev libgarcon-1-dev libgarcon-gtk3-1-dev '
+                'xfce4-dev-tools wayland-protocols libwayland-dev libxkbcommon-dev libegl-dev libepoxy-dev '
+                'gobject-introspection libgirepository1.0-dev libdisplay-info-dev')
+    env = {**os.environ, 'ARCH': architecture, 'SOURCE_COMMIT': head(),
+           'VERSION': (ROOT / 'browser/taskarian/config/version.txt').read_text().strip()}
+    run(['docker', 'run', '--rm', '--network=bridge', '-v', str(ROOT) + ':/source:ro',
+         '-v', str(work) + ':/cache', '-v', str(output) + ':/output', '-e', 'ARCH', '-e', 'SOURCE_COMMIT', '-e', 'VERSION',
+         image, 'sh', '-ec', 'export DEBIAN_FRONTEND=noninteractive; apt-get update; '
+         'apt-get install -y --no-install-recommends ' + packages + '; ' + command], env=env)
+
+
+def build_os_unit(component, target, work, output):
+    unit = component[3:]; dependencies = []; native_stage = None
+    if unit == 'panel':
+        native_stage = work / 'native-stage'; native_stage.mkdir()
+        for name in (['os-windowing'] if target.startswith('linux-') else ['os-dbusmenu', 'os-windowing']):
+            incoming = work / name
+            result = restore_component(name, target, incoming, roles={'runtime', 'metadata'})
+            if result is None:
+                raise ValueError('Publish OS native prerequisite first: ' + name)
+            dependencies.append(result)
+            for item in result['manifest']['assets']:
+                if item['role'] == 'runtime': extract(incoming / item['name'], native_stage)
+    architecture = target.split('-')[1]
+    if target.startswith('termux-'):
+        arguments = ['--native-input', native_stage] if native_stage else []
+        run(['python3', 'agent/packaging/termux/os.py', '--architecture', architecture, '--unit', unit,
+             '--work', work / 'native', '--output', output, *arguments])
+    else:
+        extra = ' --prebuilt-native /cache/native-stage' if native_stage else ''
+        os_debian_command(target, work, output,
+            'python3 /source/os/packaging/native.py --unit ' + unit + ' --target linux --architecture "$ARCH" '
+            '--version "$VERSION" --source-commit "$SOURCE_COMMIT" --output /output '
+            '--build-dir /cache/native --jobs 2 --stage-only' + extra)
+        pack(work / 'native/stage', output / f'{component}-{target}.tar.gz')
+    return dependencies
+
+
+def build_os_package(target, work, output):
+    stage, dependencies = os_native_stage(target, work)
+    architecture = target.split('-')[1]
+    if target.startswith('termux-'):
+        run(['python3', 'agent/packaging/termux/os.py', '--architecture', architecture,
+             '--native-input', stage, '--work', work / 'native', '--output', output])
+    else:
+        os_debian_command(target, work, output,
+            'python3 /source/os/packaging/build.py --target linux --architecture "$ARCH" --version "$VERSION" '
+            '--source-commit "$SOURCE_COMMIT" --output /output --build-dir /cache/package --jobs 2 '
+            '--prebuilt-native /cache/native-stage')
+    return dependencies
+
+
+def build_guest_unit(component, target, work, output):
+    architecture = target.split('-')[1]
+    image = json.loads((ROOT / 'agent/machines/image-base.json').read_text())['image']
+    env = {**os.environ, 'RUSTUP_HOME': '/rustup'}
     command = ('export DEBIAN_FRONTEND=noninteractive PATH=/rust-bin:$PATH; apt-get update; '
-        'apt-get install -y --no-install-recommends ca-certificates build-essential git python3 meson ninja-build gettext pkg-config libgtk-3-dev libwnck-3-dev libxfce4ui-2-dev libxfce4util-dev libxfconf-0-dev libx11-dev libxrandr-dev libdbusmenu-gtk3-dev libnotify-dev libexo-2-dev libgarcon-1-dev libgarcon-gtk3-1-dev xfce4-dev-tools wayland-protocols libwayland-dev libxkbcommon-dev libegl-dev libepoxy-dev gobject-introspection libgirepository1.0-dev libdisplay-info-dev; '
-        'python3 /source/os/packaging/build.py --target linux --architecture "$ARCH" --version "$VERSION" --source-commit "$SOURCE_COMMIT" --output /output --build-dir /cache/os --jobs 2; '
-        'python3 /source/agent/machines/build-guest.py --architecture "$ARCH" --version "$VERSION" --revision "$SOURCE_COMMIT" --output /output --work /cache/guest')
-    env = {**os.environ, 'ARCH': architecture, 'SOURCE_COMMIT': head(), 'VERSION': version_value}
-    run(['docker', 'run', '--rm', '--network=bridge', '-v', str(ROOT) + ':/source:ro', '-v', str(work) + ':/cache',
-         '-v', str(output) + ':/output', '-v', str(Path.home() / '.rustup') + ':/rustup:ro',
-         '-v', str(Path.home() / '.cargo/bin') + ':/rust-bin:ro', '-e', 'ARCH', '-e', 'SOURCE_COMMIT', '-e', 'VERSION',
-         '-e', 'RUSTUP_HOME=/rustup', '-e', 'RUSTUP_TOOLCHAIN=' + env.get('RUSTUP_TOOLCHAIN', '1.96.0'), image, 'sh', '-ec', command], env=env)
+        'apt-get install -y --no-install-recommends ca-certificates build-essential python3 meson ninja-build pkg-config; '
+        'python3 /source/agent/machines/build-guest-native.py --component ' + component.removeprefix('guest-') +
+        ' --work /cache/native --output /cache/stage')
+    run(['docker', 'run', '--rm', '-v', str(ROOT) + ':/source:ro', '-v', str(work) + ':/cache',
+         '-v', str(Path.home() / '.rustup') + ':/rustup:ro', '-v', str(Path.home() / '.cargo/bin') + ':/rust-bin:ro',
+         '-e', 'RUSTUP_HOME=/rustup', '-e', 'RUSTUP_TOOLCHAIN=' + os.environ.get('RUSTUP_TOOLCHAIN', '1.96.0'),
+         image, 'sh', '-ec', command])
+    pack(work / 'stage', output / f'{component}-{target}.tar.gz')
+
+
+def build_guest(target, work, output):
+    dependencies = []
+    stage = work / 'native-stage'; stage.mkdir()
+    for component in ('guest-sudo', 'guest-fusermount'):
+        incoming = work / component
+        result = restore_component(component, target, incoming, roles={'runtime', 'metadata'})
+        if result is None:
+            raise ValueError('Publish guest native helper first: ' + component)
+        dependencies.append(result)
+        for item in result['manifest']['assets']:
+            if item['role'] == 'runtime':extract(incoming / item['name'], stage)
+    os_result = restore_component('os', target, output, roles={'runtime', 'metadata'})
+    if os_result is None:
+        raise ValueError('Publish Taskarian OS guest package first')
+    dependencies.append(os_result)
+    architecture = target.split('-')[1]
+    os_debian_command(target, work, output,
+        'python3 /source/agent/machines/build-guest.py --architecture "$ARCH" --version "$VERSION" '
+        '--revision "$SOURCE_COMMIT" --output /output --work /cache/package --prebuilt-native /cache/native-stage')
+    return dependencies
 
 
 def assembly(target, directory):

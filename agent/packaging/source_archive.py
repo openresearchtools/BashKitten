@@ -19,7 +19,7 @@ def archive_revision(repository, revision, destination, prefix='taskarian/', pat
     objects = subprocess.Popen(['git', 'cat-file', '--batch'], cwd=repository,
                                stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     try:
-        with Path(destination).open('wb') as output, gzip.GzipFile(fileobj=output, mode='wb', filename='', mtime=0) as compressed:
+        with Path(destination).open('wb') as output, gzip.GzipFile(fileobj=output, mode='wb', filename='', mtime=0, compresslevel=1) as compressed:
             with tarfile.open(fileobj=compressed, mode='w|', format=tarfile.PAX_FORMAT) as archive:
                 for entry in entries:
                     if not entry:

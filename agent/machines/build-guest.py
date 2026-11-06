@@ -23,6 +23,7 @@ def main():
     parser.add_argument('--architecture',choices=['amd64','arm64'],required=True)
     parser.add_argument('--version',required=True)
     parser.add_argument('--revision',required=True)
+    parser.add_argument('--prebuilt-native',type=Path)
     args=parser.parse_args()
     actual={'x86_64':'amd64','aarch64':'arm64'}.get(platform.machine())
     if actual!=args.architecture:
@@ -33,27 +34,34 @@ def main():
     source=args.work/'source';stage=args.work/'package'
     if source.exists():shutil.rmtree(source)
     if stage.exists():shutil.rmtree(stage)
-    shutil.copytree(ROOT/'guest/sudo-bridge',source)
-    env={**os.environ,'CARGO_TARGET_DIR':str(args.work/'target')}
-    run(['cargo','build','--locked','--offline','--release'],cwd=source,env=env)
-    bindir=stage/'usr/lib/taskarian/machines/bin';bindir.mkdir(parents=True)
-    binary=args.work/'target/release/taskarian-sudo'
-    for name in ['taskarian-sudo','taskarian-sudo-exec','sudo-policy']:
-        shutil.copy2(binary,bindir/name)
-    # Reuse the engine source verifier; only the unmodified native helper is
-    # needed in the guest, not another libfuse or a privileged mount service.
-    spec=importlib.util.spec_from_file_location('machine_build',repo/'agent/packaging/machines/build.py')
-    machine_build=importlib.util.module_from_spec(spec);spec.loader.exec_module(machine_build)
-    fuse_vendor=ROOT/'vendor/libfuse'
-    fuse_record=machine_build.verify_source(fuse_vendor)
-    fuse_source=args.work/'libfuse'
-    if fuse_source.exists():shutil.rmtree(fuse_source)
-    shutil.copytree(fuse_vendor/'source',fuse_source,symlinks=True)
-    run(['meson','setup','build','--prefix=/usr','--sysconfdir=/etc','--buildtype=release',
-         '-Dexamples=false','-Dtests=false','-Duseroot=false','-Dinitscriptdir=',
-         '-Denable-io-uring=false'],cwd=fuse_source)
-    run(['meson','compile','-C','build','-j','2','fusermount3'],cwd=fuse_source)
-    shutil.copy2(fuse_source/'build/util/fusermount3',bindir/'fusermount3')
+    if args.prebuilt_native:
+        shutil.copytree(args.prebuilt_native,stage,dirs_exist_ok=True,symlinks=True)
+        bindir=stage/'usr/lib/taskarian/machines/bin'
+        spec=importlib.util.spec_from_file_location('machine_build',repo/'agent/packaging/machines/build.py')
+        machine_build=importlib.util.module_from_spec(spec);spec.loader.exec_module(machine_build)
+        fuse_vendor=ROOT/'vendor/libfuse';fuse_record=machine_build.verify_source(fuse_vendor)
+    else:
+        shutil.copytree(ROOT/'guest/sudo-bridge',source)
+        env={**os.environ,'CARGO_TARGET_DIR':str(args.work/'target')}
+        run(['cargo','build','--locked','--offline','--release'],cwd=source,env=env)
+        bindir=stage/'usr/lib/taskarian/machines/bin';bindir.mkdir(parents=True)
+        binary=args.work/'target/release/taskarian-sudo'
+        for name in ['taskarian-sudo','taskarian-sudo-exec','sudo-policy']:
+            shutil.copy2(binary,bindir/name)
+        # Reuse the engine source verifier; only the unmodified native helper is
+        # needed in the guest, not another libfuse or a privileged mount service.
+        spec=importlib.util.spec_from_file_location('machine_build',repo/'agent/packaging/machines/build.py')
+        machine_build=importlib.util.module_from_spec(spec);spec.loader.exec_module(machine_build)
+        fuse_vendor=ROOT/'vendor/libfuse'
+        fuse_record=machine_build.verify_source(fuse_vendor)
+        fuse_source=args.work/'libfuse'
+        if fuse_source.exists():shutil.rmtree(fuse_source)
+        shutil.copytree(fuse_vendor/'source',fuse_source,symlinks=True)
+        run(['meson','setup','build','--prefix=/usr','--sysconfdir=/etc','--buildtype=release',
+             '-Dexamples=false','-Dtests=false','-Duseroot=false','-Dinitscriptdir=',
+             '-Denable-io-uring=false'],cwd=fuse_source)
+        run(['meson','compile','-C','build','-j','2','fusermount3'],cwd=fuse_source)
+        shutil.copy2(fuse_source/'build/util/fusermount3',bindir/'fusermount3')
     (bindir/'fusermount3').chmod(0o4755)
     commands=stage/'usr/bin';commands.mkdir(parents=True)
     (commands/'fusermount3').symlink_to('/usr/lib/taskarian/machines/bin/fusermount3')
@@ -65,10 +73,10 @@ def main():
     aliases=stage/'usr/local/bin';aliases.mkdir(parents=True)
     for name in ['sudo','sudoedit']:(aliases/name).symlink_to('/usr/lib/taskarian/machines/bin/taskarian-sudo')
     # Debian slim drops most /usr/share/doc files during installation.
-    docs=stage/'usr/share/taskarian-machines-guest';docs.mkdir(parents=True)
+    docs=stage/'usr/share/taskarian-machines-guest';docs.mkdir(parents=True,exist_ok=True)
     shutil.copy2(ROOT/'upstream/buzzard-runtime/LICENSE',docs/'COPYING')
     shutil.copy2(ROOT/'NOTICE',docs/'copyright')
-    machine_build.rust_toolchain_notices(docs/'rust-toolchain')
+    if not args.prebuilt_native:machine_build.rust_toolchain_notices(docs/'rust-toolchain')
     libc=ROOT/'guest/sudo-bridge/vendor/libc'
     for license in libc.glob('LICENSE*'):shutil.copy2(license,docs/('libc-'+license.name))
     for license in fuse_record['license_paths']:

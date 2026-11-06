@@ -30,6 +30,10 @@ GO_NOTICES = runpy.run_path(str(ROOT / 'auth/build/go-notices.py'))
 VENDOR = ROOT / 'agent/machines/vendor'
 COMPONENTS = ('podman', 'crun', 'conmon', 'netavark', 'aardvark-dns',
               'passt', 'libfuse', 'fuse-overlayfs', 'catatonit')
+PART_BINARIES = {'podman': ('podman', 'rootlessport'), 'crun': ('crun',), 'conmon': ('conmon',),
+                 'netavark': ('netavark',), 'aardvark-dns': ('aardvark-dns',),
+                 'passt': ('pasta', 'passt', 'pesto'), 'libfuse': ('fusermount3',),
+                 'fuse-overlayfs': ('fuse-overlayfs',), 'catatonit': ('catatonit',)}
 BINARIES = ('podman', 'rootlessport', 'crun', 'conmon', 'netavark',
             'aardvark-dns', 'pasta', 'passt', 'pesto', 'fusermount3', 'fuse-overlayfs', 'catatonit')
 PREFIX = '/usr/lib/taskarian/machines'
@@ -210,26 +214,38 @@ def build(args):
     architecture = {'x86_64': 'amd64', 'aarch64': 'arm64'}.get(platform.machine())
     require(platform.system() == 'Linux' and architecture == args.architecture,
             'Use the native Linux runner for the selected architecture')
-    binaries = BINARIES + (('passt.avx2', 'pasta.avx2') if architecture == 'amd64' else ())
-    for tool in ('go', 'cargo', 'rustc', 'make', 'cc', 'pkg-config', 'autoreconf',
+    selected = (args.component,) if args.component else COMPONENTS
+    binaries = tuple(binary for name in selected for binary in PART_BINARIES[name])
+    if architecture == 'amd64' and 'passt' in selected:
+        binaries += ('passt.avx2', 'pasta.avx2')
+    uses_go = 'podman' in selected
+    uses_rust = bool(set(selected) & {'netavark', 'aardvark-dns'})
+    language_tools = (('go',) if uses_go else ()) + (('cargo', 'rustc') if uses_rust else ())
+    for tool in (*language_tools, 'make', 'cc', 'pkg-config', 'autoreconf',
                  'dpkg-shlibdeps', 'dpkg-buildflags', 'readelf', 'tar', 'gzip', 'meson', 'ninja', 'patch'):
         require(shutil.which(tool), 'Missing build dependency: ' + tool)
     work = args.work.resolve(); destination = args.output.resolve()
     require(not work.is_relative_to(ROOT) and not destination.is_relative_to(ROOT),
             'Build work/output must be outside the product checkout')
     work.mkdir(parents=True, exist_ok=True); destination.mkdir(parents=True, exist_ok=True)
-    records = {name: verify_source(VENDOR / name) for name in COMPONENTS}
-    toolchain = {name: output([name, '--version']).splitlines()[0] for name in ('cc', 'cargo', 'rustc')}
-    toolchain['go'] = output(['go', 'version'])
-    go_legal = GO_NOTICES['toolchain_notices']()
+    records = {name: verify_source(VENDOR / name) for name in selected}
+    toolchain = {name: output([name, '--version']).splitlines()[0] for name in ('cc', *(('cargo', 'rustc') if uses_rust else ()))}
+    if uses_go:
+        toolchain['go'] = output(['go', 'version'])
+    go_legal = GO_NOTICES['toolchain_notices']() if uses_go else None
     patch_root = ROOT / 'agent/machines/patches'
     patches = {str(path.relative_to(patch_root)): sha(path)
-               for path in sorted(patch_root.glob('*/*.patch'))}
+               for path in sorted(patch_root.glob('*/*.patch')) if path.parent.name in selected}
     key = hashlib.sha256(json.dumps({'sources': records, 'toolchain': toolchain, 'patches': patches,
-        'architecture': architecture, 'licenseSupplements': sha(ROOT / 'agent/machines/license-supplements/sources.json'), 'recipe': sha(Path(__file__)), 'goNotices': sha(ROOT / 'auth/build/go-notices.py'),
-        'goSource': go_legal['pin'], 'rustSource': sha(ROOT / 'agent/machines/rust-toolchain/sources.json')}, sort_keys=True).encode()).hexdigest()
+        'architecture': architecture, 'licenseSupplements': sha(ROOT / 'agent/machines/license-supplements/sources.json') if uses_rust else None, 'recipe': sha(Path(__file__)), 'goNotices': sha(ROOT / 'auth/build/go-notices.py'),
+        'goSource': go_legal['pin'] if go_legal else None, 'rustSource': sha(ROOT / 'agent/machines/rust-toolchain/sources.json') if uses_rust else None}, sort_keys=True).encode()).hexdigest()
     cache = work / key; cache.mkdir(exist_ok=True)
     runtime = cache / 'machines'; (runtime / 'bin').mkdir(parents=True, exist_ok=True)
+    (runtime / 'lib').mkdir(exist_ok=True)
+    if args.component == 'fuse-overlayfs':
+        require(args.dependency_dir is not None, 'fuse-overlayfs requires the retained libfuse build support')
+        shutil.copytree(args.dependency_dir / 'libfuse', cache / 'libfuse', dirs_exist_ok=True, symlinks=True)
+        shutil.copytree(args.dependency_dir / 'machines/lib', runtime / 'lib', dirs_exist_ok=True, symlinks=True)
     epoch = output(['git', 'log', '-1', '--format=%ct'], ROOT)
     env = {**os.environ, 'GOTOOLCHAIN': 'local', 'GOPROXY': 'off', 'GOSUMDB': 'off',
            # Materialized donors have no nested Git checkout. Do not embed the
@@ -241,8 +257,12 @@ def build(args):
     env.setdefault('GOCACHE', str(work / 'go-cache'))
     env.setdefault('CARGO_TARGET_DIR', str(work / 'cargo-target' / architecture))
     jobs = str(args.jobs)
-    licenses = [go_legal['record'], rust_toolchain_notices(runtime / 'licenses/rust-toolchain')]
-    GO_NOTICES['write_toolchain_notices'](go_legal, runtime / 'licenses/go-toolchain')
+    licenses = []
+    if uses_go:
+        licenses.append(go_legal['record'])
+        GO_NOTICES['write_toolchain_notices'](go_legal, runtime / 'licenses/go-toolchain')
+    if uses_rust:
+        licenses.append(rust_toolchain_notices(runtime / 'licenses/rust-toolchain'))
     for name, record in records.items():
         source = cache / name
         if not source.exists():
@@ -337,14 +357,14 @@ def build(args):
     for binary in binaries:
         require(os.access(runtime / 'bin' / binary, os.X_OK), 'Missing runtime executable: ' + binary)
     linked_go = {name: verify_go_closure(runtime / 'bin' / name, records['podman'])
-                 for name in ('podman', 'rootlessport')}
+                 for name in ('podman', 'rootlessport') if 'podman' in records}
     dependency_work = cache / 'dependencies'; (dependency_work / 'debian').mkdir(parents=True, exist_ok=True)
     (dependency_work / 'debian/control').write_text('Source: taskarian\nSection: utils\nPriority: optional\n'
         'Maintainer: Open Research Tools <openresearchtools@gmail.com>\n\nPackage: taskarian\n'
         'Architecture: any\nDescription: private container engine\n')
     (dependency_work / 'debian/shlibs.local').write_text('libfuse3 4 taskarian-private-fuse\n')
     dependency_text = output(['dpkg-shlibdeps', '-O', '-l' + str(runtime / 'lib'), *('-e' + str(runtime / 'bin' / b) for b in binaries),
-                              '-e' + str(runtime / 'lib/libfuse3.so.4')], dependency_work)
+                              *(['-e' + str(runtime / 'lib/libfuse3.so.4')] if (runtime / 'lib/libfuse3.so.4').exists() else [])], dependency_work)
     depends = [item for item in dependency_text.removeprefix('shlibs:Depends=').split(', ')
                if item != 'taskarian-private-fuse'] + ['uidmap', 'iptables', 'systemd', 'dbus-user-session', 'pipewire-bin', 'gstreamer1.0-tools', 'gstreamer1.0-pipewire', 'gstreamer1.0-pulseaudio', 'gstreamer1.0-plugins-base', 'gstreamer1.0-plugins-good', 'gstreamer1.0-plugins-bad']
     licenses.append({'name': 'Taskarian machine runtime adaptation notices',
@@ -352,11 +372,15 @@ def build(args):
                      'text': (ROOT / 'agent/machines/NOTICE').read_text()})
     (runtime / 'licenses.json').write_text(json.dumps(licenses, indent=2) + '\n')
     provenance = runtime / 'sources'; provenance.mkdir(exist_ok=True)
-    for name in COMPONENTS:
+    for name in selected:
         shutil.copy2(VENDOR / name / 'source.json', provenance / (name + '.json'))
-    shutil.copytree(patch_root, provenance / 'patches', dirs_exist_ok=True)
+    (provenance / 'patches').mkdir(exist_ok=True)
+    for name in selected:
+        if (patch_root / name).is_dir():
+            shutil.copytree(patch_root / name, provenance / 'patches' / name, dirs_exist_ok=True)
     shutil.copy2(ROOT / 'agent/machines/NOTICE', provenance / 'TASKARIAN-NOTICE')
-    shutil.copy2(ROOT / 'auth/dependencies/go-toolchain/sources.json', provenance / 'go-toolchain.json')
+    if uses_go:
+        shutil.copy2(ROOT / 'auth/dependencies/go-toolchain/sources.json', provenance / 'go-toolchain.json')
     (provenance / 'linked-go-modules.json').write_text(json.dumps(linked_go, indent=2) + '\n')
     manifest = {'schema': 1, 'platform': 'linux', 'architecture': architecture,
                 'buildKey': key, 'sourceCommit': output(['git', 'rev-parse', 'HEAD'], ROOT),
@@ -365,7 +389,10 @@ def build(args):
                 'libraries': {p.name: sha(p) for p in sorted((runtime / 'lib').iterdir())},
                 'recipeSha256': sha(Path(__file__)), 'sourceDateEpoch': int(epoch)}
     (runtime / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
-    archive = destination / f'machines-runtime-linux-{architecture}.tar.gz'
+    if args.component == 'libfuse':
+        with tarfile.open(destination / 'libfuse-build-support.tar.gz', 'w:gz') as support:
+            support.add(cache / 'libfuse', arcname='libfuse')
+    archive = destination / (f'machines-{args.component}-linux-{architecture}.tar.gz' if args.component else f'machines-runtime-linux-{architecture}.tar.gz')
     with archive.open('wb') as stream:
         pack = subprocess.Popen(['tar', '--sort=name', '--mtime=@' + epoch, '--owner=0', '--group=0',
                                  '--numeric-owner', '-C', str(cache), '-cf', '-', 'machines'], stdout=subprocess.PIPE)
@@ -381,6 +408,8 @@ if __name__ == '__main__':
     parser.add_argument('--architecture', choices=['amd64', 'arm64'], required=True)
     parser.add_argument('--work', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--component', choices=COMPONENTS)
+    parser.add_argument('--dependency-dir', type=Path)
     parser.add_argument('--jobs', type=int, default=min(8, os.cpu_count() or 1))
     args = parser.parse_args()
     try:

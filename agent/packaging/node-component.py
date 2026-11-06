@@ -2,48 +2,25 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Reuse complete Node components only when their committed assembly inputs match."""
 import argparse
-import base64
-from functools import cache
 import hashlib
 import importlib.util
 import json
 import os
 from pathlib import Path
 import re
-import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
-import time
 
 ROOT = Path(__file__).resolve().parents[2]
 REPOSITORY = 'openresearchtools/Taskarian'
-WORKFLOW = '.github/workflows/node-native.yml'
 TREES = ('agent/packaging/node', 'agent/vendor/node')
 SHARED_RECIPE = 'agent/packaging/source_cache.py'
-ASSEMBLE = 'Assemble pinned private runtime and corresponding source'
-RESTORE = 'Restore a matching completed Node component'
-VERIFY = 'Verify Node runtime, corresponding source and provenance'
 
 
 class MetadataUnavailable(RuntimeError):
     """Optional GitHub cache metadata remained unavailable after retries."""
-
-
-def api(endpoint):
-    for attempt in range(3):
-        try:
-            return json.loads(subprocess.check_output(
-                ['gh', 'api', endpoint], text=True, stderr=subprocess.PIPE))
-        except subprocess.CalledProcessError as error:
-            # Missing historical artifacts are cache misses; a network outage
-            # remains a resumable job failure and never triggers compilation.
-            if re.search(r'\bHTTP (?:404|410)\b', error.stderr or ''):
-                raise
-            if attempt == 2:
-                raise MetadataUnavailable('GitHub Node artifact metadata is unavailable; retry this job instead of rebuilding') from error
-            time.sleep(2 ** attempt)
 
 
 def git(*args):
@@ -56,51 +33,6 @@ def git(*args):
 def sha(path):
     with path.open('rb') as stream:
         return hashlib.file_digest(stream, 'sha256').hexdigest()
-
-
-def assembly_recipe(workflow):
-    # Only execution inputs belong in this identity, not artifact/cache policy.
-    # The workflow deliberately keeps the runner and two assembly commands as
-    # single-line values. Refuse a new syntax until its input handling is updated.
-    runner = re.findall(r'^    runs-on: (.+)$', workflow, re.M)
-    if len(runner) != 1:
-        raise ValueError('Expected one Node assembly runner')
-    recipe = {'runner': runner[0]}
-    for name in ('Install component assembly tools', ASSEMBLE):
-        blocks = re.findall(r'^    - name: ' + re.escape(name) + r'\n((?:      .+\n)+)', workflow, re.M)
-        if len(blocks) != 1:
-            raise ValueError('Missing Node assembly step: ' + name)
-        commands = re.findall(r'^      run: (.+)$', blocks[0], re.M)
-        if len(commands) != 1 or commands[0] in ('|', '>'):
-            raise ValueError('Expected a single-line Node assembly command')
-        recipe[name] = commands[0]
-    return recipe
-
-
-@cache
-def inputs(revision):
-    if not re.fullmatch('[0-9a-f]{40}', revision):
-        raise ValueError('Invalid Node producer revision')
-    local = subprocess.run(['git', 'cat-file', '-e', revision + '^{commit}'], cwd=ROOT,
-                           stderr=subprocess.DEVNULL).returncode == 0
-    if local:
-        trees = {path: git('rev-parse', revision + ':' + path).decode().strip() for path in TREES}
-        shared_entry = git('ls-tree', revision, '--', SHARED_RECIPE).decode().split()
-        shared = shared_entry[2] if shared_entry else None
-        workflow = git('show', revision + ':' + WORKFLOW).decode()
-    else:
-        trees = {}
-        for path in TREES:
-            parent, name = path.rsplit('/', 1)
-            entries = api(f'repos/{REPOSITORY}/contents/{parent}?ref={revision}')
-            trees[path] = next(item['sha'] for item in entries if item['name'] == name and item['type'] == 'dir')
-        parent, name = SHARED_RECIPE.rsplit('/', 1)
-        entries = api(f'repos/{REPOSITORY}/contents/{parent}?ref={revision}')
-        shared = next((item['sha'] for item in entries if item['name'] == name and item['type'] == 'file'), None)
-        entry = api(f'repos/{REPOSITORY}/contents/{WORKFLOW}?ref={revision}')
-        workflow = base64.b64decode(entry['content']).decode()
-    return {'trees': trees, 'sharedRecipe': {SHARED_RECIPE: shared},
-            'assembly': assembly_recipe(workflow)}
 
 
 def files(directory):
@@ -122,7 +54,15 @@ def verify(directory, target):
         checksums[name] = digest
     if set(checksums) not in (set(names), set(names + [receipt_name])):
         raise ValueError('Node checksums must cover the runtime, source and any provenance receipt')
+    durable = directory / ('native-input-equivalence-node-' + target + '.json')
+    durable_record = None
+    if durable.exists():
+        spec = importlib.util.spec_from_file_location('node_native_owner', ROOT / 'agent/packaging/native-components.py')
+        owner = importlib.util.module_from_spec(spec); spec.loader.exec_module(owner)
+        durable_record = owner.native.verify_store_receipt(directory, 'node', target, owner.head(), owner.inputs('node', target))
     allowed = set(checksums) | {'SHA256SUMS', '.checksums.lock'} | {name + '.sha256' for name in names}
+    if durable_record:
+        allowed |= set(durable_record['files']) | {durable.name}
     if any(path.name not in allowed or not path.is_file() for path in directory.iterdir()):
         raise ValueError('Unexpected Node component payload')
     for name in names:
@@ -203,127 +143,27 @@ def verify(directory, target):
     receipt = directory / receipt_name
     if receipt.exists():
         provenance = json.loads(receipt.read_text())
+        if durable_record:
+            if provenance.get('target') != target or provenance.get('archives') != {name: checksums[name] for name in names}:
+                raise ValueError('Durable Node source/runtime pairing differs')
+            return {name: checksums[name] for name in names}
         current = git('rev-parse', 'HEAD').decode().strip()
-        if (provenance.get('schema') != 1 or provenance.get('target') != target or
-                provenance.get('repository') != REPOSITORY or provenance.get('inputs') != inputs(current) or
-                not re.fullmatch('[0-9a-f]{40}', provenance.get('producerSource', '')) or
-                not isinstance(provenance.get('producerRun'), int) or
-                provenance.get('archives') != {name: checksums[name] for name in names}):
-            raise ValueError('Node producer receipt does not match this component')
+        if provenance.get('schema') == 2:
+            spec = importlib.util.spec_from_file_location('node_current_owner', ROOT / 'agent/packaging/native-components.py')
+            owner = importlib.util.module_from_spec(spec); spec.loader.exec_module(owner)
+            if (provenance.get('target') != target or provenance.get('producerSource') != current or
+                    provenance.get('inputs') != owner.inputs('node', target) or
+                    provenance.get('archives') != {name: checksums[name] for name in names}):
+                raise ValueError('Fresh native Node provenance differs from its actual inputs')
+            return {name: checksums[name] for name in names}
+        raise ValueError('Node provenance must come from its current native publisher')
     return {name: checksums[name] for name in names}
 
 
-def completed_producer(run, target):
-    if (run['event'] != 'workflow_dispatch' or run['head_branch'] != 'main' or
-            run['path'] not in (WORKFLOW, '.github/workflows/packages.yml')):
-        return None
-    run_id, attempt = run.get('id'), run.get('run_attempt')
-    if type(run_id) is not int or run_id < 1 or type(attempt) is not int or attempt < 1:
-        raise ValueError('Invalid Node producer run or attempt identity')
-    platform, architecture = target.split('-', 1)
-    suffix = f'node ({platform}, {architecture})'
-    page = 1
-    while True:
-        jobs = api(f'repos/{REPOSITORY}/actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100&page={page}')['jobs']
-        for job in jobs:
-            if job['conclusion'] != 'success' or job['name'].split(' / ')[-1] != suffix:
-                continue
-            if (type(job.get('run_id')) is not int or type(job.get('run_attempt')) is not int or
-                    job['run_id'] != run_id or job['run_attempt'] != attempt):
-                raise ValueError('Node producer job belongs to another run or attempt')
-            steps = {step['name']: step for step in job['steps']}
-            built = steps.get(ASSEMBLE, {}).get('conclusion') == 'success'
-            restored = (steps.get(ASSEMBLE, {}).get('conclusion') == 'skipped' and
-                        all(steps.get(name, {}).get('conclusion') == 'success' for name in (RESTORE, VERIFY)))
-            upload = next((step for step in job['steps'] if step['name'].startswith('Run actions/upload-artifact@')
-                           and step['conclusion'] == 'success'), None)
-            if upload and (built or restored):
-                return {'job': job['id'], 'assembled': built, 'steps': job['steps']}
-        if len(jobs) < 100:
-            return None
-        page += 1
-
-
-def write_receipt(directory, target, provenance):
-    name = f'node-provenance-{target}.json'
-    path = directory / name
-    path.write_text(json.dumps(provenance, indent=2) + '\n')
-    with (directory / 'SHA256SUMS').open('a') as output:
-        output.write(sha(path) + '  ' + name + '\n')
-
-
 def restore(directory, target):
-    current = inputs(git('rev-parse', 'HEAD').decode().strip())
-    page = 1
-    while True:
-        artifacts = api(f'repos/{REPOSITORY}/actions/artifacts?name=node-runtime-{target}&per_page=100&page={page}')['artifacts']
-        for artifact in artifacts:
-            if artifact['expired'] or artifact['name'] != f'node-runtime-{target}':
-                continue
-            run = api(f'repos/{REPOSITORY}/actions/runs/{artifact["workflow_run"]["id"]}')
-            if run['id'] == int(os.environ.get('GITHUB_RUN_ID', '0')):
-                continue
-            evidence = completed_producer(run, target)
-            if not evidence:
-                continue
-            try:
-                producer_inputs = inputs(run['head_sha'])
-            except subprocess.CalledProcessError as error:
-                # Historical artifacts can outlive the GitHub source objects
-                # needed to prove their inputs. Leave their identity untouched
-                # and use the ordinary pinned build when proof is unavailable.
-                try:
-                    response = json.loads(error.output)
-                except (TypeError, ValueError):
-                    raise error
-                if not isinstance(response, dict) or response.get('status') != '404':
-                    raise
-                print(f'Skipping Node cache producer whose source is unavailable: {run["head_sha"]}', flush=True)
-                continue
-            if producer_inputs != current:
-                continue
-            try:
-                for attempt in range(3):
-                    # A prior interrupted transfer must not poison the retry.
-                    for path in directory.iterdir():
-                        if path.is_dir(): shutil.rmtree(path)
-                        else: path.unlink()
-                    try:
-                        subprocess.run(['gh', 'run', 'download', str(run['id']), '--repo', REPOSITORY,
-                                        '--name', artifact['name'], '--dir', str(directory)], check=True,
-                                       stderr=subprocess.PIPE)
-                        break
-                    except subprocess.CalledProcessError as error:
-                        detail = error.stderr.decode(errors='replace') if isinstance(error.stderr, bytes) else error.stderr or ''
-                        if re.search(r'HTTP (?:404|410)\b|no artifacts (?:found|match)', detail, re.I):
-                            raise ValueError('Optional Node artifact expired during restoration') from error
-                        if attempt == 2:
-                            raise MetadataUnavailable('Node artifact download interrupted; retry to restore completed work') from error
-                        time.sleep(2 ** attempt)
-                archives = verify(directory, target)
-                receipt = directory / f'node-provenance-{target}.json'
-                if not receipt.exists():
-                    if not evidence['assembled']:
-                        raise ValueError('Restored Node component lacks its original producer receipt')
-                    write_receipt(directory, target, {'schema': 1, 'target': target, 'repository': REPOSITORY,
-                        'producerSource': run['head_sha'], 'producerRun': run['id'],
-                        'producerArtifact': artifact['id'], 'producerEvidence': evidence,
-                        'inputs': current, 'archives': archives})
-                elif evidence['assembled']:
-                    provenance = json.loads(receipt.read_text())
-                    if provenance['producerSource'] != run['head_sha'] or provenance['producerRun'] != run['id']:
-                        raise ValueError('Assembled Node artifact misidentifies its producer')
-            except (ValueError, KeyError, TypeError, OSError, tarfile.TarError, subprocess.CalledProcessError) as error:
-                for path in directory.iterdir():
-                    if path.is_dir(): shutil.rmtree(path)
-                    else: path.unlink()
-                print(f'Discarding absent/unprovable optional Node artifact {artifact["id"]}: {error}', flush=True)
-                continue
-            print(f'Reused verified {target} runtime and corresponding source from {run["html_url"]}', flush=True)
-            return True
-        if len(artifacts) < 100:
-            return False
-        page += 1
+    spec = importlib.util.spec_from_file_location('node_store_owner', ROOT / 'agent/packaging/native-components.py')
+    owner = importlib.util.module_from_spec(spec); spec.loader.exec_module(owner)
+    return owner.restore_component('node', target, directory) is not None
 
 
 def main():
@@ -333,8 +173,6 @@ def main():
     parser.add_argument('--directory', type=Path, required=True)
     parser.add_argument('--force', default='false')
     args = parser.parse_args()
-    if os.environ.get('GITHUB_REPOSITORY', REPOSITORY).lower() != REPOSITORY.lower():
-        raise ValueError('Node component reuse requires the product repository')
     args.directory.mkdir(parents=True, exist_ok=True)
     if args.action == 'restore':
         if any(args.directory.iterdir()):
@@ -346,10 +184,7 @@ def main():
     else:
         archives = verify(args.directory, args.target)
         if not (args.directory / f'node-provenance-{args.target}.json').exists():
-            revision = git('rev-parse', 'HEAD').decode().strip()
-            write_receipt(args.directory, args.target, {'schema': 1, 'target': args.target,
-                'repository': REPOSITORY, 'producerSource': revision, 'producerRun': int(os.environ['GITHUB_RUN_ID']),
-                'inputs': inputs(revision), 'archives': archives})
+            raise ValueError('Node provenance must come from its native component publisher')
         print('Verified Node runtime, complete corresponding source, notices and original producer')
 
 

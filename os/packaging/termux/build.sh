@@ -37,10 +37,19 @@ termux_step_configure() {
     export TASKARIAN_OS_SOURCE_COMMIT="$(git -C "$TASKARIAN_SOURCE_ROOT" rev-parse HEAD)"
 }
 termux_step_make() {
-    python3 "$TERMUX_PKG_SRCDIR/repo/os/packaging/build.py" --target termux --architecture "$TERMUX_ARCH" \
+    local owner=build.py
+    local extra=()
+    if [[ -n ${TASKARIAN_OS_NATIVE_UNIT:-} ]]; then
+        owner=native.py
+        extra+=(--unit "$TASKARIAN_OS_NATIVE_UNIT")
+    fi
+    if [[ -n ${TASKARIAN_OS_NATIVE_INPUT:-} ]]; then
+        extra+=(--prebuilt-native "$TASKARIAN_OS_NATIVE_INPUT")
+    fi
+    python3 "$TERMUX_PKG_SRCDIR/repo/os/packaging/$owner" --target termux --architecture "$TERMUX_ARCH" \
         --version "$TERMUX_PKG_VERSION-$TERMUX_PKG_REVISION" --build-dir "$TERMUX_PKG_BUILDDIR/component" \
         --output "$TERMUX_PKG_TMPDIR/artifacts" --cross-file "$TERMUX_MESON_CROSSFILE" \
-        --autotools-host "$TERMUX_HOST_PLATFORM" --source-commit "$TASKARIAN_OS_SOURCE_COMMIT" --jobs "$TERMUX_PKG_MAKE_PROCESSES" --stage-only
+        --autotools-host "$TERMUX_HOST_PLATFORM" --source-commit "$TASKARIAN_OS_SOURCE_COMMIT" --jobs "$TERMUX_PKG_MAKE_PROCESSES" --stage-only "${extra[@]}"
 }
 termux_step_make_install() {
     cp -a "$TERMUX_PKG_BUILDDIR/component/stage$TERMUX_PREFIX/." "$TERMUX_PREFIX/"

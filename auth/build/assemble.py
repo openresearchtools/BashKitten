@@ -10,7 +10,8 @@ import sys
 import tarfile
 
 root, stage, target, artifacts = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3], Path(sys.argv[4])
-component_artifacts = Path(sys.argv[5]) if len(sys.argv) > 5 else None
+runtime_only = '--runtime-only' in sys.argv[5:]
+component_artifacts = Path(sys.argv[5]) if len(sys.argv) > 5 and not sys.argv[5].startswith('--') else None
 architecture = {'linux-amd64': 'amd64', 'linux-arm64': 'arm64', 'termux-aarch64': 'aarch64', 'termux-x86_64': 'x86_64'}[target]
 artifacts.mkdir(parents=True, exist_ok=True)
 metadata = stage / 'share/metadata'
@@ -25,7 +26,7 @@ for component in ('authelia', 'caddy', 'tor', 'valkey', 'chisel', 'remote'):
                 'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()}
                if component == 'remote' else json.loads(record.read_text())[component])
     if component == 'remote' and component_artifacts is not None:
-        receipt = component_artifacts / f'auth-component-remote-{target}' / f'native-input-equivalence-auth-remote-{target}.json'
+        receipt = component_artifacts / 'auth-remote' / f'native-input-equivalence-auth-remote-{target}.json'
         if receipt.exists():
             details['commit'] = json.loads(receipt.read_text())['producerSource']
     components.append(dict(name=component, version=details['version'], source=details['repository'], commit=details['commit'], sha256=hashlib.sha256(binary.read_bytes()).hexdigest()))
@@ -53,42 +54,45 @@ if not licenses:
     raise SystemExit('Native dependency license texts are missing')
 (stage / 'licenses.json').write_text(json.dumps(licenses, ensure_ascii=False) + '\n')
 
-source_file = artifacts / f'auth-{target}-source.tar.gz'
-with tarfile.open(source_file, 'w:gz') as archive:
-    archive.add(root / 'auth', arcname='auth')
-    # Rebuild bundles keep the original pinned bytes even when repository
-    # history retains only their manifests and notices.
-    checked = runpy.run_path(str(root / 'auth/build/retained-sources.py'))['checked']
-    upstreams = json.loads((root / 'auth/upstreams.lock.json').read_text())
-    for name, record in upstreams.items():
-        if isinstance(record, dict) and record.get('archive'):
-            relative = f'upstream-archives/{name}-{record["commit"]}.tar.gz'
-            source = checked(root / 'auth', {**record, 'file': relative, 'url': record['archive']})
-            archive.add(source, arcname='auth/' + relative)
-    for kind in ('go', 'frontend', 'termux', 'go-toolchain'):
-        directory = root / 'auth/dependencies' / kind
-        manifest = json.loads((directory / 'sources.json').read_text())
-        if kind == 'go':
-            records = [record for module in manifest['modules'] for record in module['files'].values()] + manifest['moduleMetadata']
-        elif kind == 'go-toolchain':
-            records = [manifest]
-        else:
-            records = manifest['components']
-        for record in records:
-            source = checked(directory, record)
-            if not (directory / record['file']).is_file():
-                archive.add(source, arcname=str((directory / record['file']).relative_to(root)))
-    archive.add(root / 'agent/packaging/source_cache.py', arcname='agent/packaging/source_cache.py')
-    archive.add(root / 'agent/src/server/access/runtime-guard.c', arcname='agent/src/server/access/runtime-guard.c')
-    archive.add(root / 'agent/native/remote', arcname='agent/native/remote')
-    archive.add(root / 'LICENSE', arcname='LICENSE')
-    dependencies_source = stage / 'share/source'
-    if dependencies_source.exists():
-        archive.add(dependencies_source, arcname='dependencies')
-        shutil.rmtree(dependencies_source)
-    archive.add(metadata, arcname='build-metadata')
+source_file = None
+if not runtime_only:
+    source_file = artifacts / f'auth-{target}-source.tar.gz'
+    with tarfile.open(source_file, 'w:gz') as archive:
+        archive.add(root / 'auth', arcname='auth')
+        # Rebuild bundles keep the original pinned bytes even when repository
+        # history retains only their manifests and notices.
+        checked = runpy.run_path(str(root / 'auth/build/retained-sources.py'))['checked']
+        upstreams = json.loads((root / 'auth/upstreams.lock.json').read_text())
+        for name, record in upstreams.items():
+            if isinstance(record, dict) and record.get('archive'):
+                relative = f'upstream-archives/{name}-{record["commit"]}.tar.gz'
+                source = checked(root / 'auth', {**record, 'file': relative, 'url': record['archive']})
+                archive.add(source, arcname='auth/' + relative)
+        for kind in ('go', 'frontend', 'termux', 'go-toolchain'):
+            directory = root / 'auth/dependencies' / kind
+            manifest = json.loads((directory / 'sources.json').read_text())
+            if kind == 'go':
+                records = [record for module in manifest['modules'] for record in module['files'].values()] + manifest['moduleMetadata']
+            elif kind == 'go-toolchain':
+                records = [manifest]
+            else:
+                records = manifest['components']
+            for record in records:
+                source = checked(directory, record)
+                if not (directory / record['file']).is_file():
+                    archive.add(source, arcname=str((directory / record['file']).relative_to(root)))
+        archive.add(root / 'agent/packaging/source_cache.py', arcname='agent/packaging/source_cache.py')
+        archive.add(root / 'agent/src/server/access/runtime-guard.c', arcname='agent/src/server/access/runtime-guard.c')
+        archive.add(root / 'agent/native/remote', arcname='agent/native/remote')
+        archive.add(root / 'LICENSE', arcname='LICENSE')
+        dependencies_source = stage / 'share/source'
+        if dependencies_source.exists():
+            archive.add(dependencies_source, arcname='dependencies')
+            shutil.rmtree(dependencies_source)
+        archive.add(metadata, arcname='build-metadata')
+
 payload = artifacts / f'auth-{target}.tar.gz'
 with tarfile.open(payload, 'w:gz') as archive:
     for path in sorted(stage.iterdir()):
         archive.add(path, arcname=path.name)
-(artifacts / 'SHA256SUMS').write_text(''.join(f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n' for path in (payload, source_file)))
+(artifacts / 'SHA256SUMS').write_text(''.join(f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n' for path in (payload, source_file) if path is not None))

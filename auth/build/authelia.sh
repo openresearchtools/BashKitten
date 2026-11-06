@@ -41,7 +41,6 @@ else
   export CGO_CPPFLAGS='-D_FORTIFY_SOURCE=3'
   export CGO_LDFLAGS='-Wl,-z,relro,-z,now'
   "$root/auth/build/authelia-go.sh" "$work/source" "$output/bin/authelia"
-  cc -std=c11 -Wall -Wextra -Werror -O2 "$root/agent/src/server/access/runtime-guard.c" -o "$output/bin/runtime-guard"
   python3 "$root/auth/build/go-notices.py" "$work/source" "$output" authelia
   install -Dm644 "$work/source/LICENSE" "$output/share/licenses/authelia/LICENSE"
   cp -a "$work/source/.taskarian-frontend/share" "$output/"
@@ -50,11 +49,10 @@ else
     cd "$work/source"
     mkdir -p debian
     printf 'Source: taskarian-auth\nSection: utils\nPriority: optional\nMaintainer: OpenResearchTools\nStandards-Version: 4.7.0\n\nPackage: taskarian-auth\nArchitecture: any\nDescription: Taskarian native access stack\n' > debian/control
-    dpkg-shlibdeps -O -e"$output/bin/authelia" -e"$output/bin/runtime-guard" | sed 's/^shlibs:Depends=//' | tr '\n' ','
+    dpkg-shlibdeps -O -e"$output/bin/authelia" | sed 's/^shlibs:Depends=//' | tr '\n' ','
     printf ' ca-certificates\n'
   ) > "$output/share/metadata/authelia.dependencies"
 fi
-install -Dm644 "$root/LICENSE" "$output/share/licenses/runtime-guard/LICENSE"
 install -Dm644 "$root/auth/build/TORKITTEN-LICENSE" "$output/share/licenses/torkitten/LICENSE"
 python3 - "$root" "$target" "$output" <<'PY'
 import hashlib, json, pathlib, sys

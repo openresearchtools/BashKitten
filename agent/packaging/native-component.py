@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Restore native Actions artifacts whose committed build inputs are unchanged."""
+"""Native input identity and verification for durable architecture components."""
 import argparse
 import ast
 import base64
@@ -95,41 +95,8 @@ def native_toolchain(component, target, revision):
     spec = importlib.util.spec_from_file_location('native_tools', owner)
     tools = importlib.util.module_from_spec(spec); spec.loader.exec_module(tools)
     value = tools.contract(component, target, lambda path: content(revision, path))
-    source = ast.parse(content(revision, 'agent/packaging/native-tools.py')) if entry(revision, 'agent/packaging/native-tools.py') else ast.parse(owner.read_text())
-    value['setup'] = ast.dump(next(node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == 'setup'), include_attributes=False)
+    value['owner'] = entry(revision, 'agent/packaging/native-tools.py')
     return value
-
-
-def machine_recipe(revision, selected):
-    """The selected existing source unit's commands plus their common owner."""
-    source = ast.parse(content(revision, 'agent/packaging/machines/build.py'))
-    class SelectRecipe(ast.NodeTransformer):
-        def visit_If(self, node):
-            test = node.test
-            if (isinstance(test, ast.Compare) and isinstance(test.left, ast.Name) and
-                    test.left.id == 'name' and len(test.ops) == 1):
-                try:
-                    value = ast.literal_eval(test.comparators[0])
-                    matches = selected == value if isinstance(test.ops[0], ast.Eq) else selected in value if isinstance(test.ops[0], ast.In) else None
-                except (ValueError, TypeError):
-                    matches = None
-                if matches is not None:
-                    return [self.visit(item) for item in (node.body if matches else node.orelse)]
-            return self.generic_visit(node)
-    for node in source.body:
-        if isinstance(node, ast.FunctionDef) and node.name == 'build':
-            # Only name/record in this build loop chooses a native compile recipe.
-            for loop in ast.walk(node):
-                if isinstance(loop, ast.For) and isinstance(loop.target, ast.Tuple) and [getattr(value, 'id', '') for value in loop.target.elts] == ['name', 'record']:
-                    transformed = []
-                    for statement in loop.body:
-                        value = SelectRecipe().visit(statement)
-                        transformed.extend(value if isinstance(value, list) else [value])
-                    loop.body = transformed
-        elif isinstance(node, ast.Assign) and any(isinstance(value, ast.Name) and value.id == 'PART_BINARIES' for value in node.targets):
-            values = ast.literal_eval(node.value)
-            node.value = ast.parse(repr({selected: values[selected]}), mode='eval').body
-    return ast.dump(source, include_attributes=False)
 
 
 def go_sources(revision, directory):
@@ -192,7 +159,8 @@ def inputs(component, target, revision):
         job = 'assemble' if component == 'auth' else 'component'
         names = ('Assemble private runtime, notices and source',) if component == 'auth' else ('Native build prerequisites', 'Build tracked source for the target ABI')
         if component == 'auth':
-            paths += ['auth/upstreams.lock.json', 'auth/build/assemble.py', 'agent/src/server/access/runtime-guard.c']
+            paths += ['auth/upstreams.lock.json', 'auth/build/assemble.py', 'agent/packaging/native-components.py']
+            records['guard'] = inputs('runtime-guard', target, revision)
             # An aggregate may contain independently restored native components.
             records['components'] = {name: inputs('auth-' + name, target, revision) for name in AUTH}
         else:
@@ -211,7 +179,7 @@ def inputs(component, target, revision):
                 paths += ['auth/build/go-env.sh', 'auth/build/go-notices.py', 'auth/dependencies/go-toolchain']
             if name == 'authelia':
                 paths += ['auth/build/authelia-go.sh', 'auth/build/authelia-mobile-otp.patch', 'auth/build/frontend-notices.py',
-                          'auth/dependencies/frontend', 'agent/src/server/access/runtime-guard.c']
+                          'auth/dependencies/frontend']
             if target.startswith('termux-'):
                 paths += ['auth/' + name + '-termux', 'auth/build/termux-component.sh', 'auth/build/termux-toolchain.json',
                           'auth/build/termux-go-version.patch']
@@ -219,6 +187,22 @@ def inputs(component, target, revision):
                 retained = json.loads(content(revision, 'auth/dependencies/termux/sources.json'))
                 records['termuxFramework'] = [{key: value for key, value in item.items() if key not in ('lock', 'lockSha256')}
                     for item in retained['components'] if item['sourceCommit'] == toolchain['commit']]
+    elif component == 'runtime-guard':
+        paths += ['agent/src/server/access/runtime-guard.c', 'agent/packaging/native-components.py']
+        if target.startswith('termux-'):
+            paths += ['agent/packaging/termux/native_toolchain.py', 'agent/vendor/node/libcxx']
+            records['ndk'] = json.loads(content(revision, 'agent/packaging/node/lock.json'))['termux']['dependency_sources']['libc++']
+    elif component == 'search-primp':
+        if not target.startswith('termux-'):
+            raise ValueError('Linux primp uses the pinned upstream wheel')
+        lock = json.loads(content(revision, 'agent/search/runtime-lock.json'))
+        package = next(item for item in lock['packages'] if item['name'] == 'primp')
+        records.update(package=package['source'], version=package['version'], python=lock['python'][target],
+                       framework={key: lock['termuxPackages'][key] for key in ('commit', 'builderImage', 'patches')}, rust=lock['rustRuntimeVersions'][target])
+        retained = json.loads(content(revision, 'agent/search/vendor/sources/sources.json'))
+        records['crates'] = [{key: item[key] for key in ('filename', 'sha256')} for item in retained['components'] if item['filename'].endswith('.crate')]
+        paths += ['agent/packaging/native-components.py', 'agent/packaging/termux/search/python-primp',
+                  'agent/search/build/termux-inputs.py', 'auth/build/retained-sources.py']
     elif component == 'search':
         paths += ['agent/search', 'agent/packaging/machines/build.py', 'auth/build/go-notices.py']
         job = 'termux' if target.startswith('termux-') else 'linux'
@@ -231,7 +215,7 @@ def inputs(component, target, revision):
         name = component.removeprefix('machines-')
         if name not in ('podman', 'crun', 'conmon', 'netavark', 'aardvark-dns', 'passt', 'libfuse', 'fuse-overlayfs', 'catatonit'):
             raise ValueError('Unsupported machine source unit')
-        records['buildOwner'] = machine_recipe(revision, name)
+        records['buildOwner'] = entry(revision, 'agent/packaging/machines/build.py')
         paths += ['agent/machines/vendor/' + name,
                   'agent/machines/patches/' + name, 'agent/machines/NOTICE',
                   'agent/machines/license-supplements']
@@ -242,23 +226,59 @@ def inputs(component, target, revision):
         if name == 'fuse-overlayfs':
             records['libfuse'] = inputs('machines-libfuse', target, revision)
     elif component in ('machines', 'display'):
-        paths += (['agent/packaging/machines', 'agent/machines/vendor', 'agent/machines/patches', 'agent/machines/license-supplements',
+        paths += (['agent/packaging/machines', 'agent/packaging/native-components.py', 'agent/machines/vendor', 'agent/machines/patches', 'agent/machines/license-supplements',
                    'agent/machines/rust-toolchain', 'agent/machines/NOTICE', 'auth/build/go-notices.py', 'auth/dependencies/go-toolchain']
                   if component == 'machines' else ['browser/taskarian/display', 'agent/packaging/machines/build.py',
                                                   'agent/machines/rust-toolchain', 'auth/build/go-notices.py'])
+    elif component in ('guest-sudo', 'guest-fusermount'):
+        paths += ['agent/machines/build-guest-native.py', 'agent/packaging/machines/build.py',
+                  'agent/machines/image-base.json', 'auth/build/go-notices.py']
+        paths += (['agent/machines/guest/sudo-bridge', 'agent/machines/rust-toolchain'] if component == 'guest-sudo'
+                  else ['agent/machines/vendor/libfuse'])
     elif component == 'guest':
+        records['native'] = {name: inputs(name, target, revision) for name in ('guest-sudo', 'guest-fusermount')}
+        records['os'] = inputs('os', target, revision)
         paths += ['os', 'agent/machines/guest', 'agent/machines/build-guest.py', 'agent/machines/vendor/libfuse',
                   'agent/machines/upstream/buzzard-runtime', 'agent/machines/NOTICE', 'agent/packaging/machines/build.py',
                   'agent/machines/rust-toolchain', 'agent/machines/image-base.json', 'auth/build/go-notices.py']
+    elif component.startswith('os-'):
+        unit = component[3:]
+        names = {'dbusmenu': 'libdbusmenu', 'windowing': 'libxfce4windowing', 'panel': 'xfce4-panel'}
+        if unit not in names or (unit == 'dbusmenu' and target.startswith('linux-')):
+            raise ValueError('Unsupported native OS source unit for target')
+        records['upstream'] = {key: value for key, value in next(item for item in json.loads(content(revision, 'os/upstream/sources.json')) if item['name'] == names[unit]).items() if key != 'files'}
+        paths += ['os/upstream/' + names[unit], 'os/packaging/native.py',
+                  'os/packaging/termux/build.sh', 'os/licenses']
+        paths += ['os/patches/libdbusmenu'] if unit == 'dbusmenu' else ['os/patches'] if unit == 'panel' else []
+        if target.startswith('linux-'):
+            paths += ['agent/machines/image-base.json']
+        else:
+            lock = json.loads(content(revision, 'agent/packaging/node/lock.json'))['termux']
+            records['framework'] = lock['recipes']; records['ndk'] = lock['dependency_sources']['libc++']
+            paths += ['agent/packaging/termux/os.py']
+        if unit == 'panel':
+            records['windowing'] = inputs('os-windowing', target, revision)
+            if target.startswith('termux-'):
+                records['dbusmenu'] = inputs('os-dbusmenu', target, revision)
     elif component == 'os':
-        paths += ['os', 'agent/packaging/termux/os.py', 'auth/build/termux-toolchain.json']
-        lock = json.loads(content(revision, 'agent/packaging/node/lock.json'))['termux']
-        records['framework'] = lock['recipes']
-        records['ndk'] = lock['dependency_sources']['libc++']
+        paths += ['os', 'agent/packaging/termux/os.py', 'agent/packaging/native-components.py', 'auth/build/termux-toolchain.json']
+        records['native'] = {unit: inputs('os-' + unit, target, revision) for unit in
+                             (('windowing', 'panel') if target.startswith('linux-') else ('dbusmenu', 'windowing', 'panel'))}
+        if target.startswith('linux-'):
+            paths += ['agent/machines/image-base.json']
+        if target.startswith('termux-'):
+            lock = json.loads(content(revision, 'agent/packaging/node/lock.json'))['termux']
+            records['framework'] = lock['recipes']
+            records['ndk'] = lock['dependency_sources']['libc++']
     elif component == 'loader':
         paths += ['browser/mobile/android/taskarian/display/loader',
                   'browser/mobile/android/taskarian/display/src/main/java/com/taskarian/display/DisplayProtocol.java',
-                  'browser/taskarian/vendor/termux-x11', 'agent/packaging/release.py']
+                  'browser/taskarian/vendor/termux-x11/source.json',
+                  'browser/taskarian/vendor/termux-x11/source/LICENSE']
+        release = ast.parse(content(revision, 'agent/packaging/release.py'))
+        certificate = next(ast.literal_eval(node.value) for node in release.body if isinstance(node, ast.Assign) and any(isinstance(value, ast.Name) and value.id == 'CERT' for value in node.targets))
+        records['pairing'] = {'package': 'com.taskarian', 'publisherCertificateSha256': certificate,
+                              'sdk': 37, 'buildTools': '37.0.0', 'java': 17}
     else:
         raise ValueError('Unsupported native component: ' + component)
     return {'schema': 1, 'component': component, 'target': target,
@@ -323,16 +343,7 @@ def verify_payload(directory, component, target):
         name = component.removeprefix('machines-')
         if name not in ('podman', 'crun', 'conmon', 'netavark', 'aardvark-dns', 'passt', 'libfuse', 'fuse-overlayfs', 'catatonit'):
             raise ValueError('Unsupported machine source unit')
-        records['buildOwner'] = machine_recipe(revision, name)
-        paths += ['agent/machines/vendor/' + name,
-                  'agent/machines/patches/' + name, 'agent/machines/NOTICE',
-                  'agent/machines/license-supplements']
-        if name in ('netavark', 'aardvark-dns'):
-            paths += ['agent/machines/rust-toolchain']
-        if name == 'podman':
-            paths += ['auth/build/go-notices.py', 'auth/dependencies/go-toolchain']
-        if name == 'fuse-overlayfs':
-            records['libfuse'] = inputs('machines-libfuse', target, revision)
+        required = {f'machines-{name}-{target}.tar.gz', 'SHA256SUMS'}
     elif component in ('machines', 'display'):
         required = {name + '.tar.gz', 'SHA256SUMS'}
     elif component == 'loader':
@@ -398,7 +409,6 @@ def verify_store_receipt(directory, component, target, requested, expected, prod
     digest = __import__('hashlib').sha256(store.canonical(manifest) + b'\n').hexdigest()
     if (value.get('requestedSource') != requested or value.get('inputs') != expected or
             value.get('producerSource') != manifest['sourceCommit'] or
-            (producer is not None and producer != manifest['sourceCommit']) or
             record.get('repository') != ident['repository'] or record.get('manifestName') != ident['manifest'] or
             record.get('manifestSha256') != digest or not value.get('files')):
         raise ValueError('Native durable component receipt does not match requested inputs')
@@ -406,6 +416,29 @@ def verify_store_receipt(directory, component, target, requested, expected, prod
     if any(selected.get(name) != checksum or sha(Path(directory) / name) != checksum
            for name, checksum in value['files'].items()):
         raise ValueError('Native durable component bytes do not match their original manifest')
+    if producer is not None and producer != manifest['sourceCommit']:
+        # Guest packaging includes an independently retained OS package. Its
+        # native owner, not this aggregate's assembly revision, produced it.
+        owned = False
+        if component == 'guest':
+            for name in value['files']:
+                if not name.endswith('.deb.json'):
+                    continue
+                metadata = json.loads((Path(directory) / name).read_text())
+                package = name.removesuffix('.json')
+                package_sha = metadata.get('sha256')
+                sidecar = package + '.sha256'
+                if package_sha is None and sidecar in value['files']:
+                    parts = (Path(directory) / sidecar).read_text().strip().split('  ', 1)
+                    if len(parts) == 2 and parts[1] == package:
+                        package_sha = parts[0]
+                if (metadata.get('revision', metadata.get('sourceCommit')) == producer and
+                        metadata.get('file', package) == package and
+                        package in value['files'] and package_sha == value['files'][package]):
+                    owned = True
+                    break
+        if not owned:
+            raise ValueError('Native producer is not recorded by the checked component payload')
     return value
 
 

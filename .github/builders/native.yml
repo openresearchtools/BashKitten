@@ -7,7 +7,10 @@ run-name: Taskarian components ${{ inputs.target }} / ${{ inputs.source_sha }} /
       target: {required: true, type: string}
       request_id: {required: true, type: string}
       components: {default: '["all"]', type: string}
-      force_rebuild: {default: false, type: boolean}
+      force_rebuild:
+        description: Validate fresh native compilation; retain published canonical outputs
+        default: false
+        type: boolean
 permissions:
   contents: write
   actions: read
@@ -43,6 +46,7 @@ jobs:
             /agent/vendor/pi/source.json
             /agent/machines/rust-toolchain/sources.json
             /auth/dependencies/go-toolchain/sources.json
+            /files/go_runtime.py
       - name: Resolve exact direct component manifests before build setup
         id: plan
         working-directory: source
@@ -52,6 +56,9 @@ jobs:
           FORCE: ${{ inputs.force_rebuild }}
         run: |
           echo "TASKARIAN_SOURCE_CACHE=$RUNNER_TEMP/component-work/sources" >> "$GITHUB_ENV"
+          echo "CCACHE_DIR=$RUNNER_TEMP/office-ccache" >> "$GITHUB_ENV"
+          echo "GOCACHE=$HOME/.cache/go-build" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/native-cargo-target" >> "$GITHUB_ENV"
           arguments=()
           if [ "$FORCE" = true ]; then arguments+=(--force-rebuild); fi
           python3 agent/packaging/native-worker.py plan "$TARGET" --components "$COMPONENTS" --plan "$RUNNER_TEMP/components.json" "${arguments[@]}"
@@ -63,23 +70,64 @@ jobs:
         if: steps.plan.outputs.needs_go == 'true'
         with:
           go-version: ${{ steps.plan.outputs.go }}
-          cache: false
+          cache: true
+          cache-dependency-path: |
+            source/auth/**/go.sum
+            source/agent/native/remote/**/go.sum
+            source/agent/machines/vendor/podman/source/go.sum
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         if: steps.plan.outputs.needs_node == 'true'
         with:
-          node-version: '24'
+          node-version: ${{ steps.plan.outputs.node }}
       - uses: pnpm/action-setup@v4
         if: steps.plan.outputs.needs_pnpm == 'true'
         with:
-          version: '12'
+          version: ${{ steps.plan.outputs.pnpm }}
           run_install: false
+      - name: Restore native Rust objects from Actions
+        if: steps.plan.outputs.needs_rust == 'true'
+        id: rust-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ${{ runner.temp }}/native-cargo-target
+            ${{ runner.temp }}/component-work/display/native/target
+            ${{ runner.temp }}/component-work/guest-sudo/native/target
+            ${{ runner.temp }}/component-work/photon/photon-cache/target
+          key: native-rust-${{ inputs.target }}-${{ steps.plan.outputs.rust }}-${{ hashFiles('source/agent/machines/vendor/*/source/Cargo.lock', 'source/browser/taskarian/display/linux/Cargo.lock', 'source/agent/packaging/photon/lock.json', 'source/agent/machines/guest/sudo-bridge/Cargo.lock') }}
+          restore-keys: native-rust-${{ inputs.target }}-${{ steps.plan.outputs.rust }}-
+      - name: Restore Office compiler objects from Actions
+        id: office-cache
+        if: steps.plan.outputs.needs_office_cache == 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ steps.plan.outputs.office_cache_key }}-${{ github.run_id }}
+          restore-keys: ${{ steps.plan.outputs.office_cache_key }}-
       - name: Build missing components using their native owners
         if: steps.plan.outputs.build == 'true'
         working-directory: source
         env:
           TARGET: ${{ inputs.target }}
           FORCE: ${{ inputs.force_rebuild }}
+          TASKARIAN_OFFICE_ACTIONS_CACHE_MATCHED: ${{ steps.office-cache.outputs.cache-matched-key }}
         run: |
           arguments=()
           if [ "$FORCE" = true ]; then arguments+=(--force-rebuild); fi
           python3 agent/packaging/native-worker.py build "$TARGET" --plan "$RUNNER_TEMP/components.json" --work "$RUNNER_TEMP/component-work" --output "$RUNNER_TEMP/component-output" "${arguments[@]}"
+      - name: Retain Office compiler objects in Actions
+        if: always() && steps.plan.outputs.needs_office_cache == 'true' && steps.office-cache.outcome == 'success'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ steps.plan.outputs.office_cache_key }}-${{ github.run_id }}
+      - name: Retain native Rust objects in Actions
+        if: always() && steps.plan.outputs.needs_rust == 'true' && steps.rust-cache.outcome == 'success' && steps.rust-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ${{ runner.temp }}/native-cargo-target
+            ${{ runner.temp }}/component-work/display/native/target
+            ${{ runner.temp }}/component-work/guest-sudo/native/target
+            ${{ runner.temp }}/component-work/photon/photon-cache/target
+          key: native-rust-${{ inputs.target }}-${{ steps.plan.outputs.rust }}-${{ hashFiles('source/agent/machines/vendor/*/source/Cargo.lock', 'source/browser/taskarian/display/linux/Cargo.lock', 'source/agent/packaging/photon/lock.json', 'source/agent/machines/guest/sudo-bridge/Cargo.lock') }}

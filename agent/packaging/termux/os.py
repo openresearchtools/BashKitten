@@ -45,7 +45,7 @@ def prepare_framework(work,archive,checksum):
     raise ValueError('Changed pinned Termux symlink: '+parts[1])
  return framework
 def main():
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('--architecture',choices=['aarch64','x86_64'],required=True);p.add_argument('--work',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);a=p.parse_args()
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('--architecture',choices=['aarch64','x86_64'],required=True);p.add_argument('--work',type=pathlib.Path,required=True);p.add_argument('--output',type=pathlib.Path,required=True);p.add_argument('--unit',choices=['dbusmenu','windowing','panel']);p.add_argument('--native-input',type=pathlib.Path);a=p.parse_args()
  work=a.work.resolve();out=a.output.resolve()
  if work.is_relative_to(ROOT) or out.is_relative_to(ROOT):p.error('Work and output must be outside the source checkout')
  lock=json.loads((ROOT/'agent/packaging/node/lock.json').read_text())['termux']['recipes']
@@ -54,7 +54,7 @@ def main():
  recipe=framework/'x11-packages/taskarian-os';recipe.mkdir(parents=True,exist_ok=True);shutil.copy2(ROOT/'os/packaging/termux/build.sh',recipe/'build.sh')
  cache=work/'build-cache';cache.mkdir(exist_ok=True)
  data=work/'data';data.mkdir(exist_ok=True)
- container='taskarian-os-'+a.architecture+'-'+lock['sha256'][:16]
+ container='taskarian-os-'+a.architecture+'-'+(a.unit or 'package')+'-'+lock['sha256'][:16]
  ndk_pin=json.loads((ROOT/'agent/packaging/node/lock.json').read_text())['termux']['dependency_sources']['libc++']
  ndk_archive=fetch(ndk_pin,local=work/'android-ndk-r30-linux.zip')
  ndk=work/'android-ndk-r30'
@@ -63,10 +63,21 @@ def main():
  env={**os.environ,'TERMUX_BUILDER_IMAGE_NAME':image,'CONTAINER_NAME':container,
   'TERMUX_DOCKER_RUN_EXTRA_ARGS':'--volume '+str(ROOT)+':/taskarian:ro --volume '+str(ndk)+':/home/builder/lib/android-ndk-r30:ro --volume '+str(cache)+':/home/builder/.termux-build:rw --volume '+str(data)+':/data:rw',
   'TERMUX_DOCKER_EXEC_EXTRA_ARGS':'--env TASKARIAN_SOURCE_ROOT=/taskarian --env GOTELEMETRY=off --env DO_NOT_TRACK=1'}
+ if a.unit:env['TERMUX_DOCKER_EXEC_EXTRA_ARGS']+=' --env TASKARIAN_OS_NATIVE_UNIT='+a.unit
+ if a.native_input:
+  env['TERMUX_DOCKER_RUN_EXTRA_ARGS']+=' --volume '+str(a.native_input.resolve())+':/taskarian-os-native:ro'
+  env['TERMUX_DOCKER_EXEC_EXTRA_ARGS']+=' --env TASKARIAN_OS_NATIVE_INPUT=/taskarian-os-native'
  subprocess.run(['./scripts/run-docker.sh','./build-package.sh','-I','-f','-a',a.architecture,'taskarian-os'],cwd=framework,env=env,check=True)
  version=(ROOT/'browser/taskarian/config/version.txt').read_text().strip()+'-1';deb=framework/'output'/f'taskarian-os_{version}_{a.architecture}.deb'
  if not deb.is_file():raise ValueError('Missing native Termux OS package')
- out.mkdir(parents=True,exist_ok=True);target=out/deb.name;shutil.copy2(deb,target)
+ out.mkdir(parents=True,exist_ok=True)
+ if a.unit:
+  stage=work/'unit';subprocess.run(['dpkg-deb','-x',str(deb),str(stage)],check=True)
+  target=out/f'os-{a.unit}-termux-{a.architecture}.tar.gz'
+  with tarfile.open(target,'w:gz',compresslevel=1) as payload:payload.add(stage/'data',arcname='data')
+  (out/'SHA256SUMS').write_text(hashlib.sha256(target.read_bytes()).hexdigest()+'  '+target.name+'\n')
+  return
+ target=out/deb.name;shutil.copy2(deb,target)
  record={'sourceCommit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),'version':version,'architecture':a.architecture,'target':'termux','file':deb.name,'sha256':hashlib.sha256(deb.read_bytes()).hexdigest(),'framework':lock,'ndk':ndk_pin}
  (out/(deb.name+'.json')).write_text(json.dumps(record,indent=2)+'\n');(out/(deb.name+'.sha256')).write_text(record['sha256']+'  '+deb.name+'\n')
 if __name__=='__main__':main()

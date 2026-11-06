@@ -25,6 +25,8 @@ TAG = 'components'
 NOTE = 'Build components for Taskarian. Get the main app at https://github.com/openresearchtools/Taskarian.'
 PART_SIZE = 1024 ** 3
 ROLES = {'runtime', 'source', 'legal', 'build-support', 'metadata'}
+REPOSITORIES = {'openresearchtools/taskarian-build-' + suffix
+                for suffix in ('amd64', 'arm64', 'android', 'android-x86_64')}
 
 
 class StoreUnavailable(RuntimeError):
@@ -66,7 +68,12 @@ def read_url(url):
     """No Actions API/cache search. A proven 404 is the only absent manifest."""
     for attempt in range(3):
         try:
-            request = urllib.request.Request(url, headers={'User-Agent': 'Taskarian-Component-Builder/1'})
+            # An earlier absent-generation lookup can leave a cached 404 just
+            # after its manifest is uploaded. Refresh only these small direct
+            # manifest requests; immutable binary downloads remain resumable.
+            fresh = url + ('&' if '?' in url else '?') + 'taskarian_component=' + str(time.time_ns())
+            request = urllib.request.Request(fresh, headers={'User-Agent': 'Taskarian-Component-Builder/1',
+                                                            'Cache-Control': 'no-cache'})
             with urllib.request.urlopen(request, timeout=120) as response:
                 return response.read()
         except urllib.error.HTTPError as error:
@@ -147,7 +154,7 @@ def validate(manifest, expected=None):
                     not re.fullmatch('[0-9a-f]{64}', part.get('sha256', ''))):
                 raise ValueError('Invalid immutable component part')
     for dependency in manifest.get('dependencies', []):
-        if (not re.fullmatch(r'openresearchtools/taskarian-build-[a-z0-9-]+', dependency.get('repository', '')) or
+        if (dependency.get('repository') not in REPOSITORIES or
                 Path(dependency.get('manifestName', '')).name != dependency.get('manifestName') or
                 not re.fullmatch('[0-9a-f]{64}', dependency.get('manifestSha256', ''))):
             raise ValueError('Invalid component dependency reference')
@@ -159,15 +166,19 @@ def lookup(component, target, inputs):
     raw = read_url(ident['url'])
     if raw is None:
         return None
-    manifest = json.loads(raw)
-    validate(manifest, ident)
+    try:
+        manifest = json.loads(raw)
+        validate(manifest, ident)
+    except (ValueError, KeyError, TypeError, UnicodeError) as error:
+        print(f'Unusable optional component manifest {component}/{target}: {error}', flush=True)
+        return None
     return {'manifest': manifest, 'repository': ident['repository'], 'manifestName': ident['manifest'],
             'manifestSha256': hashlib.sha256(raw).hexdigest(), 'url': ident['url']}
 
 
 def fetch(reference, directory, roles=None):
     repo, name = reference['repository'], reference['manifestName']
-    if not re.fullmatch(r'openresearchtools/taskarian-build-[a-z0-9-]+', repo) or Path(name).name != name:
+    if repo not in REPOSITORIES or Path(name).name != name:
         raise ValueError('Unsafe component reference')
     url = f'https://github.com/{repo}/releases/download/{TAG}/{name}'
     raw = read_url(url)
@@ -283,7 +294,16 @@ def publish(component, target, version, inputs, directory, *, assets, source_com
     if release['body'] != NOTE or not release['prerelease']:
         gh('api', endpoint + '/' + str(release['id']), '--method', 'PATCH',
            data={'body': NOTE, 'prerelease': True, 'make_latest': 'false'})
-    uploaded = {item['name']: item for item in release['assets']}
+    uploaded = {}
+    page = 1
+    while True:
+        batch = gh('api', endpoint + '/' + str(release['id']) + f'/assets?per_page=100&page={page}')
+        if batch is None:
+            raise StoreUnavailable('Component release asset inventory disappeared; retry publication')
+        uploaded.update((item['name'], item) for item in batch)
+        if len(batch) < 100:
+            break
+        page += 1
     with tempfile.TemporaryDirectory(prefix='taskarian-component-publish-') as temporary:
         temporary = Path(temporary)
         for name, role in sorted(assets.items()):

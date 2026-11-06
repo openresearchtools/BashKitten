@@ -20,15 +20,12 @@ termux_step_make() {
 	export CGO_LDFLAGS="$LDFLAGS -Wl,-z,max-page-size=16384"
 	local output="$TERMUX_PKG_BUILDDIR/authelia"
 	bash "$TASKARIAN_SOURCE_ROOT/auth/build/authelia-go.sh" "$TERMUX_PKG_SRCDIR" "$output"
-	$CC $CPPFLAGS $CFLAGS -std=c11 -Wall -Wextra -Werror -O2 \
-		"$TASKARIAN_SOURCE_ROOT/agent/src/server/access/runtime-guard.c" \
-		$LDFLAGS -Wl,-z,max-page-size=16384 -o "$TERMUX_PKG_BUILDDIR/runtime-guard"
+
 }
 
 termux_step_make_install() {
 	local payload="$TERMUX_PREFIX/lib/taskarian/auth"
 	install -Dm755 "$TERMUX_PKG_BUILDDIR/authelia" "$payload/bin/authelia"
-	install -Dm755 "$TERMUX_PKG_BUILDDIR/runtime-guard" "$payload/bin/runtime-guard"
 	python3 "$TASKARIAN_SOURCE_ROOT/auth/build/go-notices.py" "$TERMUX_PKG_SRCDIR" "$payload" authelia
 	cp -a "$TERMUX_PKG_SRCDIR/.taskarian-frontend/share" "$payload/"
 }

@@ -42,8 +42,8 @@
   },
   "build": {
     "go": "1.27.2",
-    "node": "24",
-    "pnpm": "12"
+    "node": "24.22.2",
+    "pnpm": "12.16.1"
   },
   "reference": {
     "repository": "https://github.com/openresearchtools/torkitten",
