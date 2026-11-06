@@ -73,11 +73,22 @@ def inputs(component, target, revision=None):
                   'browser/build/moz.configure/android-sdk.configure',
                   'browser/mobile/android/android-components/.config.yml']
         records['cmake'] = '3.22.1'
+    if component == 'android-remote':
+        layout = native.entry(revision, 'agent/packaging/runtime-layout.py')
+        if layout:
+            records['runtimeLayout'] = {'version': 1, 'recipe': layout}
     return {'schema': 1, 'component': component, 'abi': abi(target), 'records': records,
             'files': {path: native.entry(revision, path) for path in paths}}
 
 
 component_inputs = inputs
+
+
+def binary_inputs(component, target, revision=None):
+    """Compare actual compiler inputs independently of source-only packaging."""
+    value = inputs(component, target, revision)
+    value['records'].pop('runtimeLayout', None)
+    return value
 
 
 def version(component, target, revision=None):

@@ -286,6 +286,10 @@ def inputs(component, target, revision):
                               'sdk': 37, 'buildTools': '37.0.0', 'java': 17}
     else:
         raise ValueError('Unsupported native component: ' + component)
+    if component in ('auth-authelia', 'auth-caddy', 'auth-chisel', 'auth-remote'):
+        layout = entry(revision, 'agent/packaging/runtime-layout.py')
+        if layout:
+            records['runtimeLayout'] = {'version': 1, 'recipe': layout}
     return {'schema': 1, 'component': component, 'target': target,
             'files': {path: entry(revision, path) for path in paths}, 'records': records,
             'recipe': native_toolchain(component, target, revision)}
