@@ -669,15 +669,24 @@ def supplement_compiler_cache(result, directory):
             path or Path(__file__).with_name(name + '.py'))
         value = importlib.util.module_from_spec(spec); spec.loader.exec_module(value)
         return value
-    cache = owner('compiler-cache')
-    if component == 'gecko':
-        engine, contract = 'sccache', owner('browser-release').cache_contract(target)
-    else:
-        engine = 'ccache'
-        contract = owner('office-components', Path(__file__).with_name('office') / 'components.py').cache_contract(
-            target, result['manifest']['sourceCommit'])
-    cache.supplement(engine, target, contract, Path(directory) / '.component-provenance' / 'cache-legal',
-                     engine_reference=result, engine_directory=directory)
+    try:
+        cache = owner('compiler-cache')
+        if component == 'gecko':
+            engine, contract = 'sccache', owner('browser-release').cache_contract(target)
+        else:
+            engine = 'ccache'
+            contract = owner('office-components', Path(__file__).with_name('office') / 'components.py').cache_contract(
+                target, result['manifest']['sourceCommit'])
+        cache_directory = os.environ.get('SCCACHE_DIR' if engine == 'sccache' else 'CCACHE_DIR')
+        if cache_directory and cache.has_objects(cache_directory):
+            cache.save(engine, target, contract, cache_directory,
+                       engine_reference=result, engine_directory=directory)
+        cache.supplement(engine, target, contract, Path(directory) / '.component-provenance' / 'cache-legal',
+                         engine_reference=result, engine_directory=directory)
+    except Exception as error:
+        # Compiler objects are optional: the native runtime, full legal texts
+        # and corresponding sources are already complete and independently safe.
+        print('Compiler backup deferred; completed engine output remains published: ' + str(error), flush=True)
 
 
 def recover_publication(component, target, version, inputs):
