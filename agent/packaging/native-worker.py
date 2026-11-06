@@ -47,6 +47,8 @@ def materialize(plan):
             paths.update(name for key in ('files', 'sources', 'trees') for name, oid in value.get(key, {}).items() if oid)
         if component.startswith('auth-'):
             paths.add('auth/build')
+            if value.get('target', '').startswith('termux-'):
+                paths.add('auth/dependencies/termux')
             if component in owner.tools.AUTH_GO | {'auth-cloudflared'}:
                 retained = json.loads(owner.native.content(owner.head(), 'auth/dependencies/go/sources.json'))
                 paths.update(retained['locks']); paths.add('auth/dependencies/go')

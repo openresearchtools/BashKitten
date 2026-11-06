@@ -12,7 +12,7 @@ import tarfile
 RECIPE = 'agent/packaging/runtime-layout.py'
 INPUT_KEY = 'runtimeLayout'
 COMPONENTS = frozenset(('auth', 'auth-authelia', 'auth-caddy', 'auth-chisel',
-                        'auth-remote', 'android-remote'))
+                        'auth-remote', 'auth-cloudflared', 'android-remote'))
 
 
 def sha(path):
