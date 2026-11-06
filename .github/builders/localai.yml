@@ -1,0 +1,114 @@
+name: Optional Taskarian AI runtimes
+run-name: LocalAI ${{ inputs.engine }} / ${{ inputs.backend }} / ${{ inputs.request_id }}
+'on':
+  workflow_dispatch:
+    inputs:
+      source_sha: {required: true, type: string}
+      request_id: {required: true, type: string}
+      engine: {required: true, type: choice, options: [llama, whisper]}
+      backend: {required: true, type: choice, options: [vulkan, cuda]}
+permissions:
+  contents: write
+concurrency:
+  group: localai-${{ inputs.engine }}-${{ inputs.backend }}
+  cancel-in-progress: false
+  queue: max
+jobs:
+  runtime:
+    runs-on: ${{ github.event.repository.name == 'taskarian-build-arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 360
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ENGINE: ${{ inputs.engine }}
+      BACKEND: ${{ inputs.backend }}
+      BUILDER_COMMIT: ${{ inputs.source_sha }}
+      RELEASE_REPOSITORY: ${{ github.repository }}
+      GIT_LFS_SKIP_SMUDGE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: openresearchtools/Taskarian
+          ref: ${{ inputs.source_sha }}
+          path: source
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /LICENSE
+            /agent/localai/
+            /agent/packaging/*.py
+      - name: Select this builder's native target
+        working-directory: source
+        run: |
+          python3 - <<'PY'
+          import os
+          targets = {'taskarian-build-amd64': 'linux-amd64', 'taskarian-build-arm64': 'linux-arm64',
+                     'taskarian-build-android': 'termux-aarch64', 'taskarian-build-android-x86_64': 'termux-x86_64'}
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write('TARGET=' + targets[os.environ['GITHUB_REPOSITORY'].split('/')[1]] + '\n')
+          PY
+      - name: Reuse an already published official version
+        id: plan
+        working-directory: source
+        run: |
+          python3 agent/packaging/localai.py plan --engine "$ENGINE" --target "$TARGET" --backend "$BACKEND" --directory "$RUNNER_TEMP/plan"
+      - name: Verify the exact official upstream tag before compilation
+        if: steps.plan.outputs.build == 'true'
+        working-directory: source
+        run: python3 agent/localai/build/releases.py --verify "$ENGINE"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        if: steps.plan.outputs.build == 'true'
+        with:
+          repository: ${{ steps.plan.outputs.upstream_repository }}
+          ref: ${{ steps.plan.outputs.commit }}
+          path: src
+          persist-credentials: false
+          submodules: recursive
+      - name: Prepare retained matching dependency sources
+        if: steps.plan.outputs.build == 'true'
+        working-directory: source
+        run: python3 agent/localai/build/native_sources.py --prepare "$RUNNER_TEMP/localai-recipe"
+      - name: Restore optional archived compiler objects
+        if: steps.plan.outputs.build == 'true'
+        working-directory: source
+        run: |
+          python3 agent/packaging/localai.py cache-restore --engine "$ENGINE" --target "$TARGET" --backend "$BACKEND" --directory "$RUNNER_TEMP/localai-cache"
+      - name: Build using the existing native engine recipe
+        id: native
+        if: steps.plan.outputs.build == 'true'
+        env:
+          TARGETOS: ${{ steps.plan.outputs.os }}
+          TARGETARCH: ${{ steps.plan.outputs.arch }}
+          SOURCE_COMMIT: ${{ steps.plan.outputs.commit }}
+          UPSTREAM_VERSION: ${{ steps.plan.outputs.version }}
+          RELEASE_TAG: ${{ steps.plan.outputs.recipe_release }}
+          PUBLISH_TAG: ${{ steps.plan.outputs.release }}
+        run: |
+          docker build --target builder -t localai-builder \
+            --build-arg "TARGETARCH=$TARGETARCH" --build-arg "TARGETOS=$TARGETOS" --build-arg "BACKEND=$BACKEND" \
+            -f source/agent/localai/build/Dockerfile source/agent/localai
+          mkdir -p "$RUNNER_TEMP/localai-cache" "$RUNNER_TEMP/artifacts"
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -e ENGINE -e BACKEND -e TARGETOS -e TARGETARCH -e SOURCE_COMMIT -e UPSTREAM_VERSION \
+            -e RELEASE_TAG -e BUILDER_COMMIT -e RELEASE_REPOSITORY -e PUBLISH_TAG \
+            -e BUILD_JOBS="$(nproc)" -e OMP_WAIT_POLICY=ACTIVE -e GOMP_SPINCOUNT=INFINITE \
+            -e BUILD_INPUTS=/recipe -v "$PWD/src:/src" -v "$RUNNER_TEMP/localai-cache:/cache" \
+            -v "$RUNNER_TEMP/artifacts:/out" -v "$RUNNER_TEMP/localai-recipe:/recipe:ro" \
+            localai-builder python3 /recipe/package.py
+      - name: Publish this successful runtime independently
+        if: steps.plan.outputs.build == 'true'
+        working-directory: source
+        run: |
+          python3 agent/packaging/localai.py publish --engine "$ENGINE" --target "$TARGET" --backend "$BACKEND" --directory "$RUNNER_TEMP/artifacts"
+      - name: Archive compiler objects outside Actions cache
+        if: always() && steps.native.outcome == 'success'
+        working-directory: source
+        run: |
+          python3 agent/packaging/localai.py cache-save --engine "$ENGINE" --target "$TARGET" --backend "$BACKEND" --directory "$RUNNER_TEMP/localai-cache"
+      - name: Retain native build diagnostics
+        if: failure() && steps.plan.outputs.build == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: localai-${{ inputs.engine }}-${{ inputs.backend }}-diagnostics
+          path: ${{ runner.temp }}/localai-cache/evidence/
+          if-no-files-found: ignore

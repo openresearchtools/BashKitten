@@ -36,6 +36,7 @@ jobs:
         sparse-checkout-cone-mode: false
         sparse-checkout: |
           /agent/
+          !/agent/localai/
           /auth/
           /files/
           !/files/vendor/quantum/source/

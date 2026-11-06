@@ -89,8 +89,11 @@ def materialize(plan):
     # Git objects identify directories recursively; selected source units do not
     # require unrelated Mozilla, LibreOffice or other component source trees.
     selected = [path for path in sorted(paths) if owner.native.entry(owner.head(), path)]
+    patterns = ['/' + path + ('/' if owner.native.git('cat-file', '-t', owner.native.entry(owner.head(), path)) == 'tree' else '') for path in selected]
+    # Downloadable AI build inputs never belong to ordinary app/service jobs.
+    patterns.append('!/agent/localai/')
     subprocess.run(['git', 'sparse-checkout', 'set', '--no-cone', '--stdin'], cwd=ROOT,
-                   input='\n'.join('/' + path + ('/' if owner.native.git('cat-file', '-t', owner.native.entry(owner.head(), path)) == 'tree' else '') for path in selected) + '\n',
+                   input='\n'.join(patterns) + '\n',
                    text=True, check=True, env={**os.environ, 'GIT_LFS_SKIP_SMUDGE': '1'})
 
 

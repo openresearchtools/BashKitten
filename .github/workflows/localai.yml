@@ -1,0 +1,102 @@
+name: Update optional AI runtimes
+'on':
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      engine:
+        type: choice
+        options: [all, llama, whisper]
+        default: all
+      target:
+        type: choice
+        options: [all, linux-amd64, linux-arm64, termux-aarch64, termux-x86_64]
+        default: all
+      backend:
+        type: choice
+        options: [all, vulkan, cuda]
+        default: all
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: localai-update
+  cancel-in-progress: false
+  queue: max
+jobs:
+  pins:
+    runs-on: ubuntu-24.04
+    outputs:
+      source: ${{ steps.matrix.outputs.source }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      build: ${{ steps.matrix.outputs.build }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: main
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /agent/localai/
+            /agent/packaging/*.py
+      - name: Check official stable engine and Silero releases
+        id: available
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 agent/localai/build/releases.py
+      - name: Prepare conversion tools only when Silero changes
+        if: steps.available.outputs.silero_changed == 'true'
+        run: |
+          python3 -m venv "$RUNNER_TEMP/vad-verify"
+          "$RUNNER_TEMP/vad-verify/bin/pip" install --index-url https://download.pytorch.org/whl/cpu torch==2.9.1+cpu numpy==2.3.5
+      - name: Pin only newly released upstream versions
+        id: update
+        if: steps.available.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python=python3
+          if [ -x "$RUNNER_TEMP/vad-verify/bin/python" ]; then python="$RUNNER_TEMP/vad-verify/bin/python"; fi
+          "$python" agent/localai/build/releases.py --write
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add agent/localai/upstreams.json agent/localai/build/vad
+          git commit -m 'Update pinned optional AI runtime releases'
+          git push origin HEAD:main
+      - name: Select independent architecture and backend builds
+        id: matrix
+        env:
+          ENGINE: ${{ inputs.engine || 'all' }}
+          TARGET: ${{ inputs.target || 'all' }}
+          BACKEND: ${{ inputs.backend || 'all' }}
+        run: |
+          python3 agent/packaging/localai.py select --engine "$ENGINE" --target "$TARGET" --backend "$BACKEND" --directory "$RUNNER_TEMP/localai"
+  runtimes:
+    needs: pins
+    if: needs.pins.outputs.build == 'true'
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix: ${{ fromJSON(needs.pins.outputs.matrix) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.pins.outputs.source }}
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /agent/packaging/*.py
+            /browser/taskarian/config/version.txt
+      - name: Run the independent architecture builder
+        env:
+          GH_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}
+          ENGINE: ${{ matrix.engine }}
+          TARGET: ${{ matrix.target }}
+          BACKEND: ${{ matrix.backend }}
+        run: |
+          python3 agent/packaging/localai.py dispatch --engine "$ENGINE" --target "$TARGET" --backend "$BACKEND" --directory "$RUNNER_TEMP/localai"

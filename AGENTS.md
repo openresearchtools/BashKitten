@@ -16,8 +16,14 @@ installers and a small source/license index linking to those permanent releases.
 Do not transport the whole release through a second massive Actions artifact.
 Reuse engines for UI/backend edits, with Actions compiler caches first and archived
 Gecko sccache/LibreOffice ccache as fallbacks. Split oversized archives below 2 GiB.
-Preserve successful outputs independently of sibling failures. LocalAI stays with
-its existing automated repository. This supersedes the 5 November shared rolling
+Preserve successful outputs independently of sibling failures. The 6 November
+LocalAI migration keeps its MIT engine recipes in `agent/localai`, builds them
+independently in these four builders, and publishes optional runtimes and full
+matching sources there. CUDA 12 runtimes bundle their redistributable libraries
+and complete NVIDIA notices; only the driver stays external. LocalAI compiler
+objects use release-backed archives without consuming Actions cache capacity.
+The old LocalAI repository must not be a live build or download dependency.
+This supersedes the 5 November shared rolling
 release and earlier shared Office-builder/Actions-artifact-only storage rules.
 
 ## 5 November product identity
