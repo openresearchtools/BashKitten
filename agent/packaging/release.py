@@ -340,7 +340,8 @@ def main():
     components = source_index.get('components', [])
     if not any(item.get('component') == 'corresponding-source' and item.get('sourceCommit') == revision for item in components):
         raise ValueError('Repository corresponding sources are missing from the component index')
-    archives = [asset for item in components for asset in item['assets'] if asset['role'] == 'source']
+    archives = [{'archive': asset['name'], **asset} for item in components
+                for asset in item['assets'] if asset['role'] == 'source']
     if not archives or not all(asset.get('parts') and re.fullmatch('[0-9a-f]{64}', asset.get('sha256', '')) for asset in archives):
         raise ValueError('Permanent source archives require checksums and downloadable parts')
     sources = [part for archive in archives for part in archive['parts']]
