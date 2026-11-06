@@ -55,8 +55,10 @@ def inputs(component, target):
         lock.pop('version', None)
         lock['packages'][''].pop('version', None)
         value['lock'] = lock
+        tool = json.loads((HERE / 'node/lock.json').read_text())['linux']
+        value['installer'] = {key: tool[key] for key in ('node_version', 'npm_version')}
         paths += ['agent/vendor/npm/sources.json', 'agent/vendor/pi/source.json',
-                  'agent/packaging/npm-sources.py', 'agent/packaging/node/lock.json']
+                  'agent/packaging/npm-sources.py']
     elif component == 'photon':
         paths += ['agent/packaging/photon', 'agent/machines/rust-toolchain',
                   'agent/packaging/machines/build.py']
@@ -93,7 +95,8 @@ def original_source(destination, paths, originals=()):
     # Original downloads stay outside Git and retain their exact bytes.
     helper_paths = ['agent/packaging/build.py', 'agent/packaging/component-store.py',
                     'agent/packaging/source_archive.py', 'agent/packaging/source_cache.py',
-                    'agent/packaging/npm-sources.py', 'agent/licenses/source-archives.json']
+                    'agent/packaging/npm-sources.py', 'agent/packaging/node/lock.json',
+                    'agent/licenses/source-archives.json']
     with tempfile.TemporaryDirectory() as temporary:
         selected = Path(temporary) / 'source.tar.gz'
         module('source_archive').archive_revision(ROOT, 'HEAD', selected, prefix='',
