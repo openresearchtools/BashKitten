@@ -1,75 +1,113 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Retain the existing complete source gate in the AMD64 architecture builder."""
+"""Publish complete repository source changes without fetching existing sources.
+
+The permanent complete snapshot preserves donor export-ignore files. Native Git
+binary patches reproduce each later exact tree; component sources remain with
+those components instead of being downloaded into another aggregate.
+"""
+import gzip
 import importlib.util
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
-import time
+import tarfile
+import tempfile
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
+BASE_SOURCE = '522a9d8a4e24ae2fdd0b76fd2cc9f98af2ba7190'
+BASE_VERSION = '153.6.2'
+BASE_MANIFEST_SHA256 = '1f185cabc3c0a332a9e41a6a785818163500883a93578e533c930e47cb6f7abf'
 
 
 def module(name):
     spec = importlib.util.spec_from_file_location(name.replace('-', '_'), HERE / (name + '.py'))
-    result = importlib.util.module_from_spec(spec); spec.loader.exec_module(result)
+    result = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(result)
     return result
 
 
+def repository_patch(revision, directory):
+    """Use Git's native binary format and prove replay yields the exact tree."""
+    if subprocess.run(['git', 'cat-file', '-e', BASE_SOURCE + '^{commit}'], cwd=ROOT,
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
+        subprocess.run(['git', 'fetch', '--filter=blob:none', '--depth=1', 'origin', BASE_SOURCE], cwd=ROOT, check=True)
+    patch = directory / 'taskarian.patch'
+    with patch.open('wb') as output:
+        subprocess.run(['git', 'diff', '--binary', '--full-index', '--no-ext-diff', '--no-textconv',
+                        BASE_SOURCE, revision, '--'], cwd=ROOT, stdout=output, check=True)
+    index = directory / 'verification.index'
+    environment = {**os.environ, 'GIT_INDEX_FILE': str(index)}
+    try:
+        subprocess.run(['git', 'read-tree', BASE_SOURCE], cwd=ROOT, env=environment, check=True)
+        if patch.stat().st_size:
+            subprocess.run(['git', 'apply', '--cached', '--binary', str(patch)], cwd=ROOT, env=environment, check=True)
+        actual = subprocess.check_output(['git', 'write-tree'], cwd=ROOT, env=environment, text=True).strip()
+        expected = subprocess.check_output(['git', 'rev-parse', revision + '^{tree}'], cwd=ROOT, text=True).strip()
+        if actual != expected:
+            raise ValueError('Repository source patch does not reconstruct the exact source tree')
+    finally:
+        index.unlink(missing_ok=True)
+    return {'schema': 1, 'baseSource': BASE_SOURCE, 'sourceCommit': revision, 'tree': expected,
+            'format': 'git diff --binary --full-index', 'patchSha256': module('component-store').sha(patch)}
+
+
 def main():
-    store, application, native = module('component-store'), module('application'), module('native-components')
+    store, application = module('component-store'), module('application')
     if os.environ.get('GITHUB_ACTIONS') != 'true' or os.environ.get('GITHUB_REPOSITORY') != store.repository('linux-amd64'):
-        raise ValueError('Complete source assembly belongs to the AMD64 builder')
+        raise ValueError('Repository source publication belongs to the AMD64 builder')
     wanted = application.inputs('linux-amd64')
     if store.lookup('corresponding-source', 'linux-amd64', wanted):
-        print('Matching complete sources are already published')
+        print('Exact repository sources are already published; no source payload downloaded')
         return
-    temporary = Path(os.environ['RUNNER_TEMP'])
-    destination = temporary / 'corresponding-source'
-    destination.mkdir(parents=True, exist_ok=True)
-    references = []
-    for target in ('linux-amd64', 'linux-arm64', 'termux-aarch64', 'termux-x86_64'):
-        directory = temporary / 'node-source-inputs' / target
-        deadline = time.monotonic() + 90 * 60
-        while True:
-            result = native.restore_component('node', target, directory, roles=('source', 'metadata'))
-            if result:
-                break
-            if time.monotonic() >= deadline:
-                raise ValueError('Required Node source component has not finished: ' + target)
-            time.sleep(30)
-        references.append({key: result[key] for key in ('repository', 'manifestName', 'manifestSha256')})
-        name = 'node-source-' + target + '.tar.gz'
-        provenance = {'schema': 1, 'target': target, 'producerSource': result['manifest']['sourceCommit'],
-                      'producer': result['manifest']['producer'], 'inputs': result['manifest']['inputs'],
-                      'archives': {name: store.sha(directory / name)}, 'store': references[-1]}
-        (directory / ('node-provenance-' + target + '.json')).write_text(json.dumps(provenance, indent=2) + '\n')
-        (directory / 'SHA256SUMS').write_text(''.join(store.sha(path) + '  ' + path.name + '\n'
-            for path in sorted(directory.iterdir()) if path.is_file() and path.name != 'SHA256SUMS'))
-    subprocess.run(['python3', str(HERE / 'sources.py'), str(destination), '--node-sources',
-                    str(temporary / 'node-source-inputs'), '--cache', str(temporary / 'source-cache')], check=True)
-    subprocess.run(['python3', '-I', '-B', str(ROOT / 'browser/taskarian/scripts/blocker_asset_provenance.py'), 'build',
-                    '--repository', str(ROOT / 'browser'), '--cache-dir', str(temporary / 'blocker-source-cache'),
-                    '--output', str(destination / 'taskarian-blocker-assets-source.tar.xz'), '--skip-reproduction-check'], check=True)
-    for target in ('linux-amd64', 'linux-arm64', 'termux-aarch64', 'termux-x86_64'):
-        for component in ('auth', 'search'):
-            directory = temporary / 'native-source-inputs' / target / component
-            deadline = time.monotonic() + 90 * 60
-            while True:
-                result = native.restore_component(component, target, directory, roles=('source',))
-                if result:
-                    break
-                if time.monotonic() >= deadline:
-                    raise ValueError('Required corresponding source has not finished: ' + component + '/' + target)
-                time.sleep(30)
-            references.append({key: result[key] for key in ('repository', 'manifestName', 'manifestSha256')})
-            for asset in result['manifest']['assets']:
-                if asset['role'] == 'source':
-                    shutil.copy2(directory / asset['name'], destination / asset['name'])
-    application.publish('linux-amd64', destination, component='corresponding-source', dependencies=references)
+    base = store.lookup('corresponding-source', 'linux-amd64', {
+        'source': BASE_SOURCE, 'productVersion': BASE_VERSION, 'target': 'linux-amd64'})
+    if not base or base['manifestSha256'] != BASE_MANIFEST_SHA256:
+        raise ValueError('The permanent verified complete repository source baseline is unavailable')
+    reference = {key: base[key] for key in ('repository', 'manifestName', 'manifestSha256', 'tag') if key in base}
+    with tempfile.TemporaryDirectory(prefix='taskarian-source-', dir=os.environ['RUNNER_TEMP']) as temporary:
+        directory = Path(temporary)
+        contents = directory / 'contents'
+        contents.mkdir()
+        metadata = repository_patch(wanted['source'], contents)
+        baseline_archive = next(item for item in base['manifest']['assets']
+                                if item['name'] == 'taskarian-source-' + BASE_SOURCE[:12] + '.tar.gz')
+        baseline_url = base['url'].rsplit('/', 1)[0] + '/'
+        metadata['baseline'] = {'manifest': {**reference, 'url': base['url']},
+                                'archive': {**baseline_archive, 'parts': [
+                                    {**part, 'url': baseline_url + part['asset']} for part in baseline_archive['parts']]}}
+        (contents / 'source.json').write_text(json.dumps(metadata, indent=2) + '\n')
+        license_text = subprocess.check_output(['git', 'show', wanted['source'] + ':LICENSE'], cwd=ROOT)
+        (contents / 'LICENSE').write_bytes(license_text)
+        (contents / 'README.txt').write_text(
+            'Complete Taskarian corresponding source\n\n'
+            'source.json records the permanent complete baseline archive, ordered download parts, checksums and exact target Git tree. '
+            'The baseline includes donor files marked export-ignore; GitHub automatic source ZIP files are not a substitute.\n\n'
+            'Download and verify the baseline parts, concatenate in recorded order, verify the full archive, and extract it. '
+            'In its taskarian directory run:\n'
+            '  git init\n  git add --force .\n  git apply --index --binary /absolute/path/to/taskarian.patch\n'
+            '  git write-tree\n'
+            'The resulting tree must equal source.json tree. The patch includes every tracked addition, modification, mode change and deletion. '
+            'Unchanged upstream and dependency source archives remain available through component-sources.json in the app release.\n')
+        output = directory / 'output'
+        output.mkdir()
+        name = 'taskarian-source-' + wanted['source'][:12] + '.tar.gz'
+        with (output / name).open('wb') as raw, gzip.GzipFile(fileobj=raw, mode='wb', filename='', mtime=0) as compressed:
+            with tarfile.open(fileobj=compressed, mode='w|', format=tarfile.PAX_FORMAT) as archive:
+                for file in sorted(contents.iterdir()):
+                    info = archive.gettarinfo(str(file), arcname='taskarian-source/' + file.name)
+                    info.uid = info.gid = info.mtime = 0
+                    info.uname = info.gname = ''
+                    with file.open('rb') as source:
+                        archive.addfile(info, source)
+        (output / 'Taskarian-LICENSE.txt').write_bytes(license_text)
+        (output / 'repository-source.json').write_text(json.dumps(metadata, indent=2) + '\n')
+        store.publish('corresponding-source', 'linux-amd64', wanted['productVersion'], wanted, output,
+                      assets={name: 'source', 'Taskarian-LICENSE.txt': 'legal', 'repository-source.json': 'metadata'},
+                      source_commit=wanted['source'], dependencies=[reference])
+        print('Published exact verified source patch; no existing source archive downloaded')
 
 
 if __name__ == '__main__':

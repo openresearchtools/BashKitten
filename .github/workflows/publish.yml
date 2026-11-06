@@ -58,8 +58,12 @@ jobs:
       with:
         ref: ${{ steps.candidate.outputs.revision }}
         persist-credentials: false
-    - name: Download complete release artifacts
-      run: gh run download "$CANDIDATE_RUN" --name taskarian-complete-candidate --dir release
+    - name: Download small pinned release plan
+      run: gh run download "$CANDIDATE_RUN" --name taskarian-complete-candidate --dir release-plan
+    - name: Download shipped installers once and verify original native release contracts
+      run: |
+        python3 agent/packaging/remote-components.py materialize --plan release-plan/candidate-plan.json --directory candidates
+        python3 agent/packaging/release.py candidates release --candidate-only --run "$CANDIDATE_RUN"
     - name: Verify artifacts and required testing notice
       id: release
       env:
@@ -86,7 +90,7 @@ jobs:
         PY
     - name: Require a newer version across stable and prerelease channels
       run: python3 -B agent/packaging/release_version.py check
-    - name: Publish with the README warning and complete sources
+    - name: Publish installers and permanent source/license index
       env:
         RELEASE_TAG: ${{ steps.release.outputs.tag }}
         CANDIDATE_REVISION: ${{ steps.candidate.outputs.revision }}

@@ -4,8 +4,10 @@
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import importlib.util
+import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import time
@@ -120,14 +122,101 @@ def build_browser(target, request, *, force=False, warm_gkrust=False):
                  native_key=native_key, force_rebuild=force, **options)
 
 
-def collect(directory, targets=None):
-    packages = {}
+def reference(result):
+    return {key: result[key] for key in ('repository', 'manifestName', 'manifestSha256', 'tag') if key in result}
+
+
+def read_reference(ref):
+    url = store.manifest_url(ref)
+    raw = store.read_url(url) if url else None
+    if raw is None or hashlib.sha256(raw).hexdigest() != ref['manifestSha256']:
+        raise ValueError('Pinned component manifest is unavailable or differs: ' + ref['manifestName'])
+    manifest = json.loads(raw)
+    ident = store.validate(manifest)
+    if ref['repository'] != ident['repository'] or ref['manifestName'] != ident['manifest']:
+        raise ValueError('Pinned component identity differs')
+    return {'manifest': manifest, **ref, 'tag': url.rsplit('/', 2)[-2], 'url': url}
+
+
+def source_index(roots, revision):
+    pending, components, seen = list(roots), [], set()
+    while pending:
+        ref = pending.pop()
+        key = (ref['repository'], ref['manifestName'], ref['manifestSha256'])
+        if key in seen:
+            continue
+        seen.add(key)
+        result = read_reference(ref)
+        manifest = result['manifest']
+        base = result['url'].rsplit('/', 1)[0] + '/'
+        assets = [{**item, 'role': 'source' if '-source_' in item['name'] else item['role'], 'parts': [{**part, 'url': base + part['asset']} for part in item['parts']]}
+                  for item in manifest['assets'] if item['role'] in ('source', 'legal') or '-source_' in item['name']]
+        components.append({'component': manifest['component'], 'target': manifest['target'],
+                           'version': manifest['version'], 'sourceCommit': manifest['sourceCommit'],
+                           'inputSha256': manifest['inputSha256'], 'manifest': {**reference(result), 'url': result['url']},
+                           'assets': assets})
+        pending.extend(manifest.get('dependencies', []))
+    if not any(item['component'] == 'corresponding-source' and item['sourceCommit'] == revision for item in components):
+        raise ValueError('Exact repository corresponding-source component is required')
+    return {'schema': 1, 'sourceCommit': revision, 'components': sorted(components, key=lambda x: (x['target'], x['component'], x['inputSha256']))}
+
+
+def wanted_inputs(target, revision=None):
+    wanted = application.inputs(target)
+    if revision:
+        if not re.fullmatch('[0-9a-f]{40}', revision):
+            raise ValueError('Storage verification requires an exact source commit')
+        wanted['source'] = revision
+        wanted['productVersion'] = subprocess.check_output(
+            ['git', 'show', revision + ':browser/taskarian/config/version.txt'], cwd=ROOT, text=True).strip()
+    return wanted
+
+
+def collect(directory, targets=None, *, revision=None):
+    """Create a small pinned plan; binaries, source and caches stay in builders."""
+    wanted = wanted_inputs('linux-amd64', revision)
+    applications = []
     for target in targets or ('linux-amd64', 'linux-arm64', 'termux-aarch64', 'termux-x86_64', 'android', 'android-x86_64'):
-        destination = directory / ('taskarian-' + target + '-candidate')
-        if not application.restore(target, destination):
+        result = store.lookup('application', target, {**wanted, 'target': target})
+        if not result:
             raise ValueError('Missing exact application output: ' + target)
-        # Android carries the exact companion packages too. Retain one copy of
-        # identical packages; a differing companion is a release pairing error.
+        applications.append({'target': target, **reference(result)})
+    sources = store.lookup('corresponding-source', 'linux-amd64', wanted)
+    if not sources:
+        raise ValueError('Matching corresponding-source metadata is missing')
+    plan = {'schema': 1, 'sourceCommit': wanted['source'], 'version': wanted['productVersion'],
+            'applications': applications,
+            'sourceIndex': source_index([*applications, reference(sources)], wanted['source'])}
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / 'candidate-plan.json').write_text(json.dumps(plan, indent=2) + '\n')
+    print('Pinned release plan created; no binaries, sources or compiler caches downloaded', flush=True)
+
+
+def materialize(plan_file, directory, *, revision=None):
+    """Fetch each shipped installer once, retaining all existing release checks."""
+    plan = json.loads(plan_file.read_text())
+    current = wanted_inputs('linux-amd64', revision)
+    if (plan.get('schema') != 1 or plan.get('sourceCommit') != current['source']
+            or plan.get('version') != current['productVersion']):
+        raise ValueError('Candidate plan differs from checked-out product source/version')
+    expected = {'linux-amd64', 'linux-arm64', 'termux-aarch64', 'termux-x86_64', 'android', 'android-x86_64'}
+    if {item['target'] for item in plan['applications']} != expected or len(plan['applications']) != len(expected):
+        raise ValueError('Candidate plan must name all six applications exactly once')
+    actual_index = source_index(plan['applications'] + [item['manifest'] for item in plan['sourceIndex']['components']
+                                if item['component'] == 'corresponding-source' and item['sourceCommit'] == current['source']], current['source'])
+    if actual_index != plan['sourceIndex']:
+        raise ValueError('Candidate source/license index differs from pinned manifests')
+    packages = {}
+    for ref in plan['applications']:
+        destination = directory / ('taskarian-' + ref['target'] + '-candidate')
+        manifest = read_reference(ref)['manifest']
+        selected = [item['name'] for item in manifest['assets']
+                    if item['name'].endswith(('.apk', '.deb', '.deb.json', '.deb.sha256'))
+                    or item['name'] == 'build-manifest.json'
+                    or item['name'].startswith('native-input-equivalence-') and item['name'].endswith('.json')]
+        result = store.fetch(ref, destination, roles=('runtime', 'metadata', 'legal'), names=selected)
+        if not result or result['manifest']['inputs'] != {**current, 'target': ref['target']}:
+            raise ValueError('Application inputs differ from candidate plan')
         for path in destination.glob('*.deb*'):
             if not path.is_file():
                 continue
@@ -138,15 +227,16 @@ def collect(directory, targets=None):
                 path.unlink()
             else:
                 packages[path.name] = digest
-    if not application.restore('linux-amd64', directory / 'taskarian-corresponding-source', component='corresponding-source'):
-        raise ValueError('Matching complete corresponding-source output is missing')
+    (directory / 'component-sources.json').write_text(json.dumps(actual_index, indent=2) + '\n')
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=('build', 'components', 'sources', 'collect'))
+    parser.add_argument('action', choices=('build', 'components', 'sources', 'collect', 'materialize'))
     parser.add_argument('target', nargs='?')
     parser.add_argument('--directory', type=Path)
+    parser.add_argument('--plan', type=Path)
+    parser.add_argument('--source', help='Existing app source for storage-only verification')
     parser.add_argument('--components', default='["all"]')
     parser.add_argument('--force-rebuild', action='store_true')
     parser.add_argument('--native-only', action='store_true')
@@ -164,8 +254,10 @@ def main():
         request = f'{os.environ["GITHUB_RUN_ID"]}-{os.environ.get("GITHUB_RUN_ATTEMPT", "1")}-sources'
         if not store.lookup('corresponding-source', 'linux-amd64', application.inputs('linux-amd64')):
             dispatch('linux-amd64', 'sources.yml', request)
+    elif args.action == 'collect':
+        collect(args.directory, revision=args.source)
     else:
-        collect(args.directory)
+        materialize(args.plan, args.directory, revision=args.source)
 
 
 if __name__ == '__main__':

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Collect the six matching build candidates and their corresponding sources.
+"""Verify six matching applications and link their permanent corresponding sources.
 
 This assembles files only. Prereleases enable APT testing; a successful compilation does not claim
 that real device validation has occurred.
@@ -12,7 +12,6 @@ import json
 import os
 from pathlib import Path
 import re
-import shlex
 import shutil
 import subprocess
 import tarfile
@@ -25,7 +24,6 @@ TERMUX_BOOTSTRAP_ASSET = 'assets/updates-bootstrap.mjs'
 TERMUX_PREPARER_ASSET = 'assets/updates-prepare.py'
 # GitHub requires each release asset to be strictly smaller than 2 GiB.
 ASSET_SIZE_LIMIT = 2 * 1024 ** 3
-SOURCE_PART_SIZE = 1024 ** 3
 
 
 def validate_termux_update(value, version=None, abi=None):
@@ -109,7 +107,7 @@ def asset_record(file, tag):
 
 def copy_asset(file, output, tag):
     if file.stat().st_size >= ASSET_SIZE_LIMIT:
-        raise ValueError('Release asset exceeds the GitHub limit; only source archives may be split: ' + file.name)
+        raise ValueError('Shipped installer exceeds the GitHub per-asset limit: ' + file.name)
     destination = output / file.name
     if destination.exists():
         if sha(destination) != sha(file):
@@ -124,63 +122,6 @@ def copy_asset(file, output, tag):
                 raise
             shutil.copy2(file, destination)
     return asset_record(destination, tag)
-
-
-def source_archive(file, output, tag):
-    """Retain exact source bytes, splitting only archives too large for GitHub."""
-    size = file.stat().st_size
-    if size < ASSET_SIZE_LIMIT:
-        asset = copy_asset(file, output, tag)
-        return {'archive': file.name, 'sha256': asset['sha256'], 'size': size, 'parts': [asset]}
-    digest, parts = hashlib.sha256(), []
-    with file.open('rb') as source:
-        for index, offset in enumerate(range(0, size, SOURCE_PART_SIZE), 1):
-            part = output / f'{file.name}.part{index:04d}'
-            remaining = min(SOURCE_PART_SIZE, size - offset)
-            with part.open('xb') as target:
-                while remaining:
-                    block = source.read(min(8 * 1024 ** 2, remaining))
-                    if not block:
-                        raise ValueError('Source archive changed during collection: ' + file.name)
-                    target.write(block)
-                    digest.update(block)
-                    remaining -= len(block)
-            parts.append(asset_record(part, tag))
-        if source.read(1):
-            raise ValueError('Source archive changed during collection: ' + file.name)
-    original = {'archive': file.name, 'sha256': digest.hexdigest(), 'size': size, 'parts': parts}
-    (output / (file.name + '.parts.sha256')).write_text(''.join(
-        part['sha256'] + '  ' + part['asset'] + '\n' for part in parts))
-    (output / (file.name + '.sha256')).write_text(original['sha256'] + '  ' + file.name + '\n')
-    return original
-
-
-def source_instructions(archives, output, tag):
-    split = [archive for archive in archives if len(archive['parts']) > 1]
-    if not split:
-        return
-    text = ('# Corresponding source archives\n\n'
-            'Large source archives are attached as ordered binary parts to fit GitHub\'s per-asset limit. '
-            'No source, license or notice was removed, and the archive bytes were not recompressed. '
-            '`release.json` records each original archive name, byte count, SHA-256 and ordered parts '
-            'under `sourceArchives`; `sources` lists the actual downloadable assets.\n\n'
-            'Run the commands below in a new directory with GitHub CLI and coreutils installed. '
-            'Each block downloads one archive and its checksum files, verifies its parts, concatenates '
-            'them in the recorded order, and verifies the original archive before extraction. '
-            'Stop if any command fails. Allow space for both the downloaded parts and the reconstructed '
-            'archive. Individual parts are not independently extractable.\n\n'
-            'For a complete release download, `sha256sum --check SHA256SUMS` verifies all attached '
-            'files, including these instructions, the manifest and checksum files.\n')
-    for archive in split:
-        name = archive['archive']
-        parts = ' '.join(shlex.quote(part['asset']) for part in archive['parts'])
-        text += (f'\n## {name}\n\nOriginal: {archive["size"]} bytes, SHA-256 `{archive["sha256"]}`.\n\n'
-                 f'```sh\ngh release download {shlex.quote(tag)} --repo openresearchtools/Taskarian '
-                 f'--pattern {shlex.quote(name + ".*")} &&\n'
-                 f'sha256sum --check {shlex.quote(name + ".parts.sha256")} &&\n'
-                 f'cat {parts} > {shlex.quote(name)} &&\n'
-                 f'sha256sum --check {shlex.quote(name + ".sha256")}\n```\n')
-    (output / 'SOURCE-ARCHIVES.md').write_text(text)
 
 
 def package(file):
@@ -228,11 +169,14 @@ def main():
     parser.add_argument('output', type=Path)
     parser.add_argument('--tag')
     parser.add_argument('--candidate-only', action='store_true')
+    parser.add_argument('--verify-existing-source', help='Integrity-only verification of already built installers; never publish')
     parser.add_argument('--run', type=int, help='Successful complete-candidate workflow run')
     args = parser.parse_args()
-    version = (ROOT / 'browser/taskarian/config/version.txt').read_text().strip()
-    engine = (ROOT / 'browser/browser/config/version_display.txt').read_text().strip()
-    revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+    revision = args.verify_existing_source or subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+    if not re.fullmatch('[0-9a-f]{40}', revision) or args.verify_existing_source and not args.candidate_only:
+        raise ValueError('Existing-source verification requires a full revision and --candidate-only')
+    version = subprocess.check_output(['git', 'show', revision + ':browser/taskarian/config/version.txt'], cwd=ROOT, text=True).strip()
+    engine = subprocess.check_output(['git', 'show', revision + ':browser/browser/config/version_display.txt'], cwd=ROOT, text=True).strip()
     if not re.fullmatch(r'\d+\.\d+(?:\.\d+)?', version):
         raise ValueError('Invalid Firefox-aligned product version')
     package_version = version
@@ -288,7 +232,7 @@ def main():
                 raise ValueError('A browser integration iteration APK is not a complete release candidate')
             if hashlib.sha256(archive.read(TERMUX_BOOTSTRAP_ASSET)).hexdigest() != pairing['bootstrapSha256']:
                 raise ValueError('APK companion update bootstrap checksum mismatch')
-            if archive.read(TERMUX_PREPARER_ASSET) != (ROOT / 'agent/src/server/platform/termux/updates-prepare.py').read_bytes():
+            if archive.read(TERMUX_PREPARER_ASSET) != subprocess.check_output(['git', 'show', revision + ':agent/src/server/platform/termux/updates-prepare.py'], cwd=ROOT):
                 raise ValueError('APK bundled-runtime preparation does not match this source')
         if pairing['sourceCommit'] != manifest['source']:
             raise ValueError('APK companion update manifest has a different producing source')
@@ -389,20 +333,18 @@ def main():
                 raise ValueError('APK companion pairing differs from the published package: '
                                  + expected['name'] + '/' + expected['architecture']
                                  + '; reassemble APK resources from the matching inputs')
-    archives = {}
-    for file in sorted(args.candidates.rglob('*')):
-        if file.is_file() and re.search(r'(?:source|sources|provenance)[^.]*\.(?:tar(?:\.(?:gz|xz|zst))?|zip|jar)$', file.name):
-            if file.name in archives:
-                if archives[file.name]['sha256'] != sha(file):
-                    raise ValueError('Conflicting release source: ' + file.name)
-            else:
-                archives[file.name] = source_archive(file, args.output, tag)
-    names = list(archives)
-    for token in ('taskarian-source-', 'dependency-source-', 'auth', 'search', 'node-source-', 'blocker', 'android-library-source'):
-        if not any(token in name for name in names):
-            raise ValueError('Missing corresponding source bundle: ' + token)
-    source_instructions(archives.values(), args.output, tag)
-    sources = [part for archive in archives.values() for part in archive['parts']]
+    source_file = args.candidates / 'component-sources.json'
+    source_index = json.loads(source_file.read_text())
+    if source_index.get('schema') != 1 or source_index.get('sourceCommit') != revision:
+        raise ValueError('Missing exact permanent component source/license index')
+    components = source_index.get('components', [])
+    if not any(item.get('component') == 'corresponding-source' and item.get('sourceCommit') == revision for item in components):
+        raise ValueError('Repository corresponding sources are missing from the component index')
+    archives = [asset for item in components for asset in item['assets'] if asset['role'] == 'source']
+    if not archives or not all(asset.get('parts') and re.fullmatch('[0-9a-f]{64}', asset.get('sha256', '')) for asset in archives):
+        raise ValueError('Permanent source archives require checksums and downloadable parts')
+    sources = [part for archive in archives for part in archive['parts']]
+    source_manifest = copy(source_file)
     # Share the README's warning instead of allowing release notes to imply
     # that a candidate build has passed retail-device acceptance.
     readme = (ROOT / 'README.md').read_text()
@@ -415,21 +357,18 @@ def main():
              '- **Linux:** install the AMD64 or ARM64 `.deb`, which includes the browser and Agent server.\n'
              '- **Updating Android:** update both the APK and the Taskarian package in Termux. Provider logins and chat history are retained.\n\n'
              'Local Agent opens without an account login. Publishing from Linux and connecting to remotes still require Tor authorization and account two-factor authentication.\n\n'
-             'Checksums and corresponding source archives are attached.\n')
-    if (args.output / 'SOURCE-ARCHIVES.md').exists():
-        notes += ('Large source archives use lossless numbered parts. Download `SOURCE-ARCHIVES.md` '
-                  'for verification and reconstruction commands; `release.json` records original archive hashes and part order.\n')
+             'Checksums are attached. `component-sources.json` links to the permanent matching component sources and license texts.\n')
     (args.output / 'release-notes.md').write_text(notes)
     result = {'schema': 2, 'tag': tag, 'version': version, 'firefoxVersion': engine, 'testingRelease': True, 'packageVersion': package_version,
               'sourceCommit': revision, 'buildRun': args.run or os.environ.get('GITHUB_RUN_ID'),
               'apps': apps, 'packages': packages + auxiliary, 'sources': sources,
-              'sourceArchives': list(archives.values())}
+              'sourceManifest': source_manifest, 'sourceArchives': archives}
     (args.output / 'release.json').write_text(json.dumps(result, indent=2) + '\n')
     (args.output / 'SHA256SUMS').write_text(''.join(
         sha(file) + '  ' + file.name + '\n' for file in sorted(args.output.iterdir()) if file.name != 'SHA256SUMS'))
     if any(file.stat().st_size >= ASSET_SIZE_LIMIT for file in args.output.iterdir()):
         raise ValueError('Release contains an asset exceeding the GitHub size limit')
-    print('Assembled two Android APKs, four complete native packages and matching sources; not published.')
+    print('Verified two Android APKs, four native packages and permanent source/license links; no source payload downloaded.')
 
 
 if __name__ == '__main__':

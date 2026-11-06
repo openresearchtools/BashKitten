@@ -24,7 +24,7 @@ def publish(target, directory, *, component='application', dependencies=(), vali
     for path in sorted(directory.iterdir()):
         if path.is_file() and not path.is_symlink():
             name = path.name
-            role = ('source' if any(token in name for token in ('-source', '-provenance')) and '.tar' in name
+            role = ('source' if any(token in name for token in ('-source', '-provenance')) and any(extension in name for extension in ('.tar', '.jar'))
                     else 'legal' if name.lower().endswith(('notices.txt', 'licenses.json'))
                     else 'runtime')
             assets[name] = role
@@ -36,7 +36,7 @@ def publish(target, directory, *, component='application', dependencies=(), vali
 
 
 def restore(target, directory, *, component='application'):
-    return store.restore(component, target, inputs(target), directory)
+    return store.restore(component, target, inputs(target), directory, roles=('runtime', 'metadata', 'legal'))
 
 
 def main():

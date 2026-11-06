@@ -2,6 +2,10 @@ name: Complete Taskarian candidates
 'on':
   workflow_dispatch:
     inputs:
+      verify_existing_source:
+        description: Verify stored installers and permanent component links for an existing full source SHA without compiling
+        default: ''
+        type: string
       force_rebuild:
         description: Rebuild selected components instead of reusing published outputs
         default: false
@@ -30,6 +34,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   builders:
+    if: ${{ inputs.verify_existing_source == '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -62,6 +67,7 @@ jobs:
         if [ "$WARM_GKRUST" = true ]; then flags+=(--warm-gkrust); fi
         python3 agent/packaging/remote-components.py build "$TARGET" --components "$COMPONENTS" "${flags[@]}"
   sources:
+    if: ${{ inputs.verify_existing_source == '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     steps:
@@ -78,27 +84,11 @@ jobs:
         GH_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}
       run: python3 agent/packaging/remote-components.py sources
   complete:
-    if: ${{ !inputs.native_only && !inputs.linux_only }}
+    if: ${{ inputs.verify_existing_source == '' && !inputs.native_only && !inputs.linux_only }}
     needs: [builders, sources]
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
-    - name: Reclaim unused hosted runner toolchains
-      run: |
-        df -h /
-        if [[ ${GITHUB_ACTIONS:-} == true && ${RUNNER_ENVIRONMENT:-} == github-hosted ]]; then
-          android_sdk="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          # Retain SDK build-tools and Java for the APK signature checks.
-          for path in "$android_sdk/ndk" "$android_sdk/ndk-bundle" \
-            "$android_sdk/emulator" "$android_sdk/system-images" \
-            "$android_sdk/platforms" "$android_sdk/sources" \
-            /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
-            /opt/hostedtoolcache/CodeQL /opt/hostedtoolcache/go \
-            /opt/hostedtoolcache/PyPy /opt/hostedtoolcache/Ruby /usr/local/share/boost; do
-            if [[ -e "$path" ]]; then sudo rm -rf --one-file-system -- "$path"; fi
-          done
-        fi
-        df -h /
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         persist-credentials: false
@@ -110,13 +100,49 @@ jobs:
           /browser/taskarian/config/version.txt
           /browser/browser/config/version_display.txt
           /README.md
-    - name: Download exact applications and sources by direct release URLs
-      run: python3 agent/packaging/remote-components.py collect --directory candidates
-    - name: Verify six primary binaries and complete source inventory
-      run: python3 agent/packaging/release.py candidates release --candidate-only
+    - name: Pin six applications and permanent component sources without downloading payloads
+      run: python3 agent/packaging/remote-components.py collect --directory release-plan
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: taskarian-complete-candidate
-        path: release/
+        path: release-plan/
+        if-no-files-found: error
+        compression-level: 0
+
+  verify-storage:
+    if: ${{ inputs.verify_existing_source != '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      EXISTING_SOURCE: ${{ inputs.verify_existing_source }}
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+        filter: blob:none
+        sparse-checkout-cone-mode: false
+        sparse-checkout: |
+          /agent/packaging/
+          /browser/taskarian/config/version.txt
+          /browser/browser/config/version_display.txt
+          /README.md
+    - name: Select existing source without rebuilding applications
+      run: |
+        [[ "$EXISTING_SOURCE" =~ ^[0-9a-f]{40}$ ]]
+        git fetch --filter=blob:none --depth=1 origin "$EXISTING_SOURCE"
+    - name: Resolve a small plan without any component payload downloads
+      run: python3 agent/packaging/remote-components.py collect --source "$EXISTING_SOURCE" --directory release-plan
+    - name: Fetch only shipped installers and perform normal release integrity checks
+      run: |
+        python3 agent/packaging/remote-components.py materialize --source "$EXISTING_SOURCE" --plan release-plan/candidate-plan.json --directory candidates
+        python3 agent/packaging/release.py candidates release --candidate-only --verify-existing-source "$EXISTING_SOURCE"
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: taskarian-storage-verification
+        path: |
+          release-plan/candidate-plan.json
+          release/release.json
+          release/component-sources.json
+          release/SHA256SUMS
         if-no-files-found: error
         compression-level: 0
