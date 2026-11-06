@@ -4,6 +4,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import tls from 'node:tls';
+import http from 'node:http';
+import { lookup } from 'node:dns/promises';
 import { createInterface } from 'node:readline';
 import { privateDir, readJson, writeJson } from '../common.mjs';
 import { accessDir, binary, sharingKinds, sharingScope } from './paths.mjs';
@@ -69,33 +71,47 @@ class SharingStack extends AccessStack {
       }
       return this.transport;
     }
-    if (this.children.some(child => child.name === 'cloudflared' && child.exit === undefined && !child.stopping)) return this.transport;
+    if (this.children.some(child => child.name === 'cloudflared' && child.exit === undefined && !child.stopping)) return this.transportStatus();
     this.transport = { kind: 'cloudflare', state: 'starting' };
     // Native cloudflared's TCP origin is its supported WebSocket byte carrier.
     // The bytes are the enrolled Caddy TLS stream; Cloudflare cannot terminate it.
     const config = path.join(this.scope.remoteDir, 'cloudflared.yml');
     await fs.writeFile(config, '{}\n', { mode: 0o600 });
-    const record = await this.launch('cloudflared', binary('cloudflared'), [
-      'tunnel', '--config', config, '--no-autoupdate', '--url', 'tcp://127.0.0.1:' + this.remotePort,
+    await this.launch('cloudflared', binary('cloudflared'), [
+      'tunnel', '--config', config, '--quick-service', 'https://api.trycloudflare.com', '--no-autoupdate', '--url', 'tcp://127.0.0.1:' + this.remotePort,
       '--protocol', 'http2', '--loglevel', 'info', '--metrics', '127.0.0.1:0',
     ], { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !['OTEL_', 'SENTRY_', 'TUNNEL_', 'CLOUDFLARED_', 'CLOUDFLARE_', 'CF_'].some(prefix => key.startsWith(prefix)))), SENTRY_DSN: '' }, { capture: true });
-    const until = Date.now() + 60000;
-    while (Date.now() < until) {
-      if (record.exit !== undefined) throw Error('Cloudflare Quick Tunnel stopped during startup; see its service log');
-      if (this.transport.state === 'running') return this.transport;
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-    throw Error('Cloudflare Quick Tunnel did not return its address; see its service log');
+    // Provisioning and public DNS can take longer than the controller action.
+    // The existing pending setup/status flow waits for upstream readiness.
+    return this.transportStatus();
   }
   captureOutput(name, output) {
     if (name !== 'cloudflared') return;
     const lines = createInterface({ input: output, crlfDelay: Infinity });
     lines.on('line', line => {
       const address = line.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com\b/)?.[0];
-      if (this.transport?.state === 'starting' && address && quickAddress.test(address)) this.transport = { kind: 'cloudflare', state: 'running', address };
+      if (this.transport?.state === 'starting' && !this.transport.address && address && quickAddress.test(address)) this.transport.address = address;
+      const metrics = /Starting metrics server on 127\.0\.0\.1:([0-9]+)\/metrics\b/.exec(line);
+      if (metrics && Number(metrics[1]) > 0 && Number(metrics[1]) <= 65535) this.metricsPort = Number(metrics[1]);
     });
   }
+  async cloudflareReady() {
+    if (!this.metricsPort || !this.transport?.address) return false;
+    const connected = await new Promise(resolve => {
+      const request = http.get({ host: '127.0.0.1', port: this.metricsPort, path: '/ready' }, response => { response.resume(); resolve(response.statusCode === 200); });
+      request.setTimeout(2000, () => request.destroy()); request.once('error', () => resolve(false));
+    });
+    if (!connected) return false;
+    // Quick provisioning may print a name before its public DNS is published.
+    // This is only the explicitly selected provider address; the private Agent
+    // identity is never resolved or sent outside its enrolled TLS stream.
+    let timer;
+    try {
+      return await Promise.race([lookup(new URL(this.transport.address).hostname).then(() => true, () => false), new Promise(resolve => { timer = setTimeout(() => resolve(false), 2000); })]);
+    } finally { clearTimeout(timer); }
+  }
   async transportStatus() {
+    if (this.scope.kind === 'cloudflare' && this.transport?.address) this.transport.state = await this.cloudflareReady() ? 'running' : 'starting';
     if (this.scope.kind !== 'cloudflare' && this.transport && this.tunnel && !this.tunnel.closed) {
       this.transport = await this.tunnel.call('transport-status');
       if (this.transport.state === 'login' && !this.transport.login_url && !this.loginRequested) {
@@ -128,7 +144,7 @@ class SharingStack extends AccessStack {
     for (const name of ['cloudflared', 'remote', 'authelia', 'valkey', 'caddy']) {
       try { await this.stopNamed(name); } catch (error) { failures.push(error); }
     }
-    this.transport = null; this.loginRequested = false; this.tunnel = null;
+    this.transport = null; this.metricsPort = null; this.loginRequested = false; this.tunnel = null;
     this.remoteOrigins = []; this.remoteAuthOrigin = null;
     for (const file of [this.paths.admin, this.paths.auth, this.paths.tunnel, this.paths.sessionSocket]) await fs.rm(file, { force: true });
     if (failures.length) throw new AggregateError(failures, 'The sharing stack could not completely stop');
@@ -187,9 +203,9 @@ export class SharingInstances {
     if (value.instance) return this.get(value).status();
     const instances = await Promise.all([...this.remotes.values()].map(remote => remote.status()));
     const tor = instances[0];
-    return { ...tor, instances, error: instances.find(item => item.enabled && item.error)?.error || tor.error, enabled: this.enabled && instances.some(item => item.enabled),
-      running: instances.some(item => item.running), configured: instances.some(item => item.phase === 'ready'),
-      selectedInstances: instances.filter(item => item.enabled).map(item => item.instance) };
+    return { ...tor, instances, error: instances.find(item => item.enabled && item.error)?.error || tor.error, enabled: this.enabled && instances.some(item => item.enabled || item.awaitingNetwork),
+      running: instances.some(item => item.running), configured: instances.some(item => item.phase === 'ready' || item.awaitingNetwork),
+      selectedInstances: instances.filter(item => item.enabled || item.awaitingNetwork).map(item => item.instance) };
   }
   async setEnabled(value) {
     await this.load();

@@ -221,13 +221,13 @@ public final class AgentSidecar {
     private void acceptSharing(JSONObject state) {
         // Keep only display state here, not the encrypted connection QR or identity.
         org.json.JSONArray instances = state.optJSONArray("instances");
-        boolean configured = state.optString("phase").equals("ready");
+        boolean configured = state.optBoolean("configured") || state.optString("phase").equals("ready");
         java.util.List<String> codes = new java.util.ArrayList<>();
         if (instances == null) { if (state.optBoolean("enabled")) codes.add("Tor"); }
         else for (int i = 0; i < instances.length(); i++) {
             JSONObject instance = instances.optJSONObject(i); if (instance == null) continue;
             configured |= instance.optString("phase").equals("ready");
-            if (!instance.optBoolean("enabled")) continue;
+            if (!instance.optBoolean("enabled") && !instance.optBoolean("awaitingNetwork")) continue;
             switch (instance.optString("instance")) {
                 case "tor": codes.add("Tor"); break;
                 case "cloudflare": codes.add("CF"); break;
@@ -236,7 +236,7 @@ public final class AgentSidecar {
             }
         }
         sharing = value("configured", configured || state.optBoolean("needsSetup") && sharing.optBoolean("configured"), "transports", String.join(" | ", codes),
-            "running", state.optBoolean("running"), "available", !state.optBoolean("needsSetup"), "error", state.optString("error"));
+            "enabled", state.optBoolean("enabled"), "running", state.optBoolean("running"), "available", !state.optBoolean("needsSetup"), "error", state.optString("error"));
         sharingChecked = android.os.SystemClock.elapsedRealtime();
     }
     private void refreshSharing() {
@@ -257,7 +257,7 @@ public final class AgentSidecar {
     private void toggleSharing() {
         final ShareSettingsAdapter owner = sharingAdapter;
         if (owner == null || sharingLoading || sharingChanging || !sharing.optBoolean("available") || !runtime.localIsRunning()) return;
-        final boolean enable = !sharing.optBoolean("running");
+        final boolean enable = !sharing.optBoolean("enabled");
         sharingChanging = true; render();
         owner.dispatch("share-publish", value("all", true, "enabled", enable)).whenComplete((state, failure) -> app.main.post(() -> {
             if (owner != sharingAdapter || !isOpen()) return;
@@ -388,13 +388,14 @@ public final class AgentSidecar {
             runtime.setBackendOn(id, checked, this::actionError);
         }); heading.addView(power);
         if (!remote && sharing.optBoolean("configured")) {
-            if (!on) sharing = value("configured", true, "running", false, "available", sharing.optBoolean("available"), "error", sharing.optString("error"), "transports", sharing.optString("transports"));
-            final boolean shared = on && sharing.optBoolean("running");
-            String label = "Local sharing: " + (!on || sharing.optBoolean("available") ? shared ? "On" : "Off" : "unavailable");
+            if (!on) sharing = value("configured", true, "enabled", sharing.optBoolean("enabled"), "running", false, "available", sharing.optBoolean("available"), "error", sharing.optString("error"), "transports", sharing.optString("transports"));
+            final boolean shared = on && sharing.optBoolean("enabled");
+            String shareStatus = !shared ? "Off" : sharing.optBoolean("running") ? "On" : !sharing.optString("error").isEmpty() ? "On, publishing failed" : "On, waiting for connection";
+            String label = "Local sharing: " + (!on || sharing.optBoolean("available") ? shareStatus : "unavailable");
             SwitchCompat share = powerSwitch(label); share.setText(sharing.optString("transports").isEmpty() ? "Share" : sharing.optString("transports")); share.setTextSize(9); share.setTextColor(muted);
             share.setChecked(shared); share.setEnabled(on && sharing.optBoolean("available") && !sharingLoading && !sharingChanging);
             share.setTooltipText(sharing.optString("error").isEmpty() ? label : label + ". " + sharing.optString("error"));
-            androidx.core.view.ViewCompat.setStateDescription(share, sharingChanging ? "Changing sharing" : shared ? "On" : "Off");
+            androidx.core.view.ViewCompat.setStateDescription(share, sharingChanging ? "Changing sharing" : shareStatus);
             share.setOnCheckedChangeListener((button, checked) -> { if (checked != shared) { button.setChecked(shared); toggleSharing(); } });
             heading.addView(share);
         }

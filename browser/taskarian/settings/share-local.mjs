@@ -58,8 +58,8 @@ export async function renderSection({ root, call, info, signal }) {
       if (state.migrationRequired) body.append(node(body, 'p', 'Replace the previous remote identity to use encrypted connections. Old connection exports will stop working.'));
       action(body, state.migrationRequired ? 'Reissue identity' : 'Turn on', () => account(Boolean(state.migrationRequired))); return;
     }
-    body.append(node(body, 'p', state.running ? 'Publishing is on' : state.error ? 'Publishing failed' : 'Publishing is off'));
-    action(body, state.running ? 'Turn off' : 'Turn on', async () => draw(await shareCall('share-publish', { enabled: !state.running })));
+    body.append(node(body, 'p', state.running ? 'Publishing is on' : state.error ? 'Publishing failed' : state.enabled ? 'Publishing is waiting for the connection' : 'Publishing is off'));
+    action(body, state.enabled ? 'Turn off' : 'Turn on', async () => draw(await shareCall('share-publish', { enabled: !state.enabled })));
     const startup = check(body, 'Start publishing automatically', state.startup === true);
     startup.onchange = () => {
       const enabled = startup.checked; startup.checked = state.startup === true;

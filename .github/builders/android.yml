@@ -159,7 +159,7 @@ jobs:
         import json, os, subprocess
         from pathlib import Path
         payload = json.loads(Path('references/runtime-payload.json').read_text())
-        patterns = ['/LICENSE', '/AGENTS.md', '/.github/', '/agent/', '!/agent/localai/', '!/agent/machines/vendor/',
+        patterns = ['/.gitignore', '/LICENSE', '/AGENTS.md', '/.github/', '/agent/', '!/agent/localai/', '!/agent/machines/vendor/',
                     '/auth/build/', '/auth/upstreams.lock.json', '/auth/dependencies/*/sources.json',
                     '/auth/dependencies/termux-lock.json', '/node/',
                     '/os/skills/', '/os/licenses/', '/os/NOTICE', '/os/packaging/', '/os/upstream/sources.json',

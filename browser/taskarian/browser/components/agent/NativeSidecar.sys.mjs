@@ -182,9 +182,9 @@ export class NativeSidecar {
         if (!this.closed && epoch === this.sharingEpoch.get(backend.id)) {
           if (local) this.host.localOn = local.web?.status === "running";
           this.sharing.set(backend.id, {
-            configured: state.phase === "ready" || state.instances?.some(item => item.phase === "ready"),
-            running: state.running === true, available: true, error: state.error,
-            transports: (state.instances || [{ instance: "tor", enabled: state.enabled }]).filter(item => item.enabled).map(item => ({ tor: "Tor", cloudflare: "CF", tailcat: "Tcat", tailscale: "TS" })[item.instance]).filter(Boolean).join(" | "),
+            configured: state.configured === true || state.phase === "ready" || state.instances?.some(item => item.phase === "ready"),
+            enabled: state.enabled === true, running: state.running === true, available: true, error: state.error,
+            transports: (state.instances || [{ instance: "tor", enabled: state.enabled }]).filter(item => item.enabled || item.awaitingNetwork).map(item => ({ tor: "Tor", cloudflare: "CF", tailcat: "Tcat", tailscale: "TS" })[item.instance]).filter(Boolean).join(" | "),
           });
         }
       } catch (error) {
@@ -203,8 +203,8 @@ export class NativeSidecar {
     this.sharingEpoch.set(backend.id, (this.sharingEpoch.get(backend.id) || 0) + 1);
     await this.render();
     try {
-      if (!state.running) await this.sharingRequest(backend, "start");
-      await this.sharingRequest(backend, "share-publish", { all: true, enabled: !state.running });
+      if (!state.enabled) await this.sharingRequest(backend, "start");
+      await this.sharingRequest(backend, "share-publish", { all: true, enabled: !state.enabled });
     } finally {
       this.sharingPending.delete(backend.id);
       await this.refreshSharing();
@@ -248,12 +248,13 @@ export class NativeSidecar {
       const sharing = this.sharing.get(backend.id);
       if (backend.kind !== "remote" && sharing?.configured) {
         if (!on) sharing.running = false;
-        const running = on && sharing.running === true;
-        const label = `${backend.name} sharing: ${sharing.available || !on ? running ? "On" : "Off" : "unavailable"}`;
+        const enabled = on && sharing.enabled === true;
+        const status = !enabled ? "Off" : sharing.running ? "On" : sharing.error ? "On, publishing failed" : "On, waiting for connection";
+        const label = `${backend.name} sharing: ${sharing.available || !on ? status : "unavailable"}`;
         const share = this.button("", label, () => this.toggleSharing(backend));
         share.className = "native-power-toggle native-sharing-toggle";
         share.append(this.node("span", { class: "native-sharing-codes" }, sharing.transports || "Share"), this.node("span", { class: "native-power-track", "aria-hidden": "true" }));
-        share.setAttribute("role", "switch"); share.setAttribute("aria-checked", String(Boolean(running)));
+        share.setAttribute("role", "switch"); share.setAttribute("aria-checked", String(Boolean(enabled)));
         share.disabled = !on || !sharing.available || this.sharingPending.has(backend.id);
         share.setAttribute("aria-busy", String(this.sharingPending.has(backend.id)));
         if (sharing.error) share.title = `${label}. ${sharing.error}`;
