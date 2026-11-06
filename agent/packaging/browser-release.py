@@ -113,18 +113,24 @@ def remember(result, directory, kind):
     return file
 
 
-def engine_record(result, directory, target):
-    browser = module('browser-component')
+def checkpoint_inventory(result, directory):
+    """Keep release-only metadata outside the native checkpoint's flat inventory."""
     directory = Path(directory)
-    # SHA256SUMS belongs to the original native checkpoint. The release also
-    # carries full corresponding legal archives, outside that payload inventory.
     checkpoint_files = {line.split('  ', 1)[1]
                         for line in (directory / 'SHA256SUMS').read_text().splitlines()}
     for asset in result['manifest']['assets']:
-        if asset['role'] == 'legal' and asset['name'] not in checkpoint_files:
-            legal = directory.parent / 'legal'
-            legal.mkdir(exist_ok=True)
-            shutil.move(directory / asset['name'], legal / asset['name'])
+        if asset['role'] in ('legal', 'metadata') and asset['name'] not in checkpoint_files:
+            path = directory / asset['name']
+            if path.is_file():
+                metadata = directory.parent / (directory.name + '-metadata')
+                metadata.mkdir(exist_ok=True)
+                shutil.move(path, metadata / asset['name'])
+
+
+def engine_record(result, directory, target):
+    browser = module('browser-component')
+    directory = Path(directory)
+    checkpoint_inventory(result, directory)
     browser.verify_checksums(directory)
     if target.startswith('android'):
         native = module('android-native-component')
@@ -193,12 +199,13 @@ def restore_resources(directory, target):
         return False  # Final APK lookup occurs after its exact companion is known.
     store, browser = module('component-store'), module('browser-component')
     result = store.restore('browser-resources', target, inputs('browser-resources', target), directory,
-                           roles=('runtime', 'metadata', 'build-support'), requested_source=source())
+                           roles=('runtime', 'metadata', 'build-support', 'legal'), requested_source=source())
     if result is None:
         for file in Path(directory).iterdir():
             shutil.rmtree(file) if file.is_dir() else file.unlink()
         return False
     try:
+        checkpoint_inventory(result, directory)
         browser.verify(directory, target, browser.fingerprint(target))
     except (OSError, ValueError, KeyError, TypeError, tarfile.TarError, zipfile.BadZipFile) as error:
         for file in Path(directory).iterdir():
