@@ -1248,7 +1248,7 @@ export class TaskarianBrowserControlChild extends JSWindowActorChild {
     if (!attrs) return true;
     const id = attrs.userContextId;
     return (id >= 0xB4500000 && id <= 0xB450FFFF) ||
-      attrs.geckoViewSessionContextId?.startsWith("gvctx626173686b697474656e2d6167656e742d75692d");
+      attrs.geckoViewSessionContextId?.startsWith("gvctx7461736b617269616e2d6167656e742d75692d");
   }
 
   actorCreated() {
