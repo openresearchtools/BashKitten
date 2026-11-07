@@ -1,0 +1,31 @@
+#!/bin/sh
+set -e
+umask 022
+# SPDX-License-Identifier: AGPL-3.0-only
+if [ "$1" = configure ] && [ -f /etc/apparmor.d/taskarian-podman ]; then
+  # Never replace administrator additions, deletions or disable/complain choices.
+  if [ ! -e /etc/apparmor.d/local/taskarian-podman ] && [ ! -L /etc/apparmor.d/local/taskarian-podman ]; then
+    mkdir -p /etc/apparmor.d/local
+    install -m 644 /dev/null /etc/apparmor.d/local/taskarian-podman
+  fi
+  if [ ! -e /etc/apparmor.d/disable/taskarian-podman ] && [ ! -L /etc/apparmor.d/disable/taskarian-podman ] &&
+      command -v apparmor_parser >/dev/null 2>&1 && aa-enabled --quiet 2>/dev/null; then
+    apparmor_parser -r -T -W /etc/apparmor.d/taskarian-podman ||
+      echo 'Taskarian: failed to load the private Podman AppArmor profile; container startup may be denied. Check the parser error above and local AppArmor policy.' >&2
+  fi
+fi
+runtime=@RUNTIME@
+if [ ! -f "$runtime/ready" ]; then
+  mkdir -p "$runtime"
+  cp -a '/usr/lib/taskarian/node_modules' "$runtime/"
+  cp '/usr/lib/taskarian/package.json' '/usr/lib/taskarian/package-lock.json' "$runtime/"
+  touch "$runtime/ready"
+fi
+printf '%s\n' @MANAGED@ > "$runtime/managed.json"
+# Retire only the exact global alias created by older Taskarian packages.
+# Private agent shells use node/bin/pi; never replace an independent Pi.
+if [ "$(readlink '/usr/bin/pi')" = taskarian-pi ]; then rm '/usr/bin/pi'; fi
+mkdir -p '/var/lib/Taskarian'
+cp '/usr/lib/taskarian/build-platform.json' '/var/lib/Taskarian/installed.json.tmp'
+chmod 644 '/var/lib/Taskarian/installed.json.tmp'
+mv '/var/lib/Taskarian/installed.json.tmp' '/var/lib/Taskarian/installed.json'

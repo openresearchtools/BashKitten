@@ -37,6 +37,8 @@ this is separate from the wake locks managed by Turn on/off.
 Current builds are published as prereleases. To receive them through APT, install
 the platform's main keyring and nightly setup package from the
 [package repository](https://github.com/openresearchtools/apt).
+Native Arch Linux and Omarchy packages use that repository's signed pacman
+catalogue; see [installation](docs/omarchy-installation.md).
 
 About and full licenses are available offline in the browser's settings.
 Taskarian's own code is [AGPL-3.0-only](LICENSE); inherited browser and dependency notices retain

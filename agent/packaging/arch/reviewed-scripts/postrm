@@ -1,0 +1,12 @@
+#!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-only
+# Like dh_apparmor, retain loaded policy on removal; removing a profile from
+# running processes could otherwise drop confinement. dpkg owns the conffile.
+if [ "$1" = purge ] && [ ! -e /etc/apparmor.d/taskarian-podman ]; then
+  rm -f /etc/apparmor.d/disable/taskarian-podman /etc/apparmor.d/force-complain/taskarian-podman
+  rm -f /etc/apparmor.d/local/taskarian-podman /var/cache/apparmor/*/taskarian-podman
+fi
+if [ "$1" = remove ] || [ "$1" = purge ]; then
+  if [ "$(readlink '/usr/bin/pi')" = taskarian-pi ]; then rm '/usr/bin/pi'; fi
+fi
+# Preserve user data, native Pi sessions/credentials and retained runtimes.

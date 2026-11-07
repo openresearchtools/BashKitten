@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Native pacman equivalent of the reviewed Debian runtime and AppArmor hooks.
+# Desktop/icon/font caches are maintained by the installed Arch package hooks.
+post_install() {
+  local runtime=@RUNTIME@
+  umask 022
+  if [ ! -f "$runtime/ready" ]; then
+    mkdir -p "$runtime" || return 1
+    cp -a /usr/lib/taskarian/node_modules "$runtime/" || return 1
+    cp /usr/lib/taskarian/package.json /usr/lib/taskarian/package-lock.json "$runtime/" || return 1
+    touch "$runtime/ready" || return 1
+  fi
+  printf '%s\n' @MANAGED@ > "$runtime/managed.json" || return 1
+  if [ "$(readlink /usr/bin/pi)" = taskarian-pi ]; then rm /usr/bin/pi; fi
+  mkdir -p /var/lib/Taskarian || return 1
+  cp /usr/lib/taskarian/build-platform.json /var/lib/Taskarian/installed.json.tmp || return 1
+  chmod 644 /var/lib/Taskarian/installed.json.tmp || return 1
+  mv /var/lib/Taskarian/installed.json.tmp /var/lib/Taskarian/installed.json || return 1
+
+  if [ -f /etc/apparmor.d/taskarian-podman ]; then
+    if [ ! -e /etc/apparmor.d/local/taskarian-podman ] && [ ! -L /etc/apparmor.d/local/taskarian-podman ]; then
+      mkdir -p /etc/apparmor.d/local || return 1
+      install -m 644 /dev/null /etc/apparmor.d/local/taskarian-podman || return 1
+    fi
+    if [ ! -e /etc/apparmor.d/disable/taskarian-podman ] && [ ! -L /etc/apparmor.d/disable/taskarian-podman ] &&
+        command -v apparmor_parser >/dev/null 2>&1 && aa-enabled --quiet 2>/dev/null; then
+      apparmor_parser -r -T -W /etc/apparmor.d/taskarian-podman ||
+        echo 'Taskarian: failed to load the private Podman AppArmor profile; container startup may be denied. Check the parser error above and local AppArmor policy.' >&2
+    fi
+  fi
+}
+
+post_upgrade() {
+  post_install "$1"
+}
+
+post_remove() {
+  if [ "$(readlink /usr/bin/pi)" = taskarian-pi ]; then rm /usr/bin/pi; fi
+  # Retain native Pi runtimes, user data and loaded AppArmor policy, matching
+  # Debian removal. Pacman backup handles the administrator's profile edits.
+}

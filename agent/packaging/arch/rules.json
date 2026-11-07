@@ -1,0 +1,248 @@
+{
+  "pkgname": "taskarian",
+  "license": [
+    "AGPL-3.0-only",
+    "MPL-2.0",
+    "custom"
+  ],
+  "url": "https://taskarian.com",
+  "depends": [
+    "bash",
+    "desktop-file-utils",
+    "hicolor-icon-theme"
+  ],
+  "debian_dependency_map": {
+    "python3": [
+      "python>=3.12",
+      "python<3.15"
+    ],
+    "git": [
+      "git"
+    ],
+    "gh": [
+      "github-cli"
+    ],
+    "ripgrep": [
+      "ripgrep"
+    ],
+    "fd-find": [
+      "fd"
+    ],
+    "ca-certificates": [
+      "ca-certificates"
+    ],
+    "curl": [
+      "curl"
+    ],
+    "unzip": [
+      "unzip"
+    ],
+    "zip": [
+      "zip"
+    ],
+    "tar": [
+      "tar"
+    ],
+    "libasound2t64 | libasound2": [
+      "alsa-lib"
+    ],
+    "libdbus-glib-1-2": [
+      "dbus-glib"
+    ],
+    "libgtk-3-0t64 | libgtk-3-0": [
+      "gtk3"
+    ],
+    "libx11-xcb1": [
+      "libx11"
+    ],
+    "libdbusmenu-glib4": [
+      "libdbusmenu-glib"
+    ],
+    "libdbusmenu-gtk3-4": [
+      "libdbusmenu-gtk3"
+    ],
+    "libgomp1": [
+      "gcc-libs>=13.1"
+    ],
+    "libstdc++6": [
+      "gcc-libs>=13.1"
+    ],
+    "libvulkan1": [
+      "vulkan-icd-loader"
+    ],
+    "fonts-dejavu-core": [
+      "ttf-dejavu"
+    ],
+    "libc6 (>= 2.34)": [
+      "glibc>=2.39"
+    ],
+    "libc6 (>= 2.38)": [
+      "glibc>=2.39"
+    ],
+    "libevent-2.1-7t64 (>= 2.1.8-stable)": [
+      "libevent>=2.1.8"
+    ],
+    "liblzma5 (>= 5.1.1alpha+20120614)": [
+      "xz>=5.1.1"
+    ],
+    "libssl3t64 (>= 3.0.0)": [
+      "openssl>=3.0.0"
+    ],
+    "zlib1g (>= 1:1.1.4)": [
+      "zlib"
+    ],
+    "python3 (>= 3.12)": [
+      "python>=3.12",
+      "python<3.15"
+    ],
+    "python3 (<< 3.15)": [
+      "python>=3.12",
+      "python<3.15"
+    ],
+    "libc6 (>= 2.28)": [
+      "glibc>=2.39"
+    ],
+    "libgcc-s1": [
+      "gcc-libs>=13.1"
+    ],
+    "dbus-user-session": [
+      "dbus"
+    ],
+    "gstreamer1.0-pipewire": [
+      "gst-plugin-pipewire"
+    ],
+    "gstreamer1.0-plugins-bad": [
+      "gst-plugins-bad"
+    ],
+    "gstreamer1.0-plugins-base": [
+      "gst-plugins-base"
+    ],
+    "gstreamer1.0-plugins-good": [
+      "gst-plugins-good"
+    ],
+    "gstreamer1.0-pulseaudio": [
+      "gst-plugins-good"
+    ],
+    "gstreamer1.0-tools": [
+      "gstreamer"
+    ],
+    "iptables": [
+      "iptables"
+    ],
+    "libc6 (>= 2.39)": [
+      "glibc>=2.39"
+    ],
+    "libcap2 (>= 1:2.10)": [
+      "libcap"
+    ],
+    "libgcc-s1 (>= 4.2)": [
+      "gcc-libs>=13.1"
+    ],
+    "libglib2.0-0t64 (>= 2.75.3)": [
+      "glib2>=2.75.3"
+    ],
+    "libjson-c5 (>= 0.15)": [
+      "json-c>=0.15"
+    ],
+    "libseccomp2 (>= 2.3.0)": [
+      "libseccomp>=2.5.0"
+    ],
+    "libseccomp2 (>= 2.5.0)": [
+      "libseccomp>=2.5.0"
+    ],
+    "libsystemd0": [
+      "systemd-libs"
+    ],
+    "libsystemd0 (>= 246)": [
+      "systemd-libs>=246"
+    ],
+    "pipewire-bin": [
+      "pipewire"
+    ],
+    "systemd": [
+      "systemd"
+    ],
+    "uidmap": [
+      "shadow"
+    ],
+    "libxkbcommon0": [
+      "libxkbcommon"
+    ],
+    "libdrm2": [
+      "libdrm"
+    ],
+    "libgbm1": [
+      "mesa"
+    ],
+    "libegl1": [
+      "libglvnd"
+    ],
+    "libgles2": [
+      "libglvnd"
+    ],
+    "xkb-data": [
+      "xkeyboard-config"
+    ],
+    "libc6 (>= 2.35)": [
+      "glibc>=2.39"
+    ],
+    "coreutils": [
+      "coreutils"
+    ],
+    "cpio": [
+      "cpio"
+    ],
+    "findutils": [
+      "findutils"
+    ],
+    "fontconfig": [
+      "fontconfig"
+    ],
+    "libcurl4t64 (>= 7.16.2)": [
+      "curl>=7.16.2"
+    ],
+    "libgcc-s1 (>= 4.0)": [
+      "gcc-libs>=13.1"
+    ],
+    "liblcms2-2 (>= 2.14)": [
+      "lcms2>=2.14"
+    ],
+    "libnspr4 (>= 2:4.12)": [
+      "nspr>=4.12"
+    ],
+    "libnss3 (>= 2:3.94)": [
+      "nss>=3.94"
+    ],
+    "libpixman-1-0 (>= 0.40.0)": [
+      "pixman>=0.40.0"
+    ],
+    "libstdc++6 (>= 13.1)": [
+      "gcc-libs>=13.1"
+    ],
+    "libuuid1 (>= 2.20.1)": [
+      "util-linux-libs>=2.20.1"
+    ],
+    "libxslt1.1 (>= 1.1.32)": [
+      "libxslt>=1.1.32"
+    ],
+    "util-linux": [
+      "util-linux"
+    ],
+    "zlib1g (>= 1:1.2.3.4)": [
+      "zlib"
+    ]
+  },
+  "maintainer_adapter": "taskarian-linux-v1",
+  "backup": [
+    "etc/apparmor.d/taskarian-podman"
+  ],
+  "provides": [
+    "taskarian-desktop"
+  ],
+  "conflicts": [
+    "taskarian-desktop"
+  ],
+  "replaces": [
+    "taskarian-desktop"
+  ]
+}

@@ -177,6 +177,34 @@ jobs:
         PY
     - name: Require a newer version across stable and prerelease channels
       run: python3 -B agent/packaging/release_version.py check
+    - name: Package native Arch and Omarchy installers from the verified Linux DEBs
+      env:
+        RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        SOURCE_DATE_EPOCH: '0'
+      run: |
+        sudo apt-get update
+        sudo apt-get install --yes --no-install-recommends python3-zstandard zstd
+        python3 -B agent/packaging/arch/release.py \
+          --input-directory release --release-tag "$RELEASE_TAG" \
+          --pkgrel 1 --output "$RUNNER_TEMP/arch-release"
+        python3 - <<'PY'
+        import hashlib, os, shutil
+        from pathlib import Path
+        release = Path('release')
+        for source in sorted((Path(os.environ['RUNNER_TEMP']) / 'arch-release').iterdir()):
+            if not source.is_file() or (release / source.name).exists():
+                raise SystemExit('Unexpected or duplicate Arch release output: ' + source.name)
+            shutil.move(source, release / source.name)
+        files = sorted(path for path in release.iterdir() if path.name != 'SHA256SUMS')
+        if any(not path.is_file() or path.stat().st_size >= 2 * 1024 ** 3 for path in files):
+            raise SystemExit('Every release asset must be a file smaller than 2 GiB')
+        with (release / 'SHA256SUMS').open('w') as output:
+            for path in files:
+                with path.open('rb') as stream:
+                    digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+                output.write(digest + '  ' + path.name + '\n')
+        PY
+        (cd release && sha256sum --check SHA256SUMS)
     - name: Publish installers and permanent source/license index
       env:
         GH_TOKEN: ${{ github.token }}

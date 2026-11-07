@@ -105,6 +105,19 @@ native packages plus corresponding sources. A release must match the exact
 successful candidate run. Runtime/device validation happens outside the repository. Prereleases are published
 for that testing; a completed build does not certify device acceptance. Logs, probes and test profiles are not shipped.
 
+The main publisher also creates native Arch Linux/Omarchy packages for `x86_64`
+and `aarch64` from its already downloaded and verified Linux `amd64` and `arm64`
+DEBs. `arch/release.py` and its reviewed rules preserve the application payload,
+bundled Podman/crun helpers, guest DEBs, licenses and component provenance. Native
+package dependencies and a pacman install hook replace Debian package metadata
+and reviewed maintainer actions. No component compilation or second installer
+download is needed. Both package formats and Arch provenance are uploaded in the
+same publication, with the complete asset inventory covered by `SHA256SUMS`.
+
+The existing `openresearchtools/apt` manifest already tracks Taskarian. Its signed
+pacman catalogue indexes these native Arch assets: stable releases go to `stable`,
+prereleases to `nightly`. See [Omarchy installation](../../docs/omarchy-installation.md).
+
 GitHub requires [each release asset to be smaller than 2 GiB](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases).
 The collector preserves smaller source archives unchanged and splits larger ones
 into ordered 1 GiB binary parts without recompression or removing any sources or
