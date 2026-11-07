@@ -67,7 +67,7 @@ bool IsProtectedAgentContext(const OriginAttributes& attributes) {
   return (attributes.mUserContextId >= 0xB4500000 &&
           attributes.mUserContextId <= 0xB450FFFF) ||
          StringBeginsWith(attributes.mGeckoViewSessionContextId,
-                          u"gvctx626173686b697474656e2d6167656e742d"_ns);
+                          u"gvctx7461736b617269616e2d6167656e742d75692d"_ns);
 }
 
 nsresult SetAgentClientAuth(const nsACString& host,

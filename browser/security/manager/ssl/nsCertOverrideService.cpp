@@ -827,7 +827,7 @@ static bool IsAgentScope(const nsACString& host, const OriginAttributes& attrs) 
   const bool service = (attrs.mUserContextId >= 0xB4510000 &&
                         attrs.mUserContextId <= 0xB451FFFF) ||
       StringBeginsWith(attrs.mGeckoViewSessionContextId,
-                       u"gvctx626173686b697474656e2d736572766963652d"_ns);
+                       u"gvctx7461736b617269616e2d736572766963652d"_ns);
   return (IsProtectedAgentContext(attrs) &&
           (host.EqualsLiteral("127.0.0.1") || IsRemoteAgentIdentity(host))) ||
          (service && host.EqualsLiteral("127.0.0.1"));
