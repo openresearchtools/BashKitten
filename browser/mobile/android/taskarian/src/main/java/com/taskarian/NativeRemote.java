@@ -4,13 +4,17 @@ package com.taskarian;
 import android.content.Context;
 import com.taskarian.remote.mobile.Connection;
 import com.taskarian.remote.mobile.Mobile;
+import java.net.InterfaceAddress;
+import java.net.NetworkInterface;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Enumeration;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 /** One native enrollment. Its owner runs blocking calls off the UI thread. */
 final class NativeRemote implements AutoCloseable {
+    private static boolean networkInterfacesConfigured;
     private final SecretStore tokens;
     private final Connection client;
     private final Object tokenLock = new Object();
@@ -19,6 +23,7 @@ final class NativeRemote implements AutoCloseable {
 
     NativeRemote(Context context, JSONObject bundle, String torSocket) throws Exception {
         go.Seq.setContext(context.getApplicationContext());
+        configureNetworkInterfaces();
         String id = bundle.getString("id");
         if (!id.matches("[a-f0-9]{48}")) throw new IllegalArgumentException("Invalid remote identity");
         // Keep token rotation separate from the connection catalogue. The native
@@ -46,6 +51,35 @@ final class NativeRemote implements AutoCloseable {
             Arrays.fill(enrollment, (byte) 0); enrollment = null;
             throw error;
         } finally { if (savedToken != null) Arrays.fill(savedToken, (byte) 0); }
+    }
+
+    private static synchronized void configureNetworkInterfaces() throws Exception {
+        if (networkInterfacesConfigured) return;
+        Mobile.setNetworkInterfaces(NativeRemote::networkInterfaces);
+        networkInterfacesConfigured = true;
+    }
+
+    /** Called by upstream netmon on its worker, using Android's supported Java API. */
+    private static String networkInterfaces() throws Exception {
+        JSONArray result = new JSONArray();
+        Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+        while (interfaces != null && interfaces.hasMoreElements()) {
+            NetworkInterface value = interfaces.nextElement();
+            JSONArray addresses = new JSONArray();
+            boolean broadcast = false;
+            for (InterfaceAddress address : value.getInterfaceAddresses()) {
+                String ip = address.getAddress().getHostAddress();
+                int zone = ip.indexOf('%');
+                if (zone >= 0) ip = ip.substring(0, zone);
+                addresses.put(ip + "/" + address.getNetworkPrefixLength());
+                broadcast |= address.getBroadcast() != null;
+            }
+            result.put(new JSONObject().put("Name", value.getName()).put("Index", value.getIndex())
+                .put("MTU", value.getMTU()).put("Up", value.isUp()).put("Broadcast", broadcast)
+                .put("Loopback", value.isLoopback()).put("PointToPoint", value.isPointToPoint())
+                .put("Multicast", value.supportsMulticast()).put("Addresses", addresses));
+        }
+        return result.toString();
     }
 
     static String host(JSONObject bundle) throws Exception {
