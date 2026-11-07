@@ -560,6 +560,9 @@ public final class AgentRuntime {
         connection.request(client -> client.phone(action, value, identity), done, failure);
     }
     public void command(String name, JSONObject args, Consumer<JSONObject> done, Consumer<String> fail) {
+        command(name, args, done, fail, null);
+    }
+    private void command(String name, JSONObject args, Consumer<JSONObject> done, Consumer<String> fail, BooleanSupplier owner) {
         final JSONObject input;
         try { input = args == null ? new JSONObject() : new JSONObject(args.toString()); }
         catch (Exception error) { fail.accept("Unable to send service command."); return; }
@@ -577,7 +580,8 @@ public final class AgentRuntime {
         final String installation = termux.installationId();
         try {
             updates.ensureMatching().whenComplete((ignored, error) -> app.main.post(() -> {
-                if (generation != operation || background != backgroundOperation || !localSetupReady() || !installation.equals(termux.installationId())) {
+                if ((owner == null ? generation != operation : !owner.getAsBoolean()) || background != backgroundOperation
+                        || !localSetupReady() || !installation.equals(termux.installationId())) {
                     clear.run(); fail.accept("The service request changed while packages were updating."); return;
                 }
                 if (error == null) send.run();
@@ -586,8 +590,8 @@ public final class AgentRuntime {
         } catch (RuntimeException error) { clear.run(); throw error; }
     }
     boolean shareNeedsSetup() {
-        if (!desired || !termuxSetupAttempted || !termux.permissionGranted()
-            || !termux.installationId().equals(app.policies.getString("agent.termuxInstallation", ""))) return true;
+        // Local administration outlives the selected remote's protected view.
+        if (!localSetupReady()) return true;
         for (String name : new String[]{app.getPackageName(), TermuxConnection.PACKAGE}) {
             if (!batteryDeferred.contains(name) && !batteryExempt(name)) return true;
         }
@@ -597,23 +601,28 @@ public final class AgentRuntime {
     // remote document. Missing permissions/setup use the existing Local flow.
     void startShareLocal(Runnable done, Consumer<String> failure) {
         if (shareNeedsSetup()) { failure.accept("Complete Local setup before publishing this device."); return; }
-        final int generation = operation;
+        JSONObject web = status.optJSONObject("web");
+        if ((selected.equals("local") && state.equals("stopping")) || web != null && web.optString("status").equals("stopping")) {
+            failure.accept("Wait for Local to finish stopping before starting Share Local."); return;
+        }
+        final int generation = backgroundOperation;
+        final String installation = termux.installationId();
         recordLocalControl(true);
+        BooleanSupplier current = () -> currentPhoneOwner(generation, installation);
         command("start", new JSONObject(), result -> {
-            if (generation != operation || !desired) { failure.accept("Agent changed while starting Share Local. Retry from its current state."); return; }
+            if (!current.getAsBoolean()) { failure.accept("Agent changed while starting Share Local. Retry from its current state."); return; }
             try {
-                final String installation = termux.installationId();
                 // Starting the private host does not enroll a browser certificate.
                 // Only the matching Local session handshake below can do that.
                 stored(() -> { verifyLocalStatus(result.getJSONObject("web")); return true; }, ignored -> {
-                    if (generation != operation || !desired || !localSetupReady() || !installation.equals(termux.installationId())) { failure.accept("Agent changed while starting Share Local."); return; }
+                    if (!current.getAsBoolean()) { failure.accept("Agent changed while starting Share Local."); return; }
                     status = result;
                     connectPhoneControls(); phoneVoice.ready(); changed();
-                    if (selected.equals("local")) { acceptStatus(result); poll(); }
+                    if (selected.equals("local") && desired) { acceptStatus(result); poll(); }
                     done.run();
                 }, failure);
             } catch (Exception error) { failure.accept(error.getMessage()); }
-        }, failure);
+        }, failure, current);
     }
     private void acceptStatus(JSONObject value) {
         final int generation = operation;
