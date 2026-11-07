@@ -59,16 +59,14 @@ class SharingStack extends AccessStack {
   async startTransport() {
     await this.startNative();
     if (this.scope.kind !== 'cloudflare') {
+      // tsnet.Start owns initial login and saved-profile reconnection. Merely
+      // observing startup must not force an interactive provider login.
       if (!this.transport) this.transport = await this.tunnel.call('transport-start', {
         kind: this.scope.kind, dir: path.join(this.scope.remoteDir, 'network'),
         host: await this.remote.hostname(), initialize: (await this.remote.state()).phase !== 'ready', target: '127.0.0.1:' + this.remotePort,
       });
       else this.transport = await this.tunnel.call('transport-status');
       if (this.transport.error) throw Error(this.transport.error);
-      if (this.transport.state === 'login' && !this.transport.login_url && !this.loginRequested) {
-        await this.tunnel.call('transport-login'); this.loginRequested = true;
-        this.transport = await this.tunnel.call('transport-status');
-      }
       return this.transport;
     }
     if (this.children.some(child => child.name === 'cloudflared' && child.exit === undefined && !child.stopping)) return this.transportStatus();
@@ -114,10 +112,6 @@ class SharingStack extends AccessStack {
     if (this.scope.kind === 'cloudflare' && this.transport?.address) this.transport.state = await this.cloudflareReady() ? 'running' : 'starting';
     if (this.scope.kind !== 'cloudflare' && this.transport && this.tunnel && !this.tunnel.closed) {
       this.transport = await this.tunnel.call('transport-status');
-      if (this.transport.state === 'login' && !this.transport.login_url && !this.loginRequested) {
-        await this.tunnel.call('transport-login'); this.loginRequested = true;
-        this.transport = await this.tunnel.call('transport-status');
-      }
     }
     return this.transport || { kind: this.scope.kind, state: 'off' };
   }
@@ -144,7 +138,7 @@ class SharingStack extends AccessStack {
     for (const name of ['cloudflared', 'remote', 'authelia', 'valkey', 'caddy']) {
       try { await this.stopNamed(name); } catch (error) { failures.push(error); }
     }
-    this.transport = null; this.metricsPort = null; this.loginRequested = false; this.tunnel = null;
+    this.transport = null; this.metricsPort = null; this.tunnel = null;
     this.remoteOrigins = []; this.remoteAuthOrigin = null;
     for (const file of [this.paths.admin, this.paths.auth, this.paths.tunnel, this.paths.sessionSocket]) await fs.rm(file, { force: true });
     if (failures.length) throw new AggregateError(failures, 'The sharing stack could not completely stop');

@@ -209,8 +209,6 @@ func (p *pipe) action(r request) (any, error) {
 	case "transport-status":
 		data, err := c.TransportStatus()
 		return json.RawMessage(data), err
-	case "begin-transport-login":
-		return true, c.BeginTransportLogin()
 	case "login-route":
 		if p.gateway != nil {
 			return nil, errors.New("Agent route already open")

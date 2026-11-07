@@ -146,11 +146,6 @@ func action(running **host.Host, publisher **transport.Publisher, r request) (an
 			return transport.Status{State: "stopped"}, nil
 		}
 		return (*publisher).Status()
-	case "transport-login":
-		if *publisher == nil {
-			return nil, errors.New("publishing transport is stopped")
-		}
-		return true, (*publisher).BeginLogin()
 	case "transport-stop":
 		if *publisher != nil {
 			(*publisher).Close()

@@ -134,8 +134,7 @@ func (c *Connection) TransportStatus() (string, error) {
 	data, err := json.Marshal(status)
 	return string(data), err
 }
-func (c *Connection) BeginTransportLogin() error { return c.client.BeginTransportLogin() }
-func (c *Connection) CancelOperations()          { c.client.CancelOperations() }
+func (c *Connection) CancelOperations() { c.client.CancelOperations() }
 func (c *Connection) Authorize() (bool, error) {
 	return c.client.Authorize(context.Background())
 }

@@ -67,7 +67,7 @@ The pipe accepts JSON objects with `id`, `method`, `params` and returns that `id
 with `result` or `error`. Operations are `hash-password`, `enrollment-keys`,
 `encrypt`, `decrypt`, `oauth-registration`, `start`, `service-set`,
 `service-remove`, `revoke`, `transport-start`, `transport-status`,
-`transport-login`, `transport-stop`, `shutdown`. Key and encryption inputs/outputs are
+`transport-stop`, `shutdown`. Key and encryption inputs/outputs are
 private controller data, never logs, argv or web responses. Start takes `socket`,
 `auth_socket`, `onion`, `key`; service-set takes `id`, `network`, `address`.
 The host uses the separate Bearer-only Authelia `/login/api/authz/tunnel` endpoint.
@@ -79,8 +79,10 @@ the helper neither starts external daemons nor removes existing sockets.
 `transport-start` takes `{kind,dir,host,target,initialize}` for Tailcat or
 Tailscale. `target` is the numeric loopback Caddy TLS address. Start initiates
 work without waiting for a provider account login; status returns
-`{kind,state,address?,login_url?,error?}`. `transport-login` invokes the native
-interactive Tailscale login. `initialize` is permitted only during new setup or
+`{kind,state,address?,login_url?,error?}`. Upstream `tsnet.Start` owns initial
+Tailscale login and saved-profile reconnection; observing status never forces
+interactive login, and its initial `NoState` is reported as `starting`.
+`initialize` is permitted only during new setup or
 reissue: ordinary restart rejects missing provider identity state. Tailcat
 persists its native private key, PSK and chosen relay; Tailscale owns its native
 state file. A Tailcat address contains its WireGuard PSK and must remain private
@@ -111,7 +113,7 @@ token persistence must complete synchronously before its callback returns.
 The desktop `--client` pipe accepts `profileDirectory` on `open`; `login-route`
 returns the same authenticated SOCKS credential shape as `agent-route` before
 OAuth. `agent-route` replaces and closes the login route. `transport-status`
-and `begin-transport-login` expose native Tailscale setup without Authelia tokens.
+exposes native Tailscale setup and its official login URL without Authelia tokens.
 
 6 November source checks compiled Linux host/client and both Android client ABI
 boundaries with Go 1.27.3 and pristine dependencies. An external protocol harness

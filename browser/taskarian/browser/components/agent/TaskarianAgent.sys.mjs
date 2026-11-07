@@ -892,7 +892,8 @@ class AgentView {
     if (epoch !== this.selectionEpoch || this.selection !== connection.id || this.off) return;
     this.remote = result.connection;
     if (result.transportLoginRequired) {
-      this.message(result.transportState === "approval" ? "Tailscale approval required" : "Tailscale sign-in required", result.transportState === "approval" ? "Approve this device in Tailscale, then continue." : "Complete Tailscale sign-in, then continue this connection.", () => this.run(() => this.selectRemote(result.connection, forceLogin, epoch)), "Continue");
+      const approval = result.transportState === "approval", login = Boolean(result.transportLoginURL);
+      this.message(approval ? "Tailscale approval required" : login ? "Tailscale sign-in required" : "Connecting to Tailscale", approval ? "Approve this device in Tailscale, then continue." : login ? "Complete Tailscale sign-in, then continue this connection." : "Continue to check this connection's status.", () => this.run(() => this.selectRemote(result.connection, forceLogin, epoch)), "Continue");
       if (result.transportLoginURL) this.openTransportLogin(result.transportLoginURL);
       return;
     }

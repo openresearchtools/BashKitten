@@ -174,7 +174,10 @@ func tailscaleStatus(ctx context.Context, s *tsnet.Server) (Status, error) {
 		if result.Address == "" && len(state.TailscaleIPs) > 0 {
 			result.Address = netip.AddrPortFrom(state.TailscaleIPs[0], 443).String()
 		}
-	case "NeedsLogin", "NoState":
+	case "NoState":
+		// Upstream is still loading saved state, not requesting a new login.
+		result.State = "starting"
+	case "NeedsLogin":
 		result.State = "login"
 	case "NeedsMachineAuth":
 		result.State = "approval"
@@ -201,17 +204,6 @@ func (c *Client) Status() (Status, error) {
 		return status, err
 	}
 	return Status{Kind: c.d.Kind, State: "ready"}, nil
-}
-
-func (c *Client) BeginLogin() error {
-	if c.tailscale == nil {
-		return errors.New("this transport has no provider account login")
-	}
-	lc, err := c.tailscale.LocalClient()
-	if err != nil {
-		return err
-	}
-	return lc.StartLoginInteractive(c.ctx)
 }
 
 func (c *Client) Dial(ctx context.Context) (net.Conn, error) {

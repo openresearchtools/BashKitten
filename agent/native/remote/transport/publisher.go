@@ -191,21 +191,6 @@ func (p *Publisher) Status() (Status, error) {
 	return result, nil
 }
 
-func (p *Publisher) BeginLogin() error {
-	p.mu.Lock()
-	s := p.ts
-	closed := p.closed
-	p.mu.Unlock()
-	if s == nil || closed {
-		return errors.New("Tailscale transport is not ready for account login")
-	}
-	lc, err := s.LocalClient()
-	if err != nil {
-		return err
-	}
-	return lc.StartLoginInteractive(p.ctx)
-}
-
 func (p *Publisher) Close() {
 	p.mu.Lock()
 	if p.closed {

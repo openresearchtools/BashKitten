@@ -456,12 +456,6 @@ func (c *Client) TransportStatus() (transport.Status, error) {
 	}
 	return transport.Status{Kind: "tor", State: "ready"}, nil
 }
-func (c *Client) BeginTransportLogin() error {
-	if c.transport == nil {
-		return errors.New("Tor has no provider account login")
-	}
-	return c.transport.BeginLogin()
-}
 
 // Logout first closes local access, then revokes with Authelia and erases the
 // saved token. Failed remote revocation remains an error, never a claimed logout

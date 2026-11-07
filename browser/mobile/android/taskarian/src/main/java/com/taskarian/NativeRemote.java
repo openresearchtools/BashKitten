@@ -90,7 +90,6 @@ final class NativeRemote implements AutoCloseable {
     int loginPort() throws Exception { return Math.toIntExact(client.loginPort()); }
     void closeLoginRoute() { client.closeLoginRoute(); }
     JSONObject transportStatus() throws Exception { return new JSONObject(client.transportStatus()); }
-    void beginTransportLogin() throws Exception { client.beginTransportLogin(); }
     String beginLogin() throws Exception { return client.beginLogin(); }
     boolean authorize() throws Exception { return client.authorize(); }
     void completeLogin(String callback, String form) throws Exception { client.completeLogin(callback, form); }

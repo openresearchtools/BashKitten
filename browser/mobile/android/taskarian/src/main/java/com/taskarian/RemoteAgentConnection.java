@@ -130,10 +130,8 @@ final class RemoteAgentConnection implements AutoCloseable {
     private void authenticate(NativeRemote current, JSONObject enrollment) throws Exception {
         JSONObject status = current.transportStatus();
         if (status.optString("kind").equals("tailscale") && !status.optString("state").equals("ready")) {
-            if (status.optString("state").equals("login") && status.optString("login_url").isEmpty()) {
-                current.beginTransportLogin(); status = current.transportStatus();
-            }
-            final String address = status.optString("login_url"), state = status.optString("state");
+            final String state = status.optString("state");
+            final String address = state.equals("login") || state.equals("approval") ? status.optString("login_url") : "";
             main.post(() -> {
                 if (isClosed()) return;
                 identity = enrollment; awaitingTransport = true;

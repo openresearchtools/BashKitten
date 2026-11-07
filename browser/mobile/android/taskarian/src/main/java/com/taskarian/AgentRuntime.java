@@ -1265,7 +1265,7 @@ public final class AgentRuntime {
     private void remoteTransportLogin(RemoteAgentConnection connection, String address, String transportState) {
         if (remoteConnections.get(connection.host) != connection || connection.isClosed()) return;
         startupRemotes.remove(connection.host);
-        String message = transportState.equals("approval") ? "Approve this device in Tailscale, then turn on this connection to continue." : "Complete Tailscale sign-in, then turn on this connection to continue.";
+        String message = transportState.equals("approval") ? "Approve this device in Tailscale, then retry this connection." : !address.isEmpty() ? "Complete Tailscale sign-in, then retry this connection." : "Connecting to Tailscale. Retry this connection to check its status.";
         startupErrors.put("remote:" + connection.host, message);
         if (!selectedRemote(connection)) { changed(); return; }
         setup("remote", message);

@@ -406,16 +406,13 @@ class AgentRemoteStore {
       this.current(entry, owner);
       const helper = owner.helper;
       if (entry.bundle.transport?.kind === "tailscale") {
-        let status = await helper.call("transport-status"); this.current(entry, owner);
+        const status = await helper.call("transport-status"); this.current(entry, owner);
         if (status.state !== "ready") {
-          if (status.state === "login" && !status.login_url) {
-            await helper.call("begin-transport-login");
-            status = await helper.call("transport-status"); this.current(entry, owner);
-          }
+          const loginURL = ["login", "approval"].includes(status.state) ? status.login_url || "" : "";
           owner.state = "transport-login";
-          owner.error = status.state === "approval" ? "Approve this device in Tailscale, then connect again." : "Complete Tailscale sign-in, then connect again.";
+          owner.error = status.state === "approval" ? "Approve this device in Tailscale, then connect again." : loginURL ? "Complete Tailscale sign-in, then connect again." : "Connecting to Tailscale. Continue to check its status.";
           this.notify();
-          return { connection: this.info(entry), transportLoginRequired: true, transportState: status.state, transportLoginURL: status.login_url || "" };
+          return { connection: this.info(entry), transportLoginRequired: true, transportState: status.state, transportLoginURL: loginURL };
         }
       }
       if (!forceLogin && await helper.call("authorize")) { await this.ready(entry, owner); return { connection: this.info(entry) }; }
@@ -434,7 +431,7 @@ class AgentRemoteStore {
     const route = await owner.helper.call("agent-route");
     this.current(entry, owner);
     TorRouting.setAgentTunnel(entry.userContextId, route);
-    owner.state = "ready"; this.notify();
+    owner.state = "ready"; owner.error = ""; this.notify();
     // A conflicting service port must not prevent the protected Agent opening.
     try { await this.services(entry.id); }
     catch (error) { owner.servicesError = error.message; }
