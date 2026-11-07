@@ -560,22 +560,30 @@ public final class AgentRuntime {
         connection.request(client -> client.phone(action, value, identity), done, failure);
     }
     public void command(String name, JSONObject args, Consumer<JSONObject> done, Consumer<String> fail) {
+        final JSONObject input;
+        try { input = args == null ? new JSONObject() : new JSONObject(args.toString()); }
+        catch (Exception error) { fail.accept("Unable to send service command."); return; }
+        // Callers may scrub their arguments while package admission is pending.
+        Runnable clear = () -> { input.remove("password"); input.remove("code"); };
         Runnable send = () -> {
-            try { termux.run(new JSONObject().put("command", name).put("args", args), done, fail); }
+            try { termux.run(new JSONObject().put("command", name).put("args", input), done, fail); }
             catch (Exception exception) { fail.accept("Unable to send service command."); }
+            finally { clear.run(); } // TermuxConnection.run serializes stdin synchronously.
         };
         // Stopping remains available during maintenance. All starts/settings use
         // the installed APK's matched native Termux package, never an older pair.
         if (name.equals("stop") || name.equals("shutdown") || name.equals("display-stop") || !localSetupReady()) { send.run(); return; }
         final int generation = operation, background = backgroundOperation;
         final String installation = termux.installationId();
-        updates.ensureMatching().whenComplete((ignored, error) -> app.main.post(() -> {
-            if (generation != operation || background != backgroundOperation || !localSetupReady() || !installation.equals(termux.installationId())) {
-                fail.accept("The service request changed while packages were updating."); return;
-            }
-            if (error == null) send.run();
-            else fail.accept("Termux packages need attention in Configuration → Updates: " + error.getMessage());
-        }));
+        try {
+            updates.ensureMatching().whenComplete((ignored, error) -> app.main.post(() -> {
+                if (generation != operation || background != backgroundOperation || !localSetupReady() || !installation.equals(termux.installationId())) {
+                    clear.run(); fail.accept("The service request changed while packages were updating."); return;
+                }
+                if (error == null) send.run();
+                else { clear.run(); fail.accept("Termux packages need attention in Configuration → Updates: " + error.getMessage()); }
+            }));
+        } catch (RuntimeException error) { clear.run(); throw error; }
     }
     boolean shareNeedsSetup() {
         if (!desired || !termuxSetupAttempted || !termux.permissionGranted()

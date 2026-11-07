@@ -532,7 +532,7 @@ def main():
              '- **Linux:** install the AMD64 or ARM64 `.deb`, which includes the browser and Agent server.\n'
              '- **Updating Android:** update both the APK and the Taskarian package in Termux. Provider logins and chat history are retained.\n\n'
              'Local Agent opens without an account login. Share Local offers independent Tor, Cloudflare Quick Tunnel, Tailcat instant and embedded Tailscale connections, using the same encrypted QR and Authelia two-factor flow.\n\n'
-             'This update repairs Local Agent certificate registration on Android and prevents unnecessary Tailscale sign-in requests during reconnect.\n\n'
+             'This update repairs Android Local Agent certificate registration and Share Local credential setup, and prevents unnecessary Tailscale sign-in requests during reconnect.\n\n'
              'Remote file sharing starts off for each backend and connection. Tailscale sign-in opens in Taskarian on host and client; approved nodes are saved for later starts, including retries of unfinished Taskarian setup. After Cloudflare Off/On, update the encrypted connection image and import it again.\n\n'
              f'Checksums are attached. [Download the source guide](https://github.com/openresearchtools/Taskarian/releases/download/{tag}/SOURCES.md) for complete source archives, component releases and verification steps.\n')
     (args.output / 'release-notes.md').write_text(notes)
