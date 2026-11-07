@@ -170,8 +170,11 @@ Choose **Tor**, **Cloudflare Quick Tunnel**, **Tailcat instant** or **Tailscale*
 Each connection keeps its own account, authenticator, encrypted image and
 publishing choice. Several can run together and reach the same existing Agent
 and configured services. Tailscale uses an embedded node: authorize the host and
-client through normal Tailscale sign-in, with access to the same permitted
-Tailscale network. No separate system Tailscale daemon is required.
+client in the same permitted Tailscale network. Sign-in opens in a regular
+Taskarian tab. The approved node identity is saved for later app starts, without
+a separate system Tailscale daemon. If unfinished Taskarian setup expires after
+Tailscale approval, retrying account and authenticator setup keeps that approved
+node. Explicitly reissuing the sharing identity replaces it.
 
 For each new connection, choose a username and password, add its authenticator
 and verify a code. Then download the password-encrypted **Connection QR**.

@@ -17,6 +17,7 @@ export class RemoteAccess {
     const state = await readJson(this.paths.share, null);
     if (!state) return { version: 2, phase: 'new', enabled: false, startup: false, allowFileManager: false };
     if (state.version !== 2 || !['replacing', 'setup', 'ready'].includes(state.phase) || typeof state.enabled !== 'boolean' || typeof state.allowFileManager !== 'boolean' || (state.startup !== undefined && typeof state.startup !== 'boolean') ||
+        (state.preserveNetwork !== undefined && (state.preserveNetwork !== true || this.kind !== 'tailscale' || state.phase !== 'replacing')) ||
         (state.phase !== 'replacing' && (!/^[a-f0-9]{48}$/.test(state.id || '') || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(state.owner || ''))) ||
         (state.phase === 'ready' && (!this.validHost(state.onion) || !/^[a-f0-9]{64}$/.test(state.caSha256 || ''))) ||
         (state.enabled && state.phase !== 'ready')) throw Error('Invalid Share Local state; remote access stays closed');
@@ -101,6 +102,9 @@ export class RemoteAccess {
       if (typeof value.allowFileManager !== 'boolean') throw Error('Choose whether to allow the remote file manager');
       const previous = await this.state();
       const startup = previous.phase === 'ready' ? previous.startup : undefined;
+      const preserveNetwork = this.kind === 'tailscale' && !reissue &&
+        (previous.phase === 'setup' || previous.phase === 'replacing' && previous.preserveNetwork === true);
+      if (preserveNetwork && !(await fs.lstat(this.scope.remoteDir)).isDirectory()) throw Error('Invalid Tailscale setup directory');
       if (!reissue) {
         const state = await this.state();
         const legacy = this.kind === 'tor' && state.phase === 'new' && Boolean(await readJson(path.join(accessDir, 'remote.json'), null));
@@ -110,7 +114,7 @@ export class RemoteAccess {
       // until the durable state is saved, including if a save fails.
       await this.stack.refreshFileManager(true);
       this.publicationRequested = false;
-      await writeJson(this.paths.share, { version: 2, phase: 'replacing', enabled: false, startup, allowFileManager: false });
+      await writeJson(this.paths.share, { version: 2, phase: 'replacing', enabled: false, startup, allowFileManager: false, ...(preserveNetwork ? { preserveNetwork: true } : {}) });
       await this.stack.refreshFileManager();
       this.stack.reconfiguring = true; this.stack.ready = false;
       this.cancelPending();
@@ -121,7 +125,18 @@ export class RemoteAccess {
           await this.stack.stopNamed('caddy');
         } else await this.stack.closeRemote();
         this.stack.remoteOrigins = []; this.stack.remoteAuthOrigin = null;
-        await fs.rm(this.scope.remoteDir, { recursive: true, force: true });
+        if (preserveNetwork) {
+          // A provider approval can arrive after the password/setup deadline.
+          // Keep its directory in place; rotate all Taskarian authority normally.
+          if (!(await fs.lstat(this.scope.remoteDir)).isDirectory()) throw Error('Invalid Tailscale setup directory');
+          const network = await fs.lstat(path.join(this.scope.remoteDir, 'network')).catch(error => { if (error.code !== 'ENOENT') throw error; return null; });
+          if (network && !network.isDirectory()) throw Error('Invalid Tailscale network directory');
+          for (const name of await fs.readdir(this.scope.remoteDir)) {
+            const file = path.join(this.scope.remoteDir, name);
+            // Retain the disabled marker if cleanup or fresh enrollment fails.
+            if (name !== 'network' && file !== this.paths.share) await fs.rm(file, { recursive: true, force: true });
+          }
+        } else await fs.rm(this.scope.remoteDir, { recursive: true, force: true });
         // Confirmed migration removes old remote authority. Its shared Local CA
         // and the saved service definitions are deliberately kept in place.
         for (const name of (this.kind === 'tor' ? ['remote.json', 'hosting-client.json', 'tor', 'users.yml', 'authelia.yml',
