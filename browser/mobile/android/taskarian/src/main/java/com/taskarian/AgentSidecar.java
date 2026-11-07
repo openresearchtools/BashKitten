@@ -223,11 +223,11 @@ public final class AgentSidecar {
         org.json.JSONArray instances = state.optJSONArray("instances");
         boolean configured = state.optBoolean("configured") || state.optString("phase").equals("ready");
         java.util.List<String> codes = new java.util.ArrayList<>();
-        if (instances == null) { if (state.optBoolean("enabled")) codes.add("Tor"); }
+        if (instances == null) { if (state.optBoolean("running")) codes.add("Tor"); }
         else for (int i = 0; i < instances.length(); i++) {
             JSONObject instance = instances.optJSONObject(i); if (instance == null) continue;
             configured |= instance.optString("phase").equals("ready");
-            if (!instance.optBoolean("enabled") && !instance.optBoolean("awaitingNetwork")) continue;
+            if (!instance.optBoolean("running")) continue;
             switch (instance.optString("instance")) {
                 case "tor": codes.add("Tor"); break;
                 case "cloudflare": codes.add("CF"); break;

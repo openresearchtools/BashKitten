@@ -184,7 +184,7 @@ export class NativeSidecar {
           this.sharing.set(backend.id, {
             configured: state.configured === true || state.phase === "ready" || state.instances?.some(item => item.phase === "ready"),
             enabled: state.enabled === true, running: state.running === true, available: true, error: state.error,
-            transports: (state.instances || [{ instance: "tor", enabled: state.enabled }]).filter(item => item.enabled || item.awaitingNetwork).map(item => ({ tor: "Tor", cloudflare: "CF", tailcat: "Tcat", tailscale: "TS" })[item.instance]).filter(Boolean).join(" | "),
+            transports: (state.instances || [{ instance: "tor", running: state.running }]).filter(item => item.running === true).map(item => ({ tor: "Tor", cloudflare: "CF", tailcat: "Tcat", tailscale: "TS" })[item.instance]).filter(Boolean).join(" | "),
           });
         }
       } catch (error) {
